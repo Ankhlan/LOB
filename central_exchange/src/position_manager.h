@@ -125,7 +125,7 @@ private:
 // ========== IMPLEMENTATION ==========
 
 inline UserAccount* PositionManager::get_or_create_account(const std::string& user_id) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     
     auto it = accounts_.find(user_id);
     if (it == accounts_.end()) {
@@ -144,13 +144,13 @@ inline bool PositionManager::deposit(const std::string& user_id, double amount) 
     if (amount <= 0) return false;
     
     auto* acc = get_or_create_account(user_id);
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     acc->balance += amount;
     return true;
 }
 
 inline bool PositionManager::withdraw(const std::string& user_id, double amount) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     
     auto it = accounts_.find(user_id);
     if (it == accounts_.end()) return false;
@@ -161,13 +161,13 @@ inline bool PositionManager::withdraw(const std::string& user_id, double amount)
 }
 
 inline double PositionManager::get_balance(const std::string& user_id) const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto it = accounts_.find(user_id);
     return it != accounts_.end() ? it->second.balance : 0.0;
 }
 
 inline double PositionManager::get_equity(const std::string& user_id) const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto it = accounts_.find(user_id);
     return it != accounts_.end() ? it->second.equity() : 0.0;
 }
@@ -183,7 +183,7 @@ inline std::optional<Position> PositionManager::open_position(
     
     auto* acc = get_or_create_account(user_id);
     
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     
     // Calculate margin required
     double notional = std::abs(size) * price;
@@ -281,13 +281,13 @@ inline std::optional<Position> PositionManager::close_position(
 }
 
 inline Position* PositionManager::get_position(const std::string& user_id, const std::string& symbol) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto it = positions_.find(pos_key(user_id, symbol));
     return it != positions_.end() ? &it->second : nullptr;
 }
 
 inline std::vector<Position> PositionManager::get_all_positions(const std::string& user_id) const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::vector<Position> result;
     
     std::string prefix = user_id + ":";
@@ -303,7 +303,7 @@ inline bool PositionManager::check_margin(const std::string& user_id, const std:
     auto* product = ProductCatalog::instance().get(symbol);
     if (!product) return false;
     
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     
     auto it = accounts_.find(user_id);
     if (it == accounts_.end()) return false;
@@ -313,7 +313,7 @@ inline bool PositionManager::check_margin(const std::string& user_id, const std:
 }
 
 inline void PositionManager::update_all_pnl() {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     
     // Reset account PnL
     for (auto& [user_id, acc] : accounts_) {
@@ -331,7 +331,7 @@ inline void PositionManager::update_all_pnl() {
 }
 
 inline std::vector<Position> PositionManager::check_liquidations() {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     
     std::vector<Position> to_liquidate;
     
@@ -365,13 +365,13 @@ inline void PositionManager::update_exposure(const std::string& symbol, double d
 }
 
 inline ExchangeExposure PositionManager::get_exposure(const std::string& symbol) const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto it = exposures_.find(symbol);
     return it != exposures_.end() ? it->second : ExchangeExposure{symbol, 0, 0, 0};
 }
 
 inline std::vector<ExchangeExposure> PositionManager::get_all_exposures() const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::vector<ExchangeExposure> result;
     for (const auto& [sym, exp] : exposures_) {
         result.push_back(exp);
@@ -380,12 +380,12 @@ inline std::vector<ExchangeExposure> PositionManager::get_all_exposures() const 
 }
 
 inline void PositionManager::update_hedge_position(const std::string& symbol, double hedge_size) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     exposures_[symbol].hedge_position = hedge_size;
 }
 
 inline double PositionManager::get_net_exposure(const std::string& symbol) const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto it = exposures_.find(symbol);
     if (it != exposures_.end()) {
         return it->second.net_position;
@@ -401,7 +401,7 @@ inline double PositionManager::get_net_exposure(const std::string& symbol) const
 }
 
 inline std::unordered_map<std::string, double> PositionManager::get_all_net_exposures() const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::unordered_map<std::string, double> result;
     for (const auto& [sym, exp] : exposures_) {
         result[sym] = exp.net_position;
@@ -410,3 +410,4 @@ inline std::unordered_map<std::string, double> PositionManager::get_all_net_expo
 }
 
 } // namespace central_exchange
+
