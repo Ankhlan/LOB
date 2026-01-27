@@ -330,6 +330,43 @@ inline void HttpServer::setup_routes() {
         }.dump(), "application/json");
     });
     
+    // POST endpoint for closing position (alternative to DELETE)
+    server_->Post("/api/position/close", [this](const httplib::Request& req, httplib::Response& res) {
+        try {
+            auto body = json::parse(req.body);
+            std::string user_id = body.value("user_id", "demo");
+            std::string symbol = body["symbol"];
+            
+            auto* pos = PositionManager::instance().get_position(user_id, symbol);
+            if (!pos) {
+                res.status = 404;
+                res.set_content(R"({"error":"No position found"})", "application/json");
+                return;
+            }
+            
+            auto [bid, ask] = MatchingEngine::instance().get_bbo(symbol);
+            auto* product = ProductCatalog::instance().get(symbol);
+            
+            double exit_price = pos->is_long() ? 
+                bid.value_or(product ? product->mark_price_mnt * 0.999 : 0) :
+                ask.value_or(product ? product->mark_price_mnt * 1.001 : 0);
+            
+            auto result = PositionManager::instance().close_position(
+                user_id, symbol, pos->size, exit_price
+            );
+            
+            res.set_content(json{
+                {"success", true},
+                {"balance", PositionManager::instance().get_balance(user_id)}
+            }.dump(), "application/json");
+            
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+    });
+    
     // ==================== ACCOUNT ====================
     
     server_->Get("/api/balance", [](const httplib::Request& req, httplib::Response& res) {
@@ -575,22 +612,21 @@ inline void HttpServer::setup_routes() {
         <section class="center">
             <div class="chart-area">
                 <div class="selected-instrument" id="selectedInstrument">
-                    <div class="selected-symbol" id="selectedSymbol">-</div>
+                    <div class="selected-symbol" id="selectedSymbol">XAU-MNT-PERP</div>
                     <div class="selected-price" id="selectedMid">-</div>
                     <div class="selected-change up" id="selectedChange">+0.00%</div>
                 </div>
-                <div class="chart-placeholder">
-                    <h3>Professional Charting</h3>
-                    <p>TradingView integration available</p>
-                </div>
+                <!-- TradingView Widget -->
+                <div id="tradingview-widget" style="flex:1;width:100%;height:100%;"></div>
+                <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
             </div>
             <div class="orderbook">
                 <div class="orderbook-side orderbook-bids">
-                    <div class="orderbook-header"><span>Price</span><span>Size</span></div>
+                    <div class="orderbook-header"><span>Bid Price</span><span>Size</span></div>
                     <div class="orderbook-levels bids" id="bidsLevels"></div>
                 </div>
                 <div class="orderbook-side orderbook-asks">
-                    <div class="orderbook-header"><span>Price</span><span>Size</span></div>
+                    <div class="orderbook-header"><span>Ask Price</span><span>Size</span></div>
                     <div class="orderbook-levels asks" id="asksLevels"></div>
                 </div>
             </div>
@@ -639,13 +675,62 @@ inline void HttpServer::setup_routes() {
     </main>
     
     <script>
-        let state = { selected: null, side: 'long', instruments: [], quotes: {} };
+        let state = { selected: 'XAU-MNT-PERP', side: 'long', instruments: [], quotes: {}, tvWidget: null };
         const fmt = (n, d=0) => new Intl.NumberFormat('en-US', {minimumFractionDigits:d, maximumFractionDigits:d}).format(n);
+        
+        // Symbol mapping for TradingView
+        const tvSymbols = {
+            'XAU-MNT-PERP': 'OANDA:XAUUSD',
+            'XAG-MNT-PERP': 'OANDA:XAGUSD',
+            'BTC-MNT-PERP': 'BINANCE:BTCUSDT',
+            'ETH-MNT-PERP': 'BINANCE:ETHUSDT',
+            'EUR-MNT-PERP': 'FX:EURUSD',
+            'USD-MNT-PERP': 'FX_IDC:USDMNT',
+            'OIL-MNT-PERP': 'TVC:USOIL',
+            'SPX-MNT-PERP': 'FOREXCOM:SPXUSD',
+            'NDX-MNT-PERP': 'NASDAQ:NDX'
+        };
+        
+        function initTradingView(symbol) {
+            const tvSym = tvSymbols[symbol] || 'OANDA:XAUUSD';
+            if (state.tvWidget) {
+                state.tvWidget.remove();
+            }
+            state.tvWidget = new TradingView.widget({
+                "autosize": true,
+                "symbol": tvSym,
+                "interval": "15",
+                "timezone": "Asia/Ulaanbaatar",
+                "theme": "dark",
+                "style": "1",
+                "locale": "en",
+                "toolbar_bg": "#111827",
+                "enable_publishing": false,
+                "hide_side_toolbar": false,
+                "allow_symbol_change": true,
+                "container_id": "tradingview-widget",
+                "hide_volume": false
+            });
+        }
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            switch(e.key.toLowerCase()) {
+                case 'b': case 'q': setSide('long'); break;
+                case 's': case 'w': setSide('short'); break;
+                case 'enter': submitOrder(); break;
+                case 'escape': state.selected = null; renderInstruments(); break;
+            }
+        });
         
         async function init() {
             await fetch('/api/deposit', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({user_id:'demo', amount:100000000}) });
             await refresh();
+            initTradingView('XAU-MNT-PERP');
+            selectInstrument('XAU-MNT-PERP');
             setInterval(refresh, 1500);
+            setInterval(() => { if(state.selected) renderOrderbook(); }, 2000);
         }
         
         async function refresh() {
@@ -689,6 +774,7 @@ inline void HttpServer::setup_routes() {
             renderInstruments();
             updateSelectedDisplay();
             renderOrderbook();
+            initTradingView(symbol);
         }
         
         function updateSelectedDisplay() {
@@ -699,19 +785,63 @@ inline void HttpServer::setup_routes() {
         }
         
         function renderOrderbook() {
-            const q = state.quotes[state.selected] || {};
-            const mid = q.mid || 1000000;
-            let bids = '', asks = '';
-            for (let i = 0; i < 8; i++) {
-                const bp = mid * (1 - 0.0001 * (i + 1));
-                const ap = mid * (1 + 0.0001 * (i + 1));
-                const bs = Math.random() * 10;
-                const as = Math.random() * 10;
-                bids += `<div class="level"><div class="level-bar" style="width:${bs*10}%"></div><span class="level-price">${fmt(bp,2)}</span><span class="level-size">${fmt(bs,2)}</span></div>`;
-                asks += `<div class="level"><div class="level-bar" style="width:${as*10}%"></div><span class="level-price">${fmt(ap,2)}</span><span class="level-size">${fmt(as,2)}</span></div>`;
-            }
-            document.getElementById('bidsLevels').innerHTML = bids;
-            document.getElementById('asksLevels').innerHTML = asks;
+            if (!state.selected) return;
+            fetch('/api/book/' + state.selected + '?levels=10')
+                .then(r => r.json())
+                .then(book => {
+                    const q = state.quotes[state.selected] || {};
+                    const mid = q.mid || 1000000;
+                    const maxQty = Math.max(
+                        ...book.bids.map(b => b.quantity),
+                        ...book.asks.map(a => a.quantity),
+                        1
+                    );
+                    
+                    let bids = '', asks = '';
+                    
+                    // Real bids from order book
+                    if (book.bids.length > 0) {
+                        book.bids.slice(0, 8).forEach(b => {
+                            const pct = (b.quantity / maxQty) * 100;
+                            bids += `<div class="level"><div class="level-bar" style="width:${pct}%"></div><span class="level-price">${fmt(b.price,2)}</span><span class="level-size">${fmt(b.quantity,4)}</span></div>`;
+                        });
+                    } else {
+                        // Synthetic levels if no real orders
+                        for (let i = 0; i < 8; i++) {
+                            const bp = mid * (1 - 0.0002 * (i + 1));
+                            bids += `<div class="level"><div class="level-bar" style="width:${20+Math.random()*30}%"></div><span class="level-price">${fmt(bp,2)}</span><span class="level-size">-</span></div>`;
+                        }
+                    }
+                    
+                    // Real asks from order book
+                    if (book.asks.length > 0) {
+                        book.asks.slice(0, 8).forEach(a => {
+                            const pct = (a.quantity / maxQty) * 100;
+                            asks += `<div class="level"><div class="level-bar" style="width:${pct}%"></div><span class="level-price">${fmt(a.price,2)}</span><span class="level-size">${fmt(a.quantity,4)}</span></div>`;
+                        });
+                    } else {
+                        // Synthetic levels if no real orders
+                        for (let i = 0; i < 8; i++) {
+                            const ap = mid * (1 + 0.0002 * (i + 1));
+                            asks += `<div class="level"><div class="level-bar" style="width:${20+Math.random()*30}%"></div><span class="level-price">${fmt(ap,2)}</span><span class="level-size">-</span></div>`;
+                        }
+                    }
+                    
+                    document.getElementById('bidsLevels').innerHTML = bids;
+                    document.getElementById('asksLevels').innerHTML = asks;
+                })
+                .catch(() => {
+                    // Fallback to synthetic
+                    const q = state.quotes[state.selected] || {};
+                    const mid = q.mid || 1000000;
+                    let bids = '', asks = '';
+                    for (let i = 0; i < 8; i++) {
+                        bids += `<div class="level"><div class="level-bar" style="width:30%"></div><span class="level-price">${fmt(mid*(1-0.0002*(i+1)),2)}</span><span class="level-size">-</span></div>`;
+                        asks += `<div class="level"><div class="level-bar" style="width:30%"></div><span class="level-price">${fmt(mid*(1+0.0002*(i+1)),2)}</span><span class="level-size">-</span></div>`;
+                    }
+                    document.getElementById('bidsLevels').innerHTML = bids;
+                    document.getElementById('asksLevels').innerHTML = asks;
+                });
         }
         
         function setSide(s) {
