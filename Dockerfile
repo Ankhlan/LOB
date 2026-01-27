@@ -2,7 +2,7 @@
 FROM ubuntu:22.04 AS builder
 
 # Cache buster - change to force rebuild
-ARG CACHE_BUST=202601271553
+ARG CACHE_BUST=202601271620
 
 ENV DEBIAN_FRONTEND=noninteractive
 
