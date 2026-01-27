@@ -181,6 +181,70 @@ inline void HttpServer::setup_routes() {
         res.set_content(R"({"success":true})", "application/json");
     });
     
+    // ==================== PHONE OTP AUTH ====================
+    // Request OTP - sends 6-digit code (mock: logged to console)
+    server_->Post("/api/auth/request-otp", [](const httplib::Request& req, httplib::Response& res) {
+        try {
+            auto body = json::parse(req.body);
+            std::string phone = body.value("phone", "");
+            
+            auto [success, otp, error] = Auth::instance().request_otp(phone);
+            
+            if (success) {
+                // In production, OTP would be sent via SMS
+                // For dev, it's logged to console
+                res.set_content(json({
+                    {"success", true},
+                    {"message", "OTP sent to " + phone},
+                    {"dev_otp", otp}  // REMOVE IN PRODUCTION!
+                }).dump(), "application/json");
+            } else {
+                res.status = 400;
+                res.set_content(json({
+                    {"success", false},
+                    {"error", error}
+                }).dump(), "application/json");
+            }
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json({
+                {"success", false},
+                {"error", std::string("Invalid request: ") + e.what()}
+            }).dump(), "application/json");
+        }
+    });
+    
+    // Verify OTP - validates code and returns JWT
+    server_->Post("/api/auth/verify-otp", [](const httplib::Request& req, httplib::Response& res) {
+        try {
+            auto body = json::parse(req.body);
+            std::string phone = body.value("phone", "");
+            std::string otp = body.value("otp", "");
+            
+            auto [success, token, error] = Auth::instance().verify_otp(phone, otp);
+            
+            if (success) {
+                res.set_content(json({
+                    {"success", true},
+                    {"token", token},
+                    {"phone", phone}
+                }).dump(), "application/json");
+            } else {
+                res.status = 401;
+                res.set_content(json({
+                    {"success", false},
+                    {"error", error}
+                }).dump(), "application/json");
+            }
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json({
+                {"success", false},
+                {"error", std::string("Invalid request: ") + e.what()}
+            }).dump(), "application/json");
+        }
+    });
+    
     // ==================== SSE STREAMING ====================
     // Real-time price updates via Server-Sent Events
     server_->Get("/api/stream", [this](const httplib::Request&, httplib::Response& res) {

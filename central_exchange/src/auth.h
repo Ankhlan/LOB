@@ -27,16 +27,27 @@ using json = nlohmann::json;
 
 struct User {
     std::string id;
-    std::string username;
-    std::string password_hash;
-    std::string email;
+    std::string phone;         // Primary identifier (+976...)
+    std::string username;      // Optional display name
+    std::string password_hash; // Optional for password login
+    std::string email;         // Optional
     bool is_active = true;
     int64_t created_at;
     int64_t last_login;
+    double balance_mnt = 0;    // Account balance
+};
+
+struct OtpRequest {
+    std::string phone;
+    std::string otp;
+    int64_t expires_at;
+    int attempts = 0;
+    int64_t last_request;
 };
 
 struct TokenPayload {
     std::string user_id;
+    std::string phone;
     std::string username;
     int64_t iat;  // Issued at
     int64_t exp;  // Expiration
@@ -163,6 +174,131 @@ public:
             return it->second;
         }
         return std::nullopt;
+    }
+    
+    // ==================== PHONE + OTP AUTH ====================
+    
+    // Request OTP - returns {success, otp (for dev), error}
+    std::tuple<bool, std::string, std::string> request_otp(const std::string& phone) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        
+        // Validate phone format (+976XXXXXXXX)
+        if (phone.size() < 12 || phone.substr(0, 4) != "+976") {
+            return {false, "", "Invalid phone format. Use +976XXXXXXXX"};
+        }
+        
+        auto now = now_ms();
+        
+        // Rate limit: 1 request per 60 seconds
+        auto it = otp_requests_.find(phone);
+        if (it != otp_requests_.end()) {
+            if (now - it->second.last_request < 60000) {
+                int wait = (60000 - (now - it->second.last_request)) / 1000;
+                return {false, "", "Please wait " + std::to_string(wait) + " seconds before requesting another OTP"};
+            }
+        }
+        
+        // Generate 6-digit OTP
+        std::string otp = generate_otp();
+        
+        // Store OTP request
+        OtpRequest req;
+        req.phone = phone;
+        req.otp = otp;
+        req.expires_at = now + 300000; // 5 minutes
+        req.attempts = 0;
+        req.last_request = now;
+        otp_requests_[phone] = req;
+        
+        // Mock SMS - log to console (replace with real SMS provider later)
+        std::cout << "[SMS] OTP for " << phone << ": " << otp << std::endl;
+        
+        return {true, otp, ""};  // Return OTP for development/testing
+    }
+    
+    // Verify OTP - returns {success, token, error}
+    std::tuple<bool, std::string, std::string> verify_otp(const std::string& phone, 
+                                                           const std::string& otp) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        
+        auto it = otp_requests_.find(phone);
+        if (it == otp_requests_.end()) {
+            return {false, "", "No OTP requested for this phone"};
+        }
+        
+        auto& req = it->second;
+        auto now = now_ms();
+        
+        // Check expiration
+        if (now > req.expires_at) {
+            otp_requests_.erase(it);
+            return {false, "", "OTP expired. Please request a new one"};
+        }
+        
+        // Check attempts (max 3)
+        if (req.attempts >= 3) {
+            otp_requests_.erase(it);
+            return {false, "", "Too many failed attempts. Please request a new OTP"};
+        }
+        
+        // Verify OTP
+        if (otp != req.otp) {
+            req.attempts++;
+            return {false, "", "Invalid OTP. " + std::to_string(3 - req.attempts) + " attempts remaining"};
+        }
+        
+        // OTP verified - create or get user
+        otp_requests_.erase(it);
+        
+        User* user = nullptr;
+        auto user_it = users_by_phone_.find(phone);
+        if (user_it != users_by_phone_.end()) {
+            user = &users_[user_it->second];
+            user->last_login = now;
+        } else {
+            // Create new user
+            User new_user;
+            new_user.id = generate_id();
+            new_user.phone = phone;
+            new_user.username = "User_" + phone.substr(phone.size() - 4); // Last 4 digits
+            new_user.is_active = true;
+            new_user.created_at = now;
+            new_user.last_login = now;
+            new_user.balance_mnt = 0;
+            
+            users_[new_user.id] = new_user;
+            users_by_phone_[phone] = new_user.id;
+            user = &users_[new_user.id];
+            
+            std::cout << "[USER] New user created: " << new_user.id << " (" << phone << ")" << std::endl;
+        }
+        
+        // Generate JWT
+        std::string token = generate_token_for_phone(user->id, user->phone);
+        return {true, token, ""};
+    }
+    
+    std::string generate_token_for_phone(const std::string& user_id,
+                                          const std::string& phone,
+                                          int64_t expires_in_ms = 86400000) {
+        int64_t now = now_ms();
+        int64_t exp = now + expires_in_ms;
+        
+        json header = {{"alg", "HS256"}, {"typ", "JWT"}};
+        json payload = {
+            {"sub", user_id},
+            {"phone", phone},
+            {"name", "User_" + phone.substr(phone.size() - 4)},
+            {"iat", now},
+            {"exp", exp}
+        };
+        
+        std::string header_b64 = base64_url_encode(header.dump());
+        std::string payload_b64 = base64_url_encode(payload.dump());
+        std::string signature = hmac_sha256(header_b64 + "." + payload_b64, secret_);
+        std::string sig_b64 = base64_url_encode(signature);
+        
+        return header_b64 + "." + payload_b64 + "." + sig_b64;
     }
     
     // ==================== HELPERS ====================
@@ -302,6 +438,18 @@ private:
         return id;
     }
     
+    std::string generate_otp() {
+        static std::random_device rd;
+        static std::mt19937 gen(rd());
+        static std::uniform_int_distribution<> dis(0, 9);
+        
+        std::string otp;
+        for (int i = 0; i < 6; i++) {
+            otp += std::to_string(dis(gen));
+        }
+        return otp;
+    }
+    
     int64_t now_ms() {
         return std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
@@ -310,6 +458,8 @@ private:
     std::string secret_;
     std::unordered_map<std::string, User> users_;
     std::unordered_map<std::string, std::string> users_by_username_;
+    std::unordered_map<std::string, std::string> users_by_phone_;
+    std::unordered_map<std::string, OtpRequest> otp_requests_;
     std::unordered_set<std::string> blacklisted_tokens_;
     std::mutex mutex_;
 };
