@@ -1,0 +1,177 @@
+.positions {
+  background: #21252b;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.pos-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #3e4451;
+}
+
+.pos-tabs {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.pos-tab {
+  background: transparent;
+  border: none;
+  color: #5c6370;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.15s;
+}
+
+.pos-tab:hover {
+  color: #abb2bf;
+}
+
+.pos-tab.active {
+  color: #61afef;
+  background: rgba(97, 175, 239, 0.1);
+}
+
+.refresh-btn {
+  background: transparent;
+  border: 1px solid #3e4451;
+  color: #5c6370;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.refresh-btn:hover {
+  color: #abb2bf;
+  border-color: #abb2bf;
+}
+
+.pos-loading,
+.pos-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #5c6370;
+  font-size: 0.875rem;
+}
+
+.pos-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.pos-table {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 0.85rem;
+}
+
+.pos-table-header {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1.5fr 1.5fr 1.5fr;
+  padding: 0.5rem 1rem;
+  background: #282c34;
+  font-size: 0.7rem;
+  color: #5c6370;
+  text-transform: uppercase;
+  position: sticky;
+  top: 0;
+}
+
+.pos-table-header.orders {
+  grid-template-columns: 1.5fr 1fr 1fr 1.5fr 1fr 1fr;
+}
+
+.pos-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1.5fr 1.5fr 1.5fr;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #2c313a;
+  align-items: center;
+}
+
+.pos-row:hover {
+  background: #282c34;
+}
+
+.pos-symbol {
+  color: #abb2bf;
+  font-weight: 500;
+}
+
+.pos-side {
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.pos-side.long,
+.pos-side.buy {
+  color: #98c379;
+}
+
+.pos-side.short,
+.pos-side.sell {
+  color: #e06c75;
+}
+
+.pos-qty,
+.pos-price {
+  color: #abb2bf;
+  text-align: right;
+}
+
+.pos-type {
+  color: #5c6370;
+  text-transform: capitalize;
+}
+
+.pos-pnl {
+  text-align: right;
+  font-weight: 600;
+}
+
+.pos-pnl.profit {
+  color: #98c379;
+}
+
+.pos-pnl.loss {
+  color: #e06c75;
+}
+
+.pos-status {
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  text-align: center;
+}
+
+.pos-status.filled {
+  background: rgba(152, 195, 121, 0.15);
+  color: #98c379;
+}
+
+.pos-status.partial {
+  background: rgba(229, 192, 123, 0.15);
+  color: #e5c07b;
+}
+
+.pos-status.pending {
+  background: rgba(97, 175, 239, 0.15);
+  color: #61afef;
+}
+
+.pos-status.cancelled {
+  background: rgba(92, 99, 112, 0.15);
+  color: #5c6370;
+}

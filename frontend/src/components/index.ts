@@ -3,3 +3,6 @@ export { Dashboard } from './Dashboard';
 export { MarketWatch } from './MarketWatch';
 export { OrderBook } from './OrderBook';
 export { TradingPanel } from './TradingPanel';
+export { ConfirmModal } from './ConfirmModal';
+export { Positions } from './Positions';
+export { LanguageSwitcher } from './LanguageSwitcher';
