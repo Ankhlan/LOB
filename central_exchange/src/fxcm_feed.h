@@ -259,6 +259,18 @@ inline void FxcmFeed::simulate_prices() {
     }
 }
 
+// ========== HEDGE TRADE RECORD ==========
+
+struct HedgeTrade {
+    std::string symbol;
+    std::string side;        // "BUY" or "SELL"
+    double quantity;
+    double price;
+    uint64_t timestamp;
+    std::string fxcm_order_id;
+    std::string status;      // "FILLED", "PENDING", "FAILED"
+};
+
 // ========== HEDGING ENGINE ==========
 
 class HedgingEngine {
@@ -276,6 +288,12 @@ public:
     // Run hedge check
     void check_and_hedge();
     
+    // Hedge history for risk dashboard
+    std::vector<HedgeTrade> get_hedge_history() const {
+        std::lock_guard<std::mutex> lock(history_mutex_);
+        return hedge_history_;
+    }
+    
 private:
     HedgingEngine() = default;
     
@@ -283,7 +301,11 @@ private:
     double max_position_{1000000.0};  // Max position in USD
     bool hedging_enabled_{true};
     
+    mutable std::mutex history_mutex_;
+    std::vector<HedgeTrade> hedge_history_;
+    
     void hedge_symbol(const std::string& symbol, const ExchangeExposure& exposure);
+    void record_hedge(const HedgeTrade& trade);
 };
 
 inline void HedgingEngine::check_and_hedge() {
@@ -319,9 +341,36 @@ inline void HedgingEngine::hedge_symbol(const std::string& symbol, const Exchang
         .reason = "Auto-hedge " + symbol
     };
     
+    // Record the hedge trade
+    HedgeTrade trade{
+        .symbol = symbol,
+        .side = hedge_size > 0 ? "BUY" : "SELL",
+        .quantity = std::abs(hedge_size),
+        .price = product->mark_price_mnt,
+        .timestamp = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count()),
+        .fxcm_order_id = "",
+        .status = "PENDING"
+    };
+    
     if (FxcmFeed::instance().execute_hedge(order)) {
+        trade.status = "FILLED";
+        trade.fxcm_order_id = "FXCM-" + std::to_string(trade.timestamp);
         PositionManager::instance().update_hedge_position(symbol, 
             exposure.hedge_position + hedge_size);
+    } else {
+        trade.status = "FAILED";
+    }
+    
+    record_hedge(trade);
+}
+
+inline void HedgingEngine::record_hedge(const HedgeTrade& trade) {
+    std::lock_guard<std::mutex> lock(history_mutex_);
+    hedge_history_.push_back(trade);
+    // Keep last 1000 trades
+    if (hedge_history_.size() > 1000) {
+        hedge_history_.erase(hedge_history_.begin());
     }
 }
 

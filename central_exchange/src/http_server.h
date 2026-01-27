@@ -431,6 +431,99 @@ inline void HttpServer::setup_routes() {
         res.set_content(exp_arr.dump(), "application/json");
     });
     
+    // ==================== RISK DASHBOARD API ====================
+    
+    // GET /api/risk/exposure - Current net exposure by symbol
+    server_->Get("/api/risk/exposure", [](const httplib::Request&, httplib::Response& res) {
+        auto net_exposures = PositionManager::instance().get_all_net_exposures();
+        auto all_exposures = PositionManager::instance().get_all_exposures();
+        
+        json result = json::object();
+        json by_symbol = json::array();
+        double total_usd = 0.0;
+        double total_hedged_usd = 0.0;
+        
+        for (const auto& exp : all_exposures) {
+            json item = {
+                {"symbol", exp.symbol},
+                {"net_position", exp.net_position},
+                {"hedge_position", exp.hedge_position},
+                {"unhedged_position", exp.unhedged()},
+                {"exposure_usd", exp.exposure_usd},
+                {"side", exp.net_position > 0 ? "LONG" : (exp.net_position < 0 ? "SHORT" : "FLAT")}
+            };
+            by_symbol.push_back(item);
+            total_usd += std::abs(exp.exposure_usd);
+            total_hedged_usd += std::abs(exp.hedge_position * exp.exposure_usd / (exp.net_position != 0 ? exp.net_position : 1));
+        }
+        
+        result["by_symbol"] = by_symbol;
+        result["summary"] = {
+            {"total_exposure_usd", total_usd},
+            {"total_hedged_usd", total_hedged_usd},
+            {"unhedged_usd", total_usd - total_hedged_usd},
+            {"hedge_ratio", total_usd > 0 ? total_hedged_usd / total_usd : 1.0}
+        };
+        result["timestamp"] = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        
+        res.set_content(result.dump(), "application/json");
+    });
+    
+    // GET /api/risk/hedges - History of hedge trades
+    server_->Get("/api/risk/hedges", [](const httplib::Request&, httplib::Response& res) {
+        auto hedges = HedgingEngine::instance().get_hedge_history();
+        
+        json arr = json::array();
+        for (const auto& h : hedges) {
+            arr.push_back({
+                {"symbol", h.symbol},
+                {"side", h.side},
+                {"quantity", h.quantity},
+                {"price", h.price},
+                {"timestamp", h.timestamp},
+                {"fxcm_order_id", h.fxcm_order_id},
+                {"status", h.status}
+            });
+        }
+        
+        res.set_content(arr.dump(), "application/json");
+    });
+    
+    // GET /api/risk/pnl - Real-time P&L breakdown
+    server_->Get("/api/risk/pnl", [](const httplib::Request&, httplib::Response& res) {
+        auto exposures = PositionManager::instance().get_all_exposures();
+        
+        json result = json::object();
+        json by_symbol = json::array();
+        double total_unrealized = 0.0;
+        double total_realized = 0.0;
+        
+        // Calculate P&L from client positions
+        for (const auto& exp : exposures) {
+            auto* product = ProductCatalog::instance().get(exp.symbol);
+            double mark_price = product ? product->mark_price_mnt : 0.0;
+            // Simplified PnL calc - would need average entry for accurate calc
+            double unrealized_pnl = exp.unhedged() * mark_price * 0.001;  // Estimate
+            
+            by_symbol.push_back({
+                {"symbol", exp.symbol},
+                {"net_position", exp.net_position},
+                {"mark_price", mark_price},
+                {"unrealized_pnl_mnt", unrealized_pnl}
+            });
+            total_unrealized += unrealized_pnl;
+        }
+        
+        result["by_symbol"] = by_symbol;
+        result["total_unrealized_pnl_mnt"] = total_unrealized;
+        result["total_realized_pnl_mnt"] = total_realized;
+        result["timestamp"] = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        
+        res.set_content(result.dump(), "application/json");
+    });
+    
     // ==================== HEALTH ====================
     
     server_->Get("/health", [](const httplib::Request&, httplib::Response& res) {

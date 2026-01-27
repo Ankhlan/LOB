@@ -100,6 +100,10 @@ public:
     std::vector<ExchangeExposure> get_all_exposures() const;
     void update_hedge_position(const std::string& symbol, double hedge_size);
     
+    // Net exposure - returns signed value (positive=net long, negative=net short)
+    double get_net_exposure(const std::string& symbol) const;
+    std::unordered_map<std::string, double> get_all_net_exposures() const;
+    
 private:
     PositionManager() = default;
     
@@ -378,6 +382,31 @@ inline std::vector<ExchangeExposure> PositionManager::get_all_exposures() const 
 inline void PositionManager::update_hedge_position(const std::string& symbol, double hedge_size) {
     std::lock_guard<std::mutex> lock(mutex_);
     exposures_[symbol].hedge_position = hedge_size;
+}
+
+inline double PositionManager::get_net_exposure(const std::string& symbol) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = exposures_.find(symbol);
+    if (it != exposures_.end()) {
+        return it->second.net_position;
+    }
+    // Calculate from positions if not in exposure map
+    double net = 0.0;
+    for (const auto& [key, pos] : positions_) {
+        if (pos.symbol == symbol) {
+            net += pos.size;  // size is already signed (+ long, - short)
+        }
+    }
+    return net;
+}
+
+inline std::unordered_map<std::string, double> PositionManager::get_all_net_exposures() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::unordered_map<std::string, double> result;
+    for (const auto& [sym, exp] : exposures_) {
+        result[sym] = exp.net_position;
+    }
+    return result;
 }
 
 } // namespace central_exchange
