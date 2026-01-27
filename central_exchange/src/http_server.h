@@ -282,10 +282,16 @@ inline void HttpServer::setup_routes() {
             auto pos = PositionManager::instance().open_position(user_id, symbol, size, entry_price);
             
             if (pos) {
+                // Trigger auto-hedge check asynchronously
+                std::thread([]() {
+                    HedgingEngine::instance().check_and_hedge();
+                }).detach();
+                
                 res.set_content(json{
                     {"success", true},
                     {"position", position_to_json(*pos)},
-                    {"balance", PositionManager::instance().get_balance(user_id)}
+                    {"balance", PositionManager::instance().get_balance(user_id)},
+                    {"hedge_triggered", product && product->requires_hedge()}
                 }.dump(), "application/json");
             } else {
                 res.status = 400;
@@ -354,6 +360,11 @@ inline void HttpServer::setup_routes() {
             auto result = PositionManager::instance().close_position(
                 user_id, symbol, pos->size, exit_price
             );
+            
+            // Trigger auto-hedge check after position closed
+            std::thread([]() {
+                HedgingEngine::instance().check_and_hedge();
+            }).detach();
             
             res.set_content(json{
                 {"success", true},

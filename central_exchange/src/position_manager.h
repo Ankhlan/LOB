@@ -356,6 +356,7 @@ inline void PositionManager::update_exposure(const std::string& symbol, double d
     auto* product = ProductCatalog::instance().get(symbol);
     if (product && product->requires_hedge()) {
         exp.exposure_usd = exp.net_position * product->mark_price_mnt / USD_MNT_RATE;
+        // Note: Auto-hedge triggered in http_server after position changes
     }
 }
 
