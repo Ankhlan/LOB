@@ -647,7 +647,11 @@ inline void HttpServer::setup_routes() {
         
         /* Center Panel - Chart placeholder and depth */
         .center { display: flex; flex-direction: column; background: var(--bg-primary); }
-        .chart-area { flex: 1; display: flex; align-items: center; justify-content: center; border-bottom: 1px solid var(--border); position: relative; }
+        .chart-area { flex: 1; display: flex; flex-direction: column; border-bottom: 1px solid var(--border); position: relative; overflow: hidden; }
+        .chart-toolbar { display: flex; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--bg-secondary); }
+        .chart-btn { background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-secondary); padding: 4px 12px; border-radius: 4px; font-size: 11px; cursor: pointer; }
+        .chart-btn:hover, .chart-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+        .chart-container { flex: 1; position: relative; }
         .chart-placeholder { text-align: center; color: var(--text-muted); }
         .chart-placeholder h3 { font-size: 16px; margin-bottom: 8px; color: var(--text-secondary); }
         .selected-instrument { position: absolute; top: 16px; left: 16px; }
@@ -753,14 +757,21 @@ inline void HttpServer::setup_routes() {
         
         <section class="center">
             <div class="chart-area">
-                <div class="selected-instrument" id="selectedInstrument">
+                <div class="chart-toolbar">
+                    <button class="chart-btn active" onclick="setTimeframe('1')">1m</button>
+                    <button class="chart-btn" onclick="setTimeframe('5')">5m</button>
+                    <button class="chart-btn" onclick="setTimeframe('15')">15m</button>
+                    <button class="chart-btn" onclick="setTimeframe('60')">1H</button>
+                    <button class="chart-btn" onclick="setTimeframe('D')">1D</button>
+                    <span style="flex:1"></span>
+                    <span style="font-size:11px;color:var(--text-muted)">Price in MNT</span>
+                </div>
+                <div class="selected-instrument" id="selectedInstrument" style="position:absolute;top:48px;left:16px;z-index:100;">
                     <div class="selected-symbol" id="selectedSymbol">XAU-MNT-PERP</div>
                     <div class="selected-price" id="selectedMid">-</div>
                     <div class="selected-change up" id="selectedChange">+0.00%</div>
                 </div>
-                <!-- TradingView Widget -->
-                <div id="tradingview-widget" style="flex:1;width:100%;height:100%;"></div>
-                <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+                <div class="chart-container" id="chartContainer"></div>
             </div>
             <div class="orderbook">
                 <div class="orderbook-side orderbook-bids">
@@ -816,43 +827,99 @@ inline void HttpServer::setup_routes() {
         </div>
     </main>
     
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
     <script>
-        let state = { selected: 'XAU-MNT-PERP', side: 'long', instruments: [], quotes: {}, tvWidget: null };
+        let state = { selected: 'XAU-MNT-PERP', side: 'long', instruments: [], quotes: {}, chart: null, candleSeries: null, priceHistory: {}, timeframe: '15' };
         const fmt = (n, d=0) => new Intl.NumberFormat('en-US', {minimumFractionDigits:d, maximumFractionDigits:d}).format(n);
         
-        // Symbol mapping for TradingView
-        const tvSymbols = {
-            'XAU-MNT-PERP': 'OANDA:XAUUSD',
-            'XAG-MNT-PERP': 'OANDA:XAGUSD',
-            'BTC-MNT-PERP': 'BINANCE:BTCUSDT',
-            'ETH-MNT-PERP': 'BINANCE:ETHUSDT',
-            'EUR-MNT-PERP': 'FX:EURUSD',
-            'USD-MNT-PERP': 'FX_IDC:USDMNT',
-            'OIL-MNT-PERP': 'TVC:USOIL',
-            'SPX-MNT-PERP': 'FOREXCOM:SPXUSD',
-            'NDX-MNT-PERP': 'NASDAQ:NDX'
-        };
-        
-        function initTradingView(symbol) {
-            const tvSym = tvSymbols[symbol] || 'OANDA:XAUUSD';
-            if (state.tvWidget) {
-                state.tvWidget.remove();
+        // Initialize lightweight chart with MNT prices
+        function initChart() {
+            const container = document.getElementById('chartContainer');
+            if (state.chart) {
+                state.chart.remove();
             }
-            state.tvWidget = new TradingView.widget({
-                "autosize": true,
-                "symbol": tvSym,
-                "interval": "15",
-                "timezone": "Asia/Ulaanbaatar",
-                "theme": "dark",
-                "style": "1",
-                "locale": "en",
-                "toolbar_bg": "#111827",
-                "enable_publishing": false,
-                "hide_side_toolbar": false,
-                "allow_symbol_change": true,
-                "container_id": "tradingview-widget",
-                "hide_volume": false
+            
+            state.chart = LightweightCharts.createChart(container, {
+                width: container.clientWidth,
+                height: container.clientHeight,
+                layout: {
+                    background: { type: 'solid', color: '#0a0e17' },
+                    textColor: '#9ca3af',
+                },
+                grid: {
+                    vertLines: { color: '#1f2937' },
+                    horzLines: { color: '#1f2937' },
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                },
+                rightPriceScale: {
+                    borderColor: '#2d3748',
+                    scaleMargins: { top: 0.1, bottom: 0.1 },
+                },
+                timeScale: {
+                    borderColor: '#2d3748',
+                    timeVisible: true,
+                    secondsVisible: false,
+                },
             });
+            
+            state.candleSeries = state.chart.addCandlestickSeries({
+                upColor: '#10b981',
+                downColor: '#ef4444',
+                borderDownColor: '#ef4444',
+                borderUpColor: '#10b981',
+                wickDownColor: '#ef4444',
+                wickUpColor: '#10b981',
+            });
+            
+            // Handle resize
+            window.addEventListener('resize', () => {
+                if (state.chart && container) {
+                    state.chart.resize(container.clientWidth, container.clientHeight);
+                }
+            });
+        }
+        
+        function updateChartData() {
+            if (!state.selected || !state.quotes[state.selected]) return;
+            
+            const q = state.quotes[state.selected];
+            const mid = q.mid || q.mark_price || 100000;
+            const now = Math.floor(Date.now() / 1000);
+            
+            // Generate synthetic candle data (prices in MNT)
+            if (!state.priceHistory[state.selected]) {
+                state.priceHistory[state.selected] = [];
+                const interval = state.timeframe === 'D' ? 86400 : state.timeframe === '60' ? 3600 : parseInt(state.timeframe) * 60;
+                for (let i = 100; i >= 0; i--) {
+                    const t = now - i * interval;
+                    const vol = 0.002;
+                    const o = mid * (1 + (Math.random() - 0.5) * vol * 2);
+                    const c = mid * (1 + (Math.random() - 0.5) * vol * 2);
+                    const h = Math.max(o, c) * (1 + Math.random() * vol);
+                    const l = Math.min(o, c) * (1 - Math.random() * vol);
+                    state.priceHistory[state.selected].push({ time: t, open: o, high: h, low: l, close: c });
+                }
+            }
+            
+            const history = state.priceHistory[state.selected];
+            if (history.length > 0) {
+                const last = history[history.length - 1];
+                last.close = mid;
+                last.high = Math.max(last.high, mid);
+                last.low = Math.min(last.low, mid);
+            }
+            
+            state.candleSeries.setData(history);
+        }
+        
+        function setTimeframe(tf) {
+            state.timeframe = tf;
+            document.querySelectorAll('.chart-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+            state.priceHistory[state.selected] = null;
+            updateChartData();
         }
         
         // Keyboard shortcuts
@@ -869,10 +936,10 @@ inline void HttpServer::setup_routes() {
         async function init() {
             await fetch('/api/deposit', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({user_id:'demo', amount:100000000}) });
             await refresh();
-            initTradingView('XAU-MNT-PERP');
+            initChart();
             selectInstrument('XAU-MNT-PERP');
             setInterval(refresh, 1500);
-            setInterval(() => { if(state.selected) renderOrderbook(); }, 2000);
+            setInterval(() => { if(state.selected) { renderOrderbook(); updateChartData(); } }, 2000);
         }
         
         async function refresh() {
@@ -913,10 +980,11 @@ inline void HttpServer::setup_routes() {
         
         function selectInstrument(symbol) {
             state.selected = symbol;
+            state.priceHistory[symbol] = null; // Reset chart for new symbol
             renderInstruments();
             updateSelectedDisplay();
             renderOrderbook();
-            initTradingView(symbol);
+            updateChartData();
         }
         
         function updateSelectedDisplay() {
