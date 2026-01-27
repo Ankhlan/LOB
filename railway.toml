@@ -1,5 +1,9 @@
 [build]
 dockerfile = "Dockerfile"
+watchPatterns = ["central_exchange/**"]
+
+[build.args]
+NO_CACHE = "202601271656"
 
 [deploy]
 healthcheckPath = "/health"
