@@ -82,7 +82,7 @@ Full support for Cyrillic (А-Я, а-я)
 ### Taglines
 - EN: "Futures. Settled in Cash."
 - EN: "Trade the World from Mongolia"
-- MN: "Хөрөнгө оруулалтын ирээдүй"
+- MN: "Фючерс. Биет бус тооцоо."
 
 ---
 
@@ -157,3 +157,4 @@ Base unit: 4px
 ---
 
 Version 1.1 | January 2026
+
