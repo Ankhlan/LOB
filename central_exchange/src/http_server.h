@@ -1092,6 +1092,41 @@ inline void HttpServer::setup_routes() {
         .status-spacer { flex: 1; }
         .status-time { color: var(--text-muted); }
         
+        /* ===== LOGIN MODAL ===== */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(4px); }
+        .modal-overlay.hidden { display: none; }
+        .login-modal { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; width: 360px; box-shadow: 0 16px 48px rgba(0,0,0,0.5); }
+        .login-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+        .login-header .flag { font-size: 24px; }
+        .login-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+        .login-subtitle { font-size: 11px; color: var(--text-muted); }
+        .login-body { padding: 20px; }
+        .login-step { display: none; }
+        .login-step.active { display: block; }
+        .phone-input { display: flex; gap: 8px; margin-bottom: 16px; }
+        .phone-prefix { background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; padding: 10px 12px; color: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+        .phone-number { flex: 1; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 4px; padding: 10px 12px; color: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+        .phone-number:focus { outline: none; border-color: var(--accent); }
+        .otp-inputs { display: flex; gap: 8px; justify-content: center; margin-bottom: 16px; }
+        .otp-digit { width: 44px; height: 52px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 4px; text-align: center; font-size: 20px; font-family: 'JetBrains Mono', monospace; color: var(--text-primary); }
+        .otp-digit:focus { outline: none; border-color: var(--accent); }
+        .login-btn { width: 100%; padding: 12px; border: none; border-radius: 4px; background: var(--accent); color: white; font-weight: 600; font-size: 13px; cursor: pointer; }
+        .login-btn:hover { opacity: 0.9; }
+        .login-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .login-error { color: var(--red); font-size: 11px; margin-top: 8px; text-align: center; }
+        .login-info { color: var(--text-muted); font-size: 11px; margin-top: 12px; text-align: center; }
+        .login-back { background: transparent; border: none; color: var(--text-muted); font-size: 11px; cursor: pointer; margin-top: 12px; }
+        .login-back:hover { color: var(--text-primary); }
+        .user-info { display: flex; align-items: center; gap: 8px; padding: 4px 10px; background: var(--bg-tertiary); border-radius: 4px; border: 1px solid var(--border); margin-right: 8px; }
+        .user-phone { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-primary); }
+        .logout-btn { background: transparent; border: none; color: var(--red); font-size: 10px; cursor: pointer; padding: 2px 6px; }
+        .logout-btn:hover { text-decoration: underline; }
+        
+        /* ===== LANGUAGE TOGGLE ===== */
+        .lang-toggle { display: flex; gap: 2px; background: var(--bg-primary); padding: 2px; border-radius: 4px; border: 1px solid var(--border); margin-right: 8px; }
+        .lang-btn { padding: 4px 8px; border: none; border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: 500; background: transparent; color: var(--text-muted); }
+        .lang-btn.active { background: var(--accent); color: white; }
+        
         /* ===== POSITIONS BAR ===== */
         .positions-bar { background: var(--bg-secondary); border-top: 1px solid var(--border); height: 140px; display: flex; flex-direction: column; }
         .positions-tabs { display: flex; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); }
@@ -1118,21 +1153,60 @@ inline void HttpServer::setup_routes() {
     </style>
 </head>
 <body data-theme="dark">
+    <!-- LOGIN MODAL -->
+    <div class="modal-overlay hidden" id="loginModal">
+        <div class="login-modal">
+            <div class="login-header">
+                <span class="flag">🇲🇳</span>
+                <div>
+                    <div class="login-title" data-i18n="loginTitle">Central Exchange</div>
+                    <div class="login-subtitle" data-i18n="loginSubtitle">Login with your phone number</div>
+                </div>
+            </div>
+            <div class="login-body">
+                <!-- Step 1: Phone Input -->
+                <div class="login-step active" id="stepPhone">
+                    <div class="phone-input">
+                        <span class="phone-prefix">+976</span>
+                        <input type="tel" class="phone-number" id="phoneInput" placeholder="99001234" maxlength="8" oninput="validatePhone()">
+                    </div>
+                    <button class="login-btn" id="requestOtpBtn" onclick="requestOtp()" disabled data-i18n="sendCode">Send Code</button>
+                    <div class="login-error" id="phoneError"></div>
+                    <div class="login-info" data-i18n="phoneInfo">We'll send a 6-digit code via SMS</div>
+                </div>
+                <!-- Step 2: OTP Input -->
+                <div class="login-step" id="stepOtp">
+                    <div class="otp-inputs">
+                        <input type="text" class="otp-digit" maxlength="1" oninput="otpInput(this, 0)">
+                        <input type="text" class="otp-digit" maxlength="1" oninput="otpInput(this, 1)">
+                        <input type="text" class="otp-digit" maxlength="1" oninput="otpInput(this, 2)">
+                        <input type="text" class="otp-digit" maxlength="1" oninput="otpInput(this, 3)">
+                        <input type="text" class="otp-digit" maxlength="1" oninput="otpInput(this, 4)">
+                        <input type="text" class="otp-digit" maxlength="1" oninput="otpInput(this, 5)">
+                    </div>
+                    <button class="login-btn" id="verifyOtpBtn" onclick="verifyOtp()" disabled data-i18n="verify">Verify</button>
+                    <div class="login-error" id="otpError"></div>
+                    <button class="login-back" onclick="backToPhone()" data-i18n="changeNumber">← Change number</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- TOP MENU BAR - Desktop App Style -->
     <div class="menubar">
         <div class="menubar-logo">
             <div class="menubar-logo-icon">🇲🇳</div>
-            <span class="menubar-logo-text">Central Exchange</span>
+            <span class="menubar-logo-text" data-i18n="appName">Central Exchange</span>
         </div>
         <div class="menu-items">
-            <div class="menu-item has-dropdown">File
+            <div class="menu-item has-dropdown" data-i18n="menuFile">File
                 <div class="dropdown">
-                    <div class="dropdown-item">New Workspace <span class="shortcut">Ctrl+N</span></div>
-                    <div class="dropdown-item">Save Layout <span class="shortcut">Ctrl+S</span></div>
+                    <div class="dropdown-item" data-i18n="newWorkspace">New Workspace <span class="shortcut">Ctrl+N</span></div>
+                    <div class="dropdown-item" data-i18n="saveLayout">Save Layout <span class="shortcut">Ctrl+S</span></div>
                     <div class="dropdown-divider"></div>
-                    <div class="dropdown-item">Export Trades</div>
+                    <div class="dropdown-item" data-i18n="exportTrades">Export Trades</div>
                     <div class="dropdown-divider"></div>
-                    <div class="dropdown-item">Exit</div>
+                    <div class="dropdown-item" data-i18n="exit">Exit</div>
                 </div>
             </div>
             <div class="menu-item has-dropdown">View
@@ -1170,6 +1244,15 @@ inline void HttpServer::setup_routes() {
         </div>
         <div class="menu-spacer"></div>
         <div class="menu-right">
+            <div class="lang-toggle">
+                <button class="lang-btn active" id="langEn" onclick="setLang('en')">EN</button>
+                <button class="lang-btn" id="langMn" onclick="setLang('mn')">МН</button>
+            </div>
+            <div class="user-info" id="userInfo" style="display:none;">
+                <span class="user-phone" id="userPhone">+976 ...</span>
+                <button class="logout-btn" onclick="logout()" data-i18n="logout">Logout</button>
+            </div>
+            <button class="toolbar-btn" id="loginBtn" onclick="showLogin()" data-i18n="login">📱 Login</button>
             <div class="theme-selector">
                 <button class="theme-btn dark active" onclick="setTheme('dark')" title="Dark">🌙</button>
                 <button class="theme-btn light" onclick="setTheme('light')" title="Light">☀️</button>
@@ -1332,8 +1415,278 @@ inline void HttpServer::setup_routes() {
     
     <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
     <script>
-        let state = { selected: 'XAU-MNT-PERP', side: 'long', instruments: [], quotes: {}, chart: null, candleSeries: null, priceHistory: {}, timeframe: '15', theme: 'dark' };
+        let state = { selected: 'XAU-MNT-PERP', side: 'long', instruments: [], quotes: {}, chart: null, candleSeries: null, priceHistory: {}, timeframe: '15', theme: 'dark', lang: 'en', user: null, authToken: null };
         const fmt = (n, d=0) => new Intl.NumberFormat('en-US', {minimumFractionDigits:d, maximumFractionDigits:d}).format(n);
+        
+        // ===== TRANSLATIONS (EN/MN) =====
+        const i18n = {
+            en: {
+                appName: 'Central Exchange',
+                loginTitle: 'Central Exchange',
+                loginSubtitle: 'Login with your phone number',
+                sendCode: 'Send Code',
+                phoneInfo: "We'll send a 6-digit code via SMS",
+                verify: 'Verify',
+                changeNumber: '← Change number',
+                login: '📱 Login',
+                logout: 'Logout',
+                menuFile: 'File',
+                menuView: 'View',
+                menuTrade: 'Trade',
+                menuWindow: 'Window',
+                menuHelp: 'Help',
+                newWorkspace: 'New Workspace',
+                saveLayout: 'Save Layout',
+                exportTrades: 'Export Trades',
+                exit: 'Exit',
+                instruments: 'Instruments',
+                search: 'Search...',
+                deposit: '💳 Deposit',
+                withdraw: '📤 Withdraw',
+                chart: '📊 Chart',
+                orders: '📋 Orders',
+                positions: '📈 Positions',
+                equity: 'Equity',
+                available: 'Available',
+                margin: 'Margin',
+                market: 'Market',
+                limit: 'Limit',
+                stop: 'Stop',
+                buy: 'BUY',
+                sell: 'SELL',
+                quantity: 'Quantity',
+                leverage: 'Leverage',
+                entry: 'Entry',
+                value: 'Value',
+                fee: 'Fee',
+                openOrders: 'Open Orders',
+                history: 'History',
+                symbol: 'Symbol',
+                side: 'Side',
+                size: 'Size',
+                entryPrice: 'Entry',
+                markPrice: 'Mark',
+                pnl: 'P&L',
+                close: 'Close',
+                noPositions: 'No open positions',
+                engine: 'Engine',
+                online: 'Online',
+                connected: 'Connected',
+                used: 'Used',
+                free: 'Free',
+                invalidPhone: 'Enter 8-digit phone number',
+                otpSent: 'Code sent!',
+                invalidOtp: 'Invalid code',
+                loginSuccess: 'Welcome!'
+            },
+            mn: {
+                appName: 'Төв Бирж',
+                loginTitle: 'Төв Бирж',
+                loginSubtitle: 'Утасны дугаараар нэвтрэх',
+                sendCode: 'Код илгээх',
+                phoneInfo: 'SMS-ээр 6 оронтой код илгээнэ',
+                verify: 'Баталгаажуулах',
+                changeNumber: '← Дугаар солих',
+                login: '📱 Нэвтрэх',
+                logout: 'Гарах',
+                menuFile: 'Файл',
+                menuView: 'Харах',
+                menuTrade: 'Арилжаа',
+                menuWindow: 'Цонх',
+                menuHelp: 'Тусламж',
+                newWorkspace: 'Шинэ ажлын талбар',
+                saveLayout: 'Байршил хадгалах',
+                exportTrades: 'Арилжаа экспортлох',
+                exit: 'Гарах',
+                instruments: 'Хэрэгсэл',
+                search: 'Хайх...',
+                deposit: '💳 Орлого',
+                withdraw: '📤 Зарлага',
+                chart: '📊 График',
+                orders: '📋 Захиалга',
+                positions: '📈 Позиц',
+                equity: 'Хөрөнгө',
+                available: 'Боломжит',
+                margin: 'Барьцаа',
+                market: 'Зах зээл',
+                limit: 'Хязгаар',
+                stop: 'Зогсоох',
+                buy: 'АВАХ',
+                sell: 'ЗАРАХ',
+                quantity: 'Тоо хэмжээ',
+                leverage: 'Хөшүүрэг',
+                entry: 'Орох',
+                value: 'Үнэ цэнэ',
+                fee: 'Шимтгэл',
+                openOrders: 'Нээлттэй захиалга',
+                history: 'Түүх',
+                symbol: 'Тэмдэгт',
+                side: 'Тал',
+                size: 'Хэмжээ',
+                entryPrice: 'Оруулах',
+                markPrice: 'Маркын',
+                pnl: 'АА',
+                close: 'Хаах',
+                noPositions: 'Нээлттэй позиц байхгүй',
+                engine: 'Систем',
+                online: 'Холбогдсон',
+                connected: 'Холбогдсон',
+                used: 'Ашигласан',
+                free: 'Чөлөөт',
+                invalidPhone: '8 оронтой утасны дугаар оруулна уу',
+                otpSent: 'Код илгээгдлээ!',
+                invalidOtp: 'Буруу код',
+                loginSuccess: 'Тавтай морил!'
+            }
+        };
+        
+        function t(key) {
+            return i18n[state.lang][key] || i18n.en[key] || key;
+        }
+        
+        function setLang(lang) {
+            state.lang = lang;
+            localStorage.setItem('ce-lang', lang);
+            document.getElementById('langEn').classList.toggle('active', lang === 'en');
+            document.getElementById('langMn').classList.toggle('active', lang === 'mn');
+            // Update all i18n elements
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                const shortcuts = el.querySelector('.shortcut');
+                if (shortcuts) {
+                    el.innerHTML = t(key) + ' ' + shortcuts.outerHTML;
+                } else if (el.tagName === 'INPUT') {
+                    el.placeholder = t(key);
+                } else {
+                    el.textContent = t(key);
+                }
+            });
+        }
+        
+        // ===== LOGIN FUNCTIONS =====
+        let loginPhone = '';
+        
+        function showLogin() {
+            document.getElementById('loginModal').classList.remove('hidden');
+            document.getElementById('phoneInput').focus();
+        }
+        
+        function hideLogin() {
+            document.getElementById('loginModal').classList.add('hidden');
+            document.getElementById('stepPhone').classList.add('active');
+            document.getElementById('stepOtp').classList.remove('active');
+            document.getElementById('phoneInput').value = '';
+            document.querySelectorAll('.otp-digit').forEach(d => d.value = '');
+            document.getElementById('phoneError').textContent = '';
+            document.getElementById('otpError').textContent = '';
+        }
+        
+        function validatePhone() {
+            const phone = document.getElementById('phoneInput').value.replace(/\D/g, '');
+            document.getElementById('requestOtpBtn').disabled = phone.length !== 8;
+        }
+        
+        async function requestOtp() {
+            const phone = '+976' + document.getElementById('phoneInput').value.replace(/\D/g, '');
+            loginPhone = phone;
+            document.getElementById('requestOtpBtn').disabled = true;
+            document.getElementById('requestOtpBtn').textContent = '...';
+            
+            try {
+                const res = await fetch('/api/auth/request-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone })
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    document.getElementById('stepPhone').classList.remove('active');
+                    document.getElementById('stepOtp').classList.add('active');
+                    document.querySelector('.otp-digit').focus();
+                    // DEV: Show OTP in console
+                    if (data.dev_otp) console.log('DEV OTP:', data.dev_otp);
+                } else {
+                    document.getElementById('phoneError').textContent = data.error || t('invalidPhone');
+                }
+            } catch (e) {
+                document.getElementById('phoneError').textContent = 'Network error';
+            }
+            
+            document.getElementById('requestOtpBtn').disabled = false;
+            document.getElementById('requestOtpBtn').textContent = t('sendCode');
+        }
+        
+        function otpInput(el, idx) {
+            if (el.value.length === 1 && idx < 5) {
+                document.querySelectorAll('.otp-digit')[idx + 1].focus();
+            }
+            // Check if all 6 digits entered
+            const digits = Array.from(document.querySelectorAll('.otp-digit')).map(d => d.value).join('');
+            document.getElementById('verifyOtpBtn').disabled = digits.length !== 6;
+        }
+        
+        async function verifyOtp() {
+            const otp = Array.from(document.querySelectorAll('.otp-digit')).map(d => d.value).join('');
+            document.getElementById('verifyOtpBtn').disabled = true;
+            document.getElementById('verifyOtpBtn').textContent = '...';
+            
+            try {
+                const res = await fetch('/api/auth/verify-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone: loginPhone, otp })
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    state.authToken = data.token;
+                    state.user = { phone: loginPhone };
+                    localStorage.setItem('ce-token', data.token);
+                    localStorage.setItem('ce-phone', loginPhone);
+                    updateUserUI();
+                    hideLogin();
+                } else {
+                    document.getElementById('otpError').textContent = data.error || t('invalidOtp');
+                }
+            } catch (e) {
+                document.getElementById('otpError').textContent = 'Network error';
+            }
+            
+            document.getElementById('verifyOtpBtn').disabled = false;
+            document.getElementById('verifyOtpBtn').textContent = t('verify');
+        }
+        
+        function backToPhone() {
+            document.getElementById('stepOtp').classList.remove('active');
+            document.getElementById('stepPhone').classList.add('active');
+            document.querySelectorAll('.otp-digit').forEach(d => d.value = '');
+            document.getElementById('otpError').textContent = '';
+        }
+        
+        function updateUserUI() {
+            if (state.user) {
+                document.getElementById('userInfo').style.display = 'flex';
+                document.getElementById('userPhone').textContent = state.user.phone;
+                document.getElementById('loginBtn').style.display = 'none';
+            } else {
+                document.getElementById('userInfo').style.display = 'none';
+                document.getElementById('loginBtn').style.display = 'block';
+            }
+        }
+        
+        function logout() {
+            state.user = null;
+            state.authToken = null;
+            localStorage.removeItem('ce-token');
+            localStorage.removeItem('ce-phone');
+            updateUserUI();
+        }
+        
+        // Close modal on background click
+        document.getElementById('loginModal').addEventListener('click', (e) => {
+            if (e.target.id === 'loginModal') hideLogin();
+        });
         
         // Theme configurations - One Half Dark as default
         const themes = {
@@ -1474,9 +1827,22 @@ inline void HttpServer::setup_routes() {
         });
         
         async function init() {
+            // Load saved language
+            const savedLang = localStorage.getItem('ce-lang') || 'en';
+            setLang(savedLang);
+            
             // Load saved theme
             const savedTheme = localStorage.getItem('ce-theme') || 'dark';
             setTheme(savedTheme);
+            
+            // Load saved auth
+            const savedToken = localStorage.getItem('ce-token');
+            const savedPhone = localStorage.getItem('ce-phone');
+            if (savedToken && savedPhone) {
+                state.authToken = savedToken;
+                state.user = { phone: savedPhone };
+                updateUserUI();
+            }
             
             await fetch('/api/deposit', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({user_id:'demo', amount:100000000}) });
             await refresh();
