@@ -1,0 +1,246 @@
+; ═══════════════════════════════════════════════════════════════════════════
+; CENTRAL RETAIL EXCHANGE (CRE) - CHART OF ACCOUNTS
+; Mongolian FX/CFD Exchange - Double-Entry Ledger
+; Created: 2026-01-27
+; ═══════════════════════════════════════════════════════════════════════════
+; 
+; MONGOLIAN ACCOUNT CODE REFERENCES (НББОУС):
+; 1xxx - Assets (Хөрөнгө)
+; 2xxx - Liabilities (Өр төлбөр)  
+; 3xxx - Equity (Эзний өмч)
+; 4xxx - Revenue (Орлого)
+; 5xxx - Expenses (Зардал)
+;
+; Currency: MNT (Mongolian Tugrik) - Base currency
+;           USD (US Dollar) - FXCM settlement
+;
+; ═══════════════════════════════════════════════════════════════════════════
+
+; ─────────────────────────────────────────────────────────────────────────────
+; ASSETS (Хөрөнгө) - Account Code 1xxx
+; ─────────────────────────────────────────────────────────────────────────────
+
+; 1100 - Exchange Operating Cash
+account Assets:Exchange:Cash:MNT
+    note Exchange operational MNT balance (QPay settlement)
+    alias CashMNT
+
+account Assets:Exchange:Cash:USD  
+    note Exchange USD balance (FXCM hedging)
+    alias CashUSD
+
+; 1200 - Bank Accounts
+account Assets:Bank:Golomt:MNT
+    note Golomt Bank MNT operating account
+    alias GolomtMNT
+
+account Assets:Bank:Golomt:USD
+    note Golomt Bank USD account
+    alias GolomtUSD
+
+; 1300 - Customer Margin Deposits (held in trust)
+account Assets:Margin:Customers
+    note Total customer margin held
+    alias CustomerMargin
+
+account Assets:Margin:Customers:ByUser
+    note Per-user margin tracking (sub-accounts created dynamically)
+
+; 1400 - Hedging Positions (at FXCM)
+account Assets:Hedge:FXCM:Cash
+    note FXCM account cash balance
+    alias FXCMCash
+
+account Assets:Hedge:FXCM:Positions
+    note FXCM open positions (hedge book)
+    alias FXCMPositions
+
+account Assets:Hedge:FXCM:Positions:FX
+    note FX hedge positions (EUR, GBP, JPY, etc.)
+
+account Assets:Hedge:FXCM:Positions:Metals
+    note Precious metals positions (XAU, XAG)
+
+account Assets:Hedge:FXCM:Positions:Indices
+    note Index CFD positions (SPX500, NAS100, etc.)
+
+account Assets:Hedge:FXCM:Positions:Energy
+    note Energy positions (USOil, NGAS)
+
+; 1500 - Receivables
+account Assets:Receivables:Customers
+    note Outstanding customer payments
+
+account Assets:Receivables:FXCM
+    note FXCM settlement receivables
+
+; ─────────────────────────────────────────────────────────────────────────────
+; LIABILITIES (Өр төлбөр) - Account Code 2xxx
+; ─────────────────────────────────────────────────────────────────────────────
+
+; 2100 - Customer Balances (we OWE customers their deposits)
+account Liabilities:Customers:Balances
+    note Total customer account balances owed
+    alias CustomerBalances
+
+account Liabilities:Customers:Balances:ByUser
+    note Per-user balance (sub-accounts created per phone number)
+
+; 2200 - Customer Open Positions (exposure we owe)
+account Liabilities:Customers:Positions
+    note Customer position exposure (what they could win)
+    alias CustomerPositions
+
+account Liabilities:Customers:Positions:FX
+    note FX customer positions
+
+account Liabilities:Customers:Positions:Metals
+    note Metals customer positions
+
+account Liabilities:Customers:Positions:Indices
+    note Index customer positions
+
+; 2300 - Pending Withdrawals
+account Liabilities:Pending:Withdrawals
+    note Approved withdrawals pending transfer
+    alias PendingWithdrawals
+
+; 2400 - Taxes Payable
+account Liabilities:Taxes:VAT
+    note VAT payable (10% on fees)
+    alias VATPayable
+
+account Liabilities:Taxes:Income
+    note Corporate income tax payable
+    alias IncomeTaxPayable
+
+; ─────────────────────────────────────────────────────────────────────────────
+; EQUITY (Эзний өмч) - Account Code 3xxx
+; ─────────────────────────────────────────────────────────────────────────────
+
+; 3100 - Owner's Capital
+account Equity:Capital
+    note Initial and contributed capital
+    alias Capital
+
+account Equity:Capital:Founder
+    note Founder's equity stake
+
+; 3200 - Retained Earnings
+account Equity:Retained
+    note Accumulated profits/losses
+    alias RetainedEarnings
+
+; 3300 - Current Period P&L
+account Equity:CurrentPL
+    note Current period profit/loss (closes to Retained)
+    alias CurrentPL
+
+; ─────────────────────────────────────────────────────────────────────────────
+; REVENUE (Орлого) - Account Code 4xxx
+; ─────────────────────────────────────────────────────────────────────────────
+
+; 4100 - Trading Revenue
+account Revenue:Trading:Spread
+    note Spread income (bid-ask difference)
+    alias SpreadIncome
+
+account Revenue:Trading:Fees
+    note Transaction fees (1% typical)
+    alias TradingFees
+
+account Revenue:Trading:Commission
+    note Commission income on trades
+    alias Commission
+
+; 4200 - Financing Revenue
+account Revenue:Financing:Swap
+    note Swap/rollover income (overnight positions)
+    alias SwapIncome
+
+account Revenue:Financing:Interest
+    note Interest on customer balances (if applicable)
+
+; 4300 - Hedging P&L
+account Revenue:Hedging:Realized
+    note Realized P&L from FXCM hedges
+    alias HedgeRealized
+
+account Revenue:Hedging:Unrealized
+    note Unrealized P&L from FXCM hedges (mark-to-market)
+    alias HedgeUnrealized
+
+; 4400 - Other Revenue
+account Revenue:Other:Fees
+    note Miscellaneous fee income
+
+; ─────────────────────────────────────────────────────────────────────────────
+; EXPENSES (Зардал) - Account Code 5xxx
+; ─────────────────────────────────────────────────────────────────────────────
+
+; 5100 - Hedging Costs
+account Expenses:Hedging:FXCM:Spread
+    note FXCM spread costs (B-book hedging)
+    alias FXCMSpread
+
+account Expenses:Hedging:FXCM:Commission
+    note FXCM commission costs
+    alias FXCMCommission
+
+account Expenses:Hedging:FXCM:Swap
+    note FXCM swap/rollover costs
+    alias FXCMSwap
+
+; 5200 - Customer Payouts (winning trades)
+account Expenses:Trading:CustomerWins
+    note Customer winning trades (our loss)
+    alias CustomerWins
+
+; 5300 - Operating Expenses
+account Expenses:Operations:QPay
+    note QPay transaction fees
+    alias QPayFees
+
+account Expenses:Operations:SMS
+    note SMS OTP verification costs
+    alias SMSCosts
+
+account Expenses:Operations:Server
+    note Railway/cloud hosting costs
+    alias ServerCosts
+
+; 5400 - Regulatory & Compliance
+account Expenses:Compliance:License
+    note FRC licensing fees
+    alias LicenseFees
+
+account Expenses:Compliance:Audit
+    note External audit costs
+    alias AuditFees
+
+; 5500 - Bank Fees
+account Expenses:Bank:Fees
+    note Bank transaction fees
+    alias BankFees
+
+account Expenses:Bank:FX
+    note Foreign exchange conversion costs
+    alias FXConversionCosts
+
+; ═══════════════════════════════════════════════════════════════════════════
+; OPENING BALANCES - Initial Exchange Capital
+; ═══════════════════════════════════════════════════════════════════════════
+
+2026-01-01 * Opening Balance - Exchange Capital
+    ; Initial capital injection - 100,000,000 MNT (~$29,000 USD)
+    Assets:Bank:Golomt:MNT              100,000,000 MNT
+    Equity:Capital:Founder             -100,000,000 MNT
+
+2026-01-01 * Opening Balance - FXCM Hedge Account
+    ; Initial FXCM funding - $10,000 USD
+    Assets:Hedge:FXCM:Cash               10,000.00 USD
+    Assets:Bank:Golomt:USD              -10,000.00 USD
+
+; ═══════════════════════════════════════════════════════════════════════════
+; END OF CHART OF ACCOUNTS
+; ═══════════════════════════════════════════════════════════════════════════
