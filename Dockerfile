@@ -1,6 +1,9 @@
 # Central Exchange - C++ Build for Railway
 FROM ubuntu:22.04 AS builder
 
+# Cache buster - change to force rebuild
+ARG CACHE_BUST=202601271553
+
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y cmake g++ git libssl-dev libsqlite3-dev && rm -rf /var/lib/apt/lists/*
