@@ -4,10 +4,8 @@ project(CentralExchange VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# === FETCH DEPENDENCIES ===
 include(FetchContent)
 
-# JSON library
 FetchContent_Declare(
     json
     GIT_REPOSITORY https://github.com/nlohmann/json.git
@@ -16,7 +14,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
-# cpp-httplib (header-only)
 FetchContent_Declare(
     httplib
     GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
@@ -25,7 +22,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(httplib)
 
-# === MAIN EXECUTABLE ===
 add_executable(central_exchange src/main.cpp)
 
 target_include_directories(central_exchange PRIVATE 
@@ -37,13 +33,11 @@ target_link_libraries(central_exchange PRIVATE
     nlohmann_json::nlohmann_json
 )
 
-# Linux needs pthread
 if(UNIX)
     find_package(Threads REQUIRED)
     target_link_libraries(central_exchange PRIVATE Threads::Threads)
 endif()
 
-# OpenSSL for HTTPS (optional)
 find_package(OpenSSL QUIET)
 if(OpenSSL_FOUND)
     target_link_libraries(central_exchange PRIVATE OpenSSL::SSL OpenSSL::Crypto)
