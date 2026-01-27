@@ -1,4 +1,4 @@
-# Central Exchange - C++ Build for Railway
+# Central Exchange - C++ Build for Railway v4
 FROM ubuntu:22.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -6,14 +6,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y cmake g++ git libssl-dev libsqlite3-dev && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-# Cache buster - increment to force rebuild
-ARG CACHE_BUST=3
-RUN echo "Build: ${CACHE_BUST}" > /tmp/build_id
-
 COPY central_exchange/ ./central_exchange/
 
 WORKDIR /app/central_exchange
+# Force rebuild by changing this comment: BUILD_V4_20260127_1640
 RUN mkdir -p build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && make -j$(nproc)
 
 FROM ubuntu:22.04
