@@ -85,7 +85,7 @@ private:
     
     // Hedge positions at FXCM
     std::unordered_map<std::string, double> hedge_positions_;
-    std::mutex hedge_mutex_;
+    mutable std::mutex hedge_mutex_;
     
 #ifdef FXCM_ENABLED
     IO2GSession* session_{nullptr};

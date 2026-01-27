@@ -182,6 +182,9 @@ private:
     
     // Internal
     std::vector<Trade> match(std::shared_ptr<Order> order);
+    void match_against_asks(std::shared_ptr<Order> order, std::vector<Trade>& trades);
+    void match_against_bids(std::shared_ptr<Order> order, std::vector<Trade>& trades);
+    void match_at_level(std::shared_ptr<Order> order, PriceLevel& level, std::vector<Trade>& trades);
     void add_to_book(std::shared_ptr<Order> order);
     Trade create_trade(std::shared_ptr<Order> maker, 
                        std::shared_ptr<Order> taker, 
@@ -240,60 +243,79 @@ inline std::vector<Trade> OrderBook::submit(std::shared_ptr<Order> order) {
 inline std::vector<Trade> OrderBook::match(std::shared_ptr<Order> order) {
     std::vector<Trade> trades;
     
-    auto& opposite = order->is_bid() ? asks_ : bids_;
-    
-    while (order->remaining_qty > 0 && !opposite.empty()) {
-        auto& [best_price, level] = *opposite.begin();
-        
-        // Check if price crosses
-        if (order->type != OrderType::MARKET) {
-            if (order->is_bid() && order->price < best_price) break;
-            if (order->is_ask() && order->price > best_price) break;
-        }
-        
-        // Match against orders at this level
-        while (order->remaining_qty > 0 && !level.empty()) {
-            auto& maker = level.orders.front();
-            double fill_qty = std::min(order->remaining_qty, maker->remaining_qty);
-            
-            // Create trade
-            Trade trade = create_trade(maker, order, fill_qty);
-            trades.push_back(trade);
-            
-            if (on_trade_) on_trade_(trade);
-            
-            // Update maker
-            maker->remaining_qty -= fill_qty;
-            maker->filled_qty += fill_qty;
-            maker->updated_at = now_micros();
-            level.total_quantity -= fill_qty;
-            
-            if (maker->remaining_qty <= 0) {
-                maker->status = OrderStatus::FILLED;
-                if (on_order_) on_order_(*maker);
-                level.orders.pop_front();
-            } else {
-                maker->status = OrderStatus::PARTIALLY_FILLED;
-            }
-            
-            // Update taker
-            order->remaining_qty -= fill_qty;
-            order->filled_qty += fill_qty;
-            
-            if (order->remaining_qty <= 0) {
-                order->status = OrderStatus::FILLED;
-            } else {
-                order->status = OrderStatus::PARTIALLY_FILLED;
-            }
-        }
-        
-        // Remove empty price level
-        if (level.empty()) {
-            opposite.erase(opposite.begin());
-        }
+    if (order->is_bid()) {
+        match_against_asks(order, trades);
+    } else {
+        match_against_bids(order, trades);
     }
     
     return trades;
+}
+
+inline void OrderBook::match_against_asks(std::shared_ptr<Order> order, std::vector<Trade>& trades) {
+    while (order->remaining_qty > 0 && !asks_.empty()) {
+        auto it = asks_.begin();
+        double best_price = it->first;
+        PriceLevel& level = it->second;
+        
+        if (order->type != OrderType::MARKET && order->price < best_price) break;
+        
+        match_at_level(order, level, trades);
+        
+        if (level.empty()) {
+            asks_.erase(it);
+        }
+    }
+}
+
+inline void OrderBook::match_against_bids(std::shared_ptr<Order> order, std::vector<Trade>& trades) {
+    while (order->remaining_qty > 0 && !bids_.empty()) {
+        auto it = bids_.begin();
+        double best_price = it->first;
+        PriceLevel& level = it->second;
+        
+        if (order->type != OrderType::MARKET && order->price > best_price) break;
+        
+        match_at_level(order, level, trades);
+        
+        if (level.empty()) {
+            bids_.erase(it);
+        }
+    }
+}
+
+inline void OrderBook::match_at_level(std::shared_ptr<Order> order, PriceLevel& level, std::vector<Trade>& trades) {
+    while (order->remaining_qty > 0 && !level.empty()) {
+        auto& maker = level.orders.front();
+        double fill_qty = std::min(order->remaining_qty, maker->remaining_qty);
+        
+        Trade trade = create_trade(maker, order, fill_qty);
+        trades.push_back(trade);
+        
+        if (on_trade_) on_trade_(trade);
+        
+        maker->remaining_qty -= fill_qty;
+        maker->filled_qty += fill_qty;
+        maker->updated_at = now_micros();
+        level.total_quantity -= fill_qty;
+        
+        if (maker->remaining_qty <= 0) {
+            maker->status = OrderStatus::FILLED;
+            if (on_order_) on_order_(*maker);
+            level.orders.pop_front();
+        } else {
+            maker->status = OrderStatus::PARTIALLY_FILLED;
+        }
+        
+        order->remaining_qty -= fill_qty;
+        order->filled_qty += fill_qty;
+        
+        if (order->remaining_qty <= 0) {
+            order->status = OrderStatus::FILLED;
+        } else {
+            order->status = OrderStatus::PARTIALLY_FILLED;
+        }
+    }
 }
 
 inline void OrderBook::add_to_book(std::shared_ptr<Order> order) {

@@ -259,7 +259,10 @@ inline std::optional<Position> PositionManager::open_position(
         pos.updated_at = now_micros();
         update_exposure(symbol, size);
         
-        return positions_.count(key) ? positions_[key] : std::nullopt;
+        if (positions_.count(key)) {
+            return std::make_optional(positions_[key]);
+        }
+        return std::nullopt;
     }
 }
 
