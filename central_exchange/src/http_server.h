@@ -577,266 +577,397 @@ inline void HttpServer::setup_routes() {
     // ==================== STATIC FILES (Web UI) ====================
     
     server_->Get("/", [](const httplib::Request&, httplib::Response& res) {
-        // Professional Trading Terminal UI - JForex/Dukascopy Dark Style
+        // Professional Trading Terminal UI - JForex Desktop App Style
         res.set_content(R"HTML(
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Central Exchange | Professional Trading Terminal</title>
+    <title>Central Exchange | Professional Trading Platform</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        /* 🇲🇳 Professional Dark Terminal - JForex/Bloomberg Style */
+        /* Theme Variables - Dark (Default) */
         :root {
-            --bg-primary: #0a0e14;
-            --bg-secondary: #0d1117;
-            --bg-tertiary: #161b22;
+            --bg-app: #1a1d21;
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
             --bg-panel: #0d1117;
-            --bg-hover: #1c2128;
-            --border: #21262d;
-            --border-bright: #30363d;
+            --bg-hover: #30363d;
+            --bg-menu: #21262d;
+            --border: #30363d;
+            --border-bright: #484f58;
             --text-primary: #e6edf3;
             --text-secondary: #8b949e;
             --text-muted: #6e7681;
-            --accent: #00bfff;           /* Cyan glow */
-            --accent-dim: rgba(0, 191, 255, 0.15);
-            --accent-bright: #00d4ff;
-            --mongolian-blue: #0066b3;
-            --green: #00ff88;
-            --green-dim: rgba(0, 255, 136, 0.12);
-            --red: #ff4757;
-            --red-dim: rgba(255, 71, 87, 0.12);
-            --yellow: #ffd93d;
-            --gold: #ffc107;
-            --glow-green: 0 0 10px rgba(0, 255, 136, 0.3);
-            --glow-red: 0 0 10px rgba(255, 71, 87, 0.3);
-            --glow-cyan: 0 0 10px rgba(0, 191, 255, 0.3);
+            --accent: #58a6ff;
+            --accent-dim: rgba(88, 166, 255, 0.15);
+            --green: #3fb950;
+            --green-bright: #56d364;
+            --green-dim: rgba(63, 185, 80, 0.15);
+            --red: #f85149;
+            --red-bright: #ff7b72;
+            --red-dim: rgba(248, 81, 73, 0.15);
+            --yellow: #d29922;
+            --menu-hover: #30363d;
         }
+        
+        /* Light Theme */
+        [data-theme="light"] {
+            --bg-app: #f6f8fa;
+            --bg-primary: #ffffff;
+            --bg-secondary: #f6f8fa;
+            --bg-tertiary: #eaeef2;
+            --bg-panel: #ffffff;
+            --bg-hover: #eaeef2;
+            --bg-menu: #f6f8fa;
+            --border: #d0d7de;
+            --border-bright: #afb8c1;
+            --text-primary: #1f2328;
+            --text-secondary: #656d76;
+            --text-muted: #8c959f;
+            --accent: #0969da;
+            --accent-dim: rgba(9, 105, 218, 0.1);
+            --green: #1a7f37;
+            --green-bright: #2da44e;
+            --green-dim: rgba(45, 164, 78, 0.1);
+            --red: #cf222e;
+            --red-bright: #fa4549;
+            --red-dim: rgba(207, 34, 46, 0.1);
+            --menu-hover: #eaeef2;
+        }
+        
+        /* Blue Theme */
+        [data-theme="blue"] {
+            --bg-app: #0a1929;
+            --bg-primary: #001e3c;
+            --bg-secondary: #0a1929;
+            --bg-tertiary: #132f4c;
+            --bg-panel: #001e3c;
+            --bg-hover: #173a5e;
+            --bg-menu: #132f4c;
+            --border: #1e4976;
+            --border-bright: #265d97;
+            --text-primary: #e3f2fd;
+            --text-secondary: #b0c4de;
+            --text-muted: #7a9cbf;
+            --accent: #5c9ce6;
+            --accent-dim: rgba(92, 156, 230, 0.2);
+            --green: #66bb6a;
+            --green-bright: #81c784;
+            --green-dim: rgba(102, 187, 106, 0.15);
+            --red: #ef5350;
+            --red-bright: #e57373;
+            --red-dim: rgba(239, 83, 80, 0.15);
+            --menu-hover: #173a5e;
+        }
+        
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; font-size: 12px; }
+        html, body { height: 100%; overflow: hidden; }
+        body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-app); color: var(--text-primary); font-size: 12px; display: flex; flex-direction: column; }
         
-        /* Header - Dark Terminal Style */
-        .header { background: linear-gradient(180deg, #1a1f26 0%, #0d1117 100%); border-bottom: 1px solid var(--border); padding: 0 16px; height: 52px; display: flex; align-items: center; justify-content: space-between; }
-        .logo { display: flex; align-items: center; gap: 10px; }
-        .logo-icon { width: 32px; height: 32px; background: linear-gradient(135deg, var(--accent) 0%, var(--mongolian-blue) 100%); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: white; box-shadow: var(--glow-cyan); }
-        .logo-text { font-weight: 700; font-size: 14px; letter-spacing: -0.3px; color: white; text-transform: uppercase; }
-        .logo-text span { color: var(--accent); font-weight: 400; margin-left: 6px; font-size: 10px; letter-spacing: 1px; }
-        .header-right { display: flex; align-items: center; gap: 20px; }
-        .header-stat { display: flex; flex-direction: column; align-items: flex-end; padding: 4px 12px; background: var(--bg-tertiary); border-radius: 4px; border: 1px solid var(--border); }
-        .header-stat-label { font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; }
-        .header-stat-value { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 500; color: var(--text-primary); }
-        .header-stat-value.positive { color: var(--green); text-shadow: var(--glow-green); }
-        .connection-status { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--green); padding: 6px 10px; background: var(--green-dim); border-radius: 4px; border: 1px solid rgba(0,255,136,0.2); }
-        .connection-dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%; animation: pulse 2s infinite; box-shadow: var(--glow-green); }
-        @keyframes pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 10px rgba(0,255,136,0.5); } 50% { opacity: 0.6; box-shadow: 0 0 4px rgba(0,255,136,0.3); } }
+        /* ===== TOP MENU BAR - Desktop App Style ===== */
+        .menubar { background: var(--bg-menu); border-bottom: 1px solid var(--border); display: flex; align-items: center; height: 28px; padding: 0 8px; user-select: none; }
+        .menubar-logo { display: flex; align-items: center; gap: 6px; padding-right: 12px; border-right: 1px solid var(--border); margin-right: 4px; }
+        .menubar-logo img, .menubar-logo-icon { width: 18px; height: 18px; }
+        .menubar-logo-icon { background: linear-gradient(135deg, #0066b3, #00a3e0); border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: white; }
+        .menubar-logo-text { font-size: 11px; font-weight: 600; color: var(--text-primary); }
+        .menu-items { display: flex; align-items: center; }
+        .menu-item { padding: 4px 10px; color: var(--text-secondary); font-size: 11px; cursor: pointer; border-radius: 3px; position: relative; }
+        .menu-item:hover { background: var(--menu-hover); color: var(--text-primary); }
+        .menu-item.has-dropdown:hover .dropdown { display: block; }
+        .dropdown { display: none; position: absolute; top: 100%; left: 0; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; min-width: 180px; padding: 4px 0; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        .dropdown-item { padding: 6px 12px; color: var(--text-secondary); cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .dropdown-item:hover { background: var(--menu-hover); color: var(--text-primary); }
+        .dropdown-item .shortcut { font-size: 10px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+        .dropdown-divider { height: 1px; background: var(--border); margin: 4px 0; }
+        .menu-spacer { flex: 1; }
+        .menu-right { display: flex; align-items: center; gap: 8px; }
+        .theme-selector { display: flex; gap: 2px; background: var(--bg-primary); padding: 2px; border-radius: 4px; border: 1px solid var(--border); }
+        .theme-btn { width: 20px; height: 20px; border: none; border-radius: 3px; cursor: pointer; font-size: 10px; }
+        .theme-btn.dark { background: #1a1d21; color: #e6edf3; }
+        .theme-btn.light { background: #f6f8fa; color: #1f2328; border: 1px solid #d0d7de; }
+        .theme-btn.blue { background: #0a1929; color: #5c9ce6; }
+        .theme-btn.active { outline: 2px solid var(--accent); outline-offset: 1px; }
         
-        /* System Status Bar - Terminal Style */
-        .system-status { background: var(--bg-secondary); border-bottom: 1px solid var(--border); padding: 6px 16px; display: flex; gap: 20px; font-size: 10px; font-family: 'JetBrains Mono', monospace; }
-        .status-item { display: flex; align-items: center; gap: 6px; }
-        .status-dot { width: 6px; height: 6px; border-radius: 50%; }
-        .status-dot.online { background: var(--green); box-shadow: var(--glow-green); }
-        .status-dot.offline { background: var(--red); box-shadow: var(--glow-red); }
-        .status-label { color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-        .status-value { font-weight: 500; color: var(--accent); }
+        /* ===== TOOLBAR ===== */
+        .toolbar { background: var(--bg-secondary); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 4px 12px; gap: 8px; height: 36px; }
+        .toolbar-group { display: flex; align-items: center; gap: 2px; padding: 0 8px; border-right: 1px solid var(--border); }
+        .toolbar-group:last-child { border-right: none; }
+        .toolbar-btn { background: transparent; border: 1px solid transparent; color: var(--text-secondary); padding: 4px 8px; border-radius: 3px; font-size: 10px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+        .toolbar-btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border); }
+        .toolbar-btn.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+        .toolbar-separator { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+        .account-display { display: flex; align-items: center; gap: 12px; margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+        .account-item { display: flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--bg-tertiary); border-radius: 4px; border: 1px solid var(--border); }
+        .account-label { color: var(--text-muted); font-size: 9px; text-transform: uppercase; }
+        .account-value { color: var(--text-primary); font-weight: 500; }
+        .account-value.positive { color: var(--green); }
         
-        /* Main Layout - Dense Terminal Grid */
-        .main { display: grid; grid-template-columns: 240px 1fr 300px; grid-template-rows: 1fr auto; height: calc(100vh - 84px); }
+        /* ===== MAIN WORKSPACE ===== */
+        .workspace { flex: 1; display: grid; grid-template-columns: 220px 1fr 280px; overflow: hidden; }
         
-        /* Watchlist Panel - Dark */
-        .watchlist { background: var(--bg-secondary); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
-        .panel-header { padding: 10px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--bg-tertiary); }
-        .panel-title { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--accent); display: flex; align-items: center; gap: 6px; }
-        .panel-title::before { content: ''; width: 3px; height: 12px; background: var(--accent); border-radius: 2px; }
-        .search-box { margin: 8px; }
-        .search-box input { width: 100%; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; color: var(--text-primary); font-size: 11px; font-family: 'JetBrains Mono', monospace; }
-        .search-box input:focus { outline: none; border-color: var(--accent); box-shadow: var(--glow-cyan); }
-        .search-box input::placeholder { color: var(--text-muted); }
+        /* ===== WATCHLIST PANEL ===== */
+        .watchlist { background: var(--bg-secondary); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+        .panel-header { padding: 8px 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--bg-tertiary); }
+        .panel-title { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); }
+        .panel-actions { display: flex; gap: 4px; }
+        .panel-btn { background: transparent; border: none; color: var(--text-muted); padding: 2px; cursor: pointer; font-size: 12px; }
+        .panel-btn:hover { color: var(--text-primary); }
+        .search-box { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+        .search-box input { width: 100%; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 3px; padding: 6px 8px; color: var(--text-primary); font-size: 11px; }
+        .search-box input:focus { outline: none; border-color: var(--accent); }
         .instrument-list { flex: 1; overflow-y: auto; }
-        .instrument-row { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); cursor: pointer; transition: all 0.1s; }
+        .instrument-row { display: grid; grid-template-columns: 1fr auto; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border); cursor: pointer; }
         .instrument-row:hover { background: var(--bg-hover); }
         .instrument-row.selected { background: var(--accent-dim); border-left: 2px solid var(--accent); }
-        .instrument-symbol { font-weight: 600; font-size: 11px; color: var(--text-primary); font-family: 'JetBrains Mono', monospace; }
-        .instrument-name { font-size: 9px; color: var(--text-muted); margin-top: 2px; }
-        .instrument-price { font-family: 'JetBrains Mono', monospace; text-align: right; }
-        .instrument-bid { color: var(--green); font-size: 11px; text-shadow: var(--glow-green); }
-        .instrument-ask { color: var(--red); font-size: 11px; text-shadow: var(--glow-red); }
-        .instrument-spread { font-size: 9px; color: var(--text-muted); text-align: right; }
-        .instrument-change { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-align: right; }
-        .instrument-change.up { color: var(--green); }
-        .instrument-change.down { color: var(--red); }
+        .instrument-symbol { font-weight: 500; font-size: 11px; color: var(--text-primary); font-family: 'JetBrains Mono', monospace; }
+        .instrument-name { font-size: 9px; color: var(--text-muted); }
+        .instrument-price { font-family: 'JetBrains Mono', monospace; text-align: right; font-size: 11px; }
+        .instrument-bid { color: var(--green); }
+        .instrument-ask { color: var(--red); }
         
-        /* Center Panel - Chart and Order Flow */
-        .center { display: flex; flex-direction: column; background: var(--bg-primary); }
-        .chart-area { flex: 1; display: flex; flex-direction: column; border-bottom: 1px solid var(--border); position: relative; overflow: hidden; }
-        .chart-toolbar { display: flex; gap: 4px; padding: 6px 12px; border-bottom: 1px solid var(--border); background: var(--bg-tertiary); }
-        .chart-btn { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); padding: 4px 10px; border-radius: 3px; font-size: 10px; cursor: pointer; font-family: 'JetBrains Mono', monospace; transition: all 0.1s; }
-        .chart-btn:hover { background: var(--bg-hover); border-color: var(--border-bright); color: var(--text-primary); }
-        .chart-btn.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); box-shadow: var(--glow-cyan); }
-        .chart-container { flex: 1; position: relative; background: var(--bg-primary); }
-        .chart-placeholder { text-align: center; color: var(--text-muted); }
-        .chart-placeholder h3 { font-size: 16px; margin-bottom: 8px; color: var(--text-secondary); }
-        .selected-instrument { position: absolute; top: 8px; left: 12px; z-index: 100; background: rgba(10,14,20,0.85); padding: 8px 12px; border-radius: 4px; border: 1px solid var(--border); }
-        .selected-symbol { font-size: 16px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--accent); }
-        .selected-price { font-family: 'JetBrains Mono', monospace; font-size: 24px; font-weight: 600; margin-top: 2px; color: var(--text-primary); }
-        .selected-change { font-size: 11px; margin-top: 2px; padding: 2px 6px; border-radius: 3px; display: inline-block; font-family: 'JetBrains Mono', monospace; }
-        .selected-change.up { background: var(--green-dim); color: var(--green); border: 1px solid rgba(0,255,136,0.3); }
-        .selected-change.down { background: var(--red-dim); color: var(--red); border: 1px solid rgba(255,71,87,0.3); }
+        /* ===== CENTER PANEL ===== */
+        .center { display: flex; flex-direction: column; background: var(--bg-primary); overflow: hidden; }
+        .chart-area { flex: 1; display: flex; flex-direction: column; position: relative; }
+        .chart-tabs { display: flex; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); }
+        .chart-tab { padding: 6px 16px; font-size: 11px; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; display: flex; align-items: center; gap: 6px; }
+        .chart-tab:hover { color: var(--text-primary); background: var(--bg-hover); }
+        .chart-tab.active { color: var(--accent); border-color: var(--accent); background: var(--bg-primary); }
+        .chart-tab .close { font-size: 14px; opacity: 0.5; margin-left: 4px; }
+        .chart-tab .close:hover { opacity: 1; }
+        .chart-toolbar { display: flex; gap: 2px; padding: 4px 8px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); }
+        .tf-btn { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); padding: 3px 8px; border-radius: 2px; font-size: 10px; cursor: pointer; font-family: 'JetBrains Mono', monospace; }
+        .tf-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .tf-btn.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+        .chart-info { position: absolute; top: 40px; left: 10px; z-index: 100; background: rgba(0,0,0,0.7); padding: 8px 12px; border-radius: 4px; backdrop-filter: blur(4px); }
+        [data-theme="light"] .chart-info { background: rgba(255,255,255,0.9); border: 1px solid var(--border); }
+        .chart-symbol { font-size: 14px; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: var(--accent); }
+        .chart-price { font-size: 22px; font-weight: 600; font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
+        .chart-change { font-size: 11px; margin-top: 2px; }
+        .chart-change.up { color: var(--green); }
+        .chart-change.down { color: var(--red); }
+        .chart-container { flex: 1; }
         
-        /* Order Book - Terminal Style */
-        .orderbook { height: 240px; display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--border); background: var(--bg-secondary); }
-        .orderbook-side { display: flex; flex-direction: column; }
-        .orderbook-header { padding: 6px 12px; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; background: var(--bg-tertiary); }
-        .orderbook-bids { border-right: 1px solid var(--border); }
-        .orderbook-levels { flex: 1; overflow: hidden; }
-        .level { display: flex; justify-content: space-between; padding: 2px 12px; font-family: 'JetBrains Mono', monospace; font-size: 10px; position: relative; }
-        .level-bar { position: absolute; top: 0; bottom: 0; right: 0; }
-        .bids .level-bar { background: linear-gradient(90deg, transparent 0%, rgba(0,255,136,0.15) 100%); }
-        .asks .level-bar { background: linear-gradient(90deg, transparent 0%, rgba(255,71,87,0.15) 100%); }
-        .level-price { position: relative; z-index: 1; }
-        .bids .level-price { color: var(--green); text-shadow: var(--glow-green); }
-        .asks .level-price { color: var(--red); text-shadow: var(--glow-red); }
-        .level-size { position: relative; z-index: 1; color: var(--text-secondary); }
+        /* ===== ORDER BOOK ===== */
+        .orderbook { height: 200px; display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--border); background: var(--bg-secondary); }
+        .ob-side { display: flex; flex-direction: column; }
+        .ob-header { padding: 4px 10px; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; background: var(--bg-tertiary); }
+        .ob-bids { border-right: 1px solid var(--border); }
+        .ob-levels { flex: 1; overflow: hidden; font-family: 'JetBrains Mono', monospace; font-size: 10px; }
+        .ob-level { display: flex; justify-content: space-between; padding: 1px 10px; position: relative; }
+        .ob-bar { position: absolute; top: 0; bottom: 0; right: 0; opacity: 0.2; }
+        .ob-bids .ob-bar { background: var(--green); }
+        .ob-asks .ob-bar { background: var(--red); }
+        .ob-price { position: relative; z-index: 1; }
+        .ob-bids .ob-price { color: var(--green); }
+        .ob-asks .ob-price { color: var(--red); }
+        .ob-size { position: relative; z-index: 1; color: var(--text-secondary); }
         
-        /* Trade Panel - Dark Terminal */
-        .trade-panel { background: var(--bg-secondary); border-left: 1px solid var(--border); display: flex; flex-direction: column; }
-        .trade-tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--bg-tertiary); }
-        .trade-tab { flex: 1; padding: 10px; text-align: center; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.1s; }
+        /* ===== TRADE PANEL ===== */
+        .trade-panel { background: var(--bg-secondary); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+        .trade-tabs { display: flex; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); }
+        .trade-tab { flex: 1; padding: 8px; text-align: center; font-size: 10px; font-weight: 500; text-transform: uppercase; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; }
         .trade-tab:hover { color: var(--text-secondary); }
-        .trade-tab.active { color: var(--accent); border-color: var(--accent); background: var(--accent-dim); }
-        .trade-form { padding: 12px; flex: 1; }
-        .form-row { margin-bottom: 12px; }
-        .form-label { display: block; font-size: 9px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.8px; }
-        .form-input { width: 100%; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 3px; padding: 10px; color: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-size: 13px; }
-        .form-input:focus { outline: none; border-color: var(--accent); box-shadow: var(--glow-cyan); }
-        .side-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
-        .side-btn { padding: 10px; border: none; border-radius: 3px; font-weight: 600; font-size: 11px; cursor: pointer; transition: all 0.1s; text-transform: uppercase; letter-spacing: 0.5px; font-family: 'JetBrains Mono', monospace; }
-        .side-btn.buy { background: var(--green-dim); color: var(--green); border: 1px solid rgba(0,255,136,0.3); }
-        .side-btn.buy.active, .side-btn.buy:hover { background: var(--green); color: var(--bg-primary); box-shadow: var(--glow-green); }
-        .side-btn.sell { background: var(--red-dim); color: var(--red); border: 1px solid rgba(255,71,87,0.3); }
-        .side-btn.sell.active, .side-btn.sell:hover { background: var(--red); color: white; box-shadow: var(--glow-red); }
-        .submit-order { width: 100%; padding: 12px; border: none; border-radius: 3px; font-weight: 700; font-size: 12px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: all 0.15s; font-family: 'JetBrains Mono', monospace; }
-        .submit-order.buy { background: linear-gradient(135deg, var(--green) 0%, #00cc6a 100%); color: var(--bg-primary); box-shadow: var(--glow-green); }
-        .submit-order.sell { background: linear-gradient(135deg, var(--red) 0%, #cc3344 100%); color: white; box-shadow: var(--glow-red); }
-        .submit-order:hover { opacity: 0.9; transform: translateY(-1px); }
-        .order-summary { background: var(--bg-tertiary); border-radius: 3px; padding: 10px; margin-top: 12px; border: 1px solid var(--border); }
-        .summary-row { display: flex; justify-content: space-between; font-size: 10px; padding: 3px 0; }
+        .trade-tab.active { color: var(--accent); border-color: var(--accent); }
+        .trade-form { padding: 12px; flex: 1; overflow-y: auto; }
+        .form-row { margin-bottom: 10px; }
+        .form-label { display: block; font-size: 9px; font-weight: 500; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; }
+        .form-input { width: 100%; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 3px; padding: 8px; color: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+        .form-input:focus { outline: none; border-color: var(--accent); }
+        .side-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 10px; }
+        .side-btn { padding: 10px; border: none; border-radius: 3px; font-weight: 600; font-size: 11px; cursor: pointer; text-transform: uppercase; font-family: 'JetBrains Mono', monospace; transition: all 0.1s; }
+        .side-btn.buy { background: var(--green-dim); color: var(--green); border: 1px solid var(--green); }
+        .side-btn.buy.active, .side-btn.buy:hover { background: var(--green); color: white; }
+        .side-btn.sell { background: var(--red-dim); color: var(--red); border: 1px solid var(--red); }
+        .side-btn.sell.active, .side-btn.sell:hover { background: var(--red); color: white; }
+        .order-summary { background: var(--bg-tertiary); border-radius: 3px; padding: 8px; margin-top: 8px; border: 1px solid var(--border); }
+        .summary-row { display: flex; justify-content: space-between; font-size: 10px; padding: 2px 0; }
         .summary-label { color: var(--text-muted); }
-        .summary-value { font-family: 'JetBrains Mono', monospace; color: var(--text-primary); }
+        .summary-value { font-family: 'JetBrains Mono', monospace; }
+        .submit-btn { width: 100%; padding: 12px; border: none; border-radius: 3px; font-weight: 600; font-size: 12px; cursor: pointer; text-transform: uppercase; margin-top: 10px; font-family: 'JetBrains Mono', monospace; }
+        .submit-btn.buy { background: var(--green); color: white; }
+        .submit-btn.sell { background: var(--red); color: white; }
+        .submit-btn:hover { opacity: 0.9; }
         
-        /* Positions Bar - Terminal Grid */
-        .positions-bar { grid-column: 1 / -1; background: var(--bg-secondary); border-top: 1px solid var(--border); }
-        .positions-tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 12px; background: var(--bg-tertiary); }
-        .positions-tab { padding: 8px 14px; font-size: 10px; font-weight: 600; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; text-transform: uppercase; letter-spacing: 0.5px; }
+        /* ===== BOTTOM STATUS BAR ===== */
+        .statusbar { background: var(--bg-menu); border-top: 1px solid var(--border); display: flex; align-items: center; height: 24px; padding: 0 12px; font-size: 10px; font-family: 'JetBrains Mono', monospace; }
+        .status-section { display: flex; align-items: center; gap: 6px; padding: 0 12px; border-right: 1px solid var(--border); }
+        .status-section:last-child { border-right: none; }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+        .status-dot.online { background: var(--green); }
+        .status-dot.offline { background: var(--red); }
+        .status-label { color: var(--text-muted); }
+        .status-value { color: var(--text-primary); }
+        .status-value.green { color: var(--green); }
+        .status-value.red { color: var(--red); }
+        .status-spacer { flex: 1; }
+        .status-time { color: var(--text-muted); }
+        
+        /* ===== POSITIONS BAR ===== */
+        .positions-bar { background: var(--bg-secondary); border-top: 1px solid var(--border); height: 140px; display: flex; flex-direction: column; }
+        .positions-tabs { display: flex; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); }
+        .positions-tab { padding: 6px 14px; font-size: 10px; font-weight: 500; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; text-transform: uppercase; }
         .positions-tab:hover { color: var(--text-secondary); }
         .positions-tab.active { color: var(--accent); border-color: var(--accent); }
-        .positions-tab .count { background: var(--bg-primary); padding: 1px 5px; border-radius: 8px; margin-left: 4px; font-size: 9px; color: var(--text-muted); }
-        .positions-table { width: 100%; border-collapse: collapse; }
-        .positions-table th { text-align: left; padding: 6px 12px; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); background: var(--bg-tertiary); border-bottom: 1px solid var(--border); }
-        .positions-table td { padding: 8px 12px; font-size: 11px; border-bottom: 1px solid var(--border); }
+        .positions-tab .count { background: var(--bg-primary); padding: 1px 5px; border-radius: 8px; margin-left: 4px; font-size: 9px; }
+        .positions-content { flex: 1; overflow: auto; }
+        .positions-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        .positions-table th { text-align: left; padding: 4px 10px; font-size: 9px; font-weight: 500; text-transform: uppercase; color: var(--text-muted); background: var(--bg-tertiary); border-bottom: 1px solid var(--border); position: sticky; top: 0; }
+        .positions-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); }
         .positions-table .mono { font-family: 'JetBrains Mono', monospace; }
-        .positions-table .positive { color: var(--green); text-shadow: var(--glow-green); }
-        .positions-table .negative { color: var(--red); text-shadow: var(--glow-red); }
-        .close-btn { background: var(--red-dim); color: var(--red); border: 1px solid rgba(255,71,87,0.3); padding: 3px 10px; border-radius: 3px; font-size: 9px; font-weight: 600; cursor: pointer; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; }
-        .close-btn:hover { background: var(--red); color: white; box-shadow: var(--glow-red); }
-        .empty-state { padding: 24px; text-align: center; color: var(--text-muted); font-size: 11px; }
+        .positions-table .positive { color: var(--green); }
+        .positions-table .negative { color: var(--red); }
+        .close-btn { background: var(--red-dim); color: var(--red); border: 1px solid var(--red); padding: 2px 8px; border-radius: 2px; font-size: 9px; cursor: pointer; }
+        .close-btn:hover { background: var(--red); color: white; }
+        .empty-state { padding: 20px; text-align: center; color: var(--text-muted); }
         
-        /* Clearing Flow Panel - Mechanical Style */
-        .clearing-flow { background: var(--bg-tertiary); border: 1px solid var(--accent); border-radius: 3px; padding: 10px; margin: 10px 0; font-size: 10px; box-shadow: var(--glow-cyan); }
-        .clearing-title { font-weight: 600; color: var(--accent); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; text-transform: uppercase; letter-spacing: 0.5px; font-size: 9px; }
-        .clearing-step { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-family: 'JetBrains Mono', monospace; }
-        .clearing-step .arrow { color: var(--accent); }
-        .clearing-step .amount { font-weight: 500; color: var(--green); }
-        
-        /* QPAY Button - Glow Style */
-        .qpay-btn { background: linear-gradient(135deg, #00a650 0%, #008840 100%); color: white; border: none; padding: 8px 16px; border-radius: 4px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 11px; box-shadow: 0 0 10px rgba(0, 166, 80, 0.3); }
-        .qpay-btn:hover { box-shadow: 0 0 15px rgba(0, 166, 80, 0.5); transform: translateY(-1px); }
-        
-        /* Scrollbar - Dark */
+        /* Scrollbar */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: var(--bg-primary); }
-        ::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--border-bright); }
     </style>
 </head>
-<body>
-    <header class="header">
-        <div class="logo">
-            <div class="logo-icon">MN</div>
-            <div class="logo-text">Central Exchange<span>PRO TERMINAL</span></div>
+<body data-theme="dark">
+    <!-- TOP MENU BAR - Desktop App Style -->
+    <div class="menubar">
+        <div class="menubar-logo">
+            <div class="menubar-logo-icon">🇲🇳</div>
+            <span class="menubar-logo-text">Central Exchange</span>
         </div>
-        <div class="header-right">
-            <div class="header-stat">
-                <div class="header-stat-label">Equity</div>
-                <div class="header-stat-value positive" id="equity">0.00 MNT</div>
+        <div class="menu-items">
+            <div class="menu-item has-dropdown">File
+                <div class="dropdown">
+                    <div class="dropdown-item">New Workspace <span class="shortcut">Ctrl+N</span></div>
+                    <div class="dropdown-item">Save Layout <span class="shortcut">Ctrl+S</span></div>
+                    <div class="dropdown-divider"></div>
+                    <div class="dropdown-item">Export Trades</div>
+                    <div class="dropdown-divider"></div>
+                    <div class="dropdown-item">Exit</div>
+                </div>
             </div>
-            <div class="header-stat">
-                <div class="header-stat-label">Available</div>
-                <div class="header-stat-value" id="available">0.00 MNT</div>
+            <div class="menu-item has-dropdown">View
+                <div class="dropdown">
+                    <div class="dropdown-item">Chart <span class="shortcut">F5</span></div>
+                    <div class="dropdown-item">Order Book <span class="shortcut">F6</span></div>
+                    <div class="dropdown-item">Positions <span class="shortcut">F7</span></div>
+                    <div class="dropdown-divider"></div>
+                    <div class="dropdown-item">Full Screen <span class="shortcut">F11</span></div>
+                </div>
             </div>
-            <div class="header-stat">
-                <div class="header-stat-label">Margin</div>
-                <div class="header-stat-value" id="margin">0.00 MNT</div>
+            <div class="menu-item has-dropdown">Trade
+                <div class="dropdown">
+                    <div class="dropdown-item">New Order <span class="shortcut">F9</span></div>
+                    <div class="dropdown-item">Close All Positions</div>
+                    <div class="dropdown-divider"></div>
+                    <div class="dropdown-item">Risk Settings</div>
+                </div>
             </div>
-            <div class="connection-status">
-                <div class="connection-dot"></div>
-                <span>CONNECTED</span>
+            <div class="menu-item has-dropdown">Window
+                <div class="dropdown">
+                    <div class="dropdown-item">Tile Horizontally</div>
+                    <div class="dropdown-item">Tile Vertically</div>
+                    <div class="dropdown-item">Cascade</div>
+                </div>
             </div>
-            <button class="qpay-btn" onclick="openQpay()">💳 QPAY</button>
+            <div class="menu-item has-dropdown">Help
+                <div class="dropdown">
+                    <div class="dropdown-item">Documentation</div>
+                    <div class="dropdown-item">Keyboard Shortcuts</div>
+                    <div class="dropdown-divider"></div>
+                    <div class="dropdown-item">About Central Exchange</div>
+                </div>
+            </div>
         </div>
-    </header>
-    
-    <div class="system-status">
-        <div class="status-item"><div class="status-dot online"></div><span class="status-label">ENGINE:</span><span class="status-value">ONLINE</span></div>
-        <div class="status-item"><div class="status-dot online"></div><span class="status-label">BOOK:</span><span class="status-value" id="bookStatus">19 PRODUCTS</span></div>
-        <div class="status-item"><div class="status-dot online"></div><span class="status-label">FXCM:</span><span class="status-value" id="fxcmStatus">CONNECTED</span></div>
-        <div class="status-item"><div class="status-dot online"></div><span class="status-label">USD/MNT:</span><span class="status-value" id="rateStatus">3,450</span></div>
-        <div class="status-item"><div class="status-dot online"></div><span class="status-label">HEDGE:</span><span class="status-value">ACTIVE</span></div>
-        <span style="flex:1"></span>
-        <span style="color:var(--accent);font-size:9px;letter-spacing:1px;">🇲🇳 TRANSPARENCY • ACCOUNTABILITY • VALUE</span>
+        <div class="menu-spacer"></div>
+        <div class="menu-right">
+            <div class="theme-selector">
+                <button class="theme-btn dark active" onclick="setTheme('dark')" title="Dark">🌙</button>
+                <button class="theme-btn light" onclick="setTheme('light')" title="Light">☀️</button>
+                <button class="theme-btn blue" onclick="setTheme('blue')" title="Blue">💠</button>
+            </div>
+        </div>
     </div>
     
-    <main class="main">
+    <!-- TOOLBAR -->
+    <div class="toolbar">
+        <div class="toolbar-group">
+            <button class="toolbar-btn" onclick="openQpay()">💳 Deposit</button>
+            <button class="toolbar-btn">📤 Withdraw</button>
+        </div>
+        <div class="toolbar-group">
+            <button class="toolbar-btn active">📊 Chart</button>
+            <button class="toolbar-btn">📋 Orders</button>
+            <button class="toolbar-btn">📈 Positions</button>
+        </div>
+        <div class="account-display">
+            <div class="account-item">
+                <span class="account-label">Equity</span>
+                <span class="account-value positive" id="equity">0.00 MNT</span>
+            </div>
+            <div class="account-item">
+                <span class="account-label">Available</span>
+                <span class="account-value" id="available">0.00 MNT</span>
+            </div>
+            <div class="account-item">
+                <span class="account-label">Margin</span>
+                <span class="account-value" id="margin">0.00 MNT</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- MAIN WORKSPACE -->
+    <div class="workspace">
+        <!-- WATCHLIST -->
         <aside class="watchlist">
             <div class="panel-header">
-                <span class="panel-title">🔍 Instruments</span>
+                <span class="panel-title">Instruments</span>
+                <div class="panel-actions">
+                    <button class="panel-btn" title="Add">+</button>
+                    <button class="panel-btn" title="Settings">⚙</button>
+                </div>
             </div>
             <div class="search-box">
-                <input type="text" placeholder="Search markets..." id="searchInput" oninput="filterInstruments()">
+                <input type="text" placeholder="Search..." id="searchInput" oninput="filterInstruments()">
             </div>
             <div class="instrument-list" id="instrumentList"></div>
         </aside>
         
+        <!-- CENTER - Chart & Orderbook -->
         <section class="center">
             <div class="chart-area">
-                <div class="chart-toolbar">
-                    <button class="chart-btn active" onclick="setTimeframe('1')">1m</button>
-                    <button class="chart-btn" onclick="setTimeframe('5')">5m</button>
-                    <button class="chart-btn" onclick="setTimeframe('15')">15m</button>
-                    <button class="chart-btn" onclick="setTimeframe('60')">1H</button>
-                    <button class="chart-btn" onclick="setTimeframe('D')">1D</button>
-                    <span style="flex:1"></span>
-                    <span style="font-size:11px;color:var(--text-muted)">Price in MNT</span>
+                <div class="chart-tabs">
+                    <div class="chart-tab active"><span id="tabSymbol">XAU-MNT-PERP</span><span class="close">×</span></div>
                 </div>
-                <div class="selected-instrument" id="selectedInstrument" style="position:absolute;top:48px;left:16px;z-index:100;">
-                    <div class="selected-symbol" id="selectedSymbol">XAU-MNT-PERP</div>
-                    <div class="selected-price" id="selectedMid">-</div>
-                    <div class="selected-change up" id="selectedChange">+0.00%</div>
+                <div class="chart-toolbar">
+                    <button class="tf-btn active" onclick="setTimeframe('1')">1m</button>
+                    <button class="tf-btn" onclick="setTimeframe('5')">5m</button>
+                    <button class="tf-btn" onclick="setTimeframe('15')">15m</button>
+                    <button class="tf-btn" onclick="setTimeframe('60')">1H</button>
+                    <button class="tf-btn" onclick="setTimeframe('D')">1D</button>
+                </div>
+                <div class="chart-info">
+                    <div class="chart-symbol" id="chartSymbol">XAU-MNT-PERP</div>
+                    <div class="chart-price" id="chartPrice">-</div>
+                    <div class="chart-change up" id="chartChange">+0.00%</div>
                 </div>
                 <div class="chart-container" id="chartContainer"></div>
             </div>
             <div class="orderbook">
-                <div class="orderbook-side orderbook-bids">
-                    <div class="orderbook-header"><span>Bid Price</span><span>Size</span></div>
-                    <div class="orderbook-levels bids" id="bidsLevels"></div>
+                <div class="ob-side ob-bids">
+                    <div class="ob-header"><span>Bid</span><span>Size</span></div>
+                    <div class="ob-levels" id="bidsLevels"></div>
                 </div>
-                <div class="orderbook-side orderbook-asks">
-                    <div class="orderbook-header"><span>Ask Price</span><span>Size</span></div>
-                    <div class="orderbook-levels asks" id="asksLevels"></div>
+                <div class="ob-side ob-asks">
+                    <div class="ob-header"><span>Ask</span><span>Size</span></div>
+                    <div class="ob-levels" id="asksLevels"></div>
                 </div>
             </div>
         </section>
         
+        <!-- TRADE PANEL -->
         <aside class="trade-panel">
             <div class="trade-tabs">
                 <div class="trade-tab active">Market</div>
@@ -844,9 +975,9 @@ inline void HttpServer::setup_routes() {
                 <div class="trade-tab">Stop</div>
             </div>
             <div class="trade-form">
-                <div class="side-buttons">
-                    <button class="side-btn buy active" id="buyBtn" onclick="setSide('long')">Buy / Long</button>
-                    <button class="side-btn sell" id="sellBtn" onclick="setSide('short')">Sell / Short</button>
+                <div class="side-btns">
+                    <button class="side-btn buy active" id="buyBtn" onclick="setSide('long')">BUY</button>
+                    <button class="side-btn sell" id="sellBtn" onclick="setSide('short')">SELL</button>
                 </div>
                 <div class="form-row">
                     <label class="form-label">Quantity</label>
@@ -857,54 +988,85 @@ inline void HttpServer::setup_routes() {
                     <input type="number" class="form-input" id="leverage" value="10" step="1" oninput="updateSummary()">
                 </div>
                 <div class="order-summary">
-                    <div class="summary-row"><span class="summary-label">Entry Price</span><span class="summary-value" id="entryPrice">-</span></div>
-                    <div class="summary-row"><span class="summary-label">Position Value</span><span class="summary-value" id="posValue">-</span></div>
-                    <div class="summary-row"><span class="summary-label">Required Margin</span><span class="summary-value" id="reqMargin">-</span></div>
-                    <div class="summary-row"><span class="summary-label">Fee (est.)</span><span class="summary-value" id="estFee">-</span></div>
+                    <div class="summary-row"><span class="summary-label">Entry</span><span class="summary-value" id="entryPrice">-</span></div>
+                    <div class="summary-row"><span class="summary-label">Value</span><span class="summary-value" id="posValue">-</span></div>
+                    <div class="summary-row"><span class="summary-label">Margin</span><span class="summary-value" id="reqMargin">-</span></div>
+                    <div class="summary-row"><span class="summary-label">Fee</span><span class="summary-value" id="estFee">-</span></div>
                 </div>
-                
-                <!-- Clearing Flow - Transparent order execution -->
-                <div class="clearing-flow" id="clearingFlow" style="display:none;">
-                    <div class="clearing-title">📋 Clearing Flow</div>
-                    <div class="clearing-step">
-                        <span>1.</span>
-                        <span class="amount" id="clearMnt">- MNT</span>
-                        <span class="arrow">→</span>
-                        <span>USD/MNT Book</span>
-                    </div>
-                    <div class="clearing-step">
-                        <span>2.</span>
-                        <span class="amount" id="clearUsd">- USD</span>
-                        <span class="arrow">→</span>
-                        <span>FXCM Hedge</span>
-                    </div>
-                    <div class="clearing-step">
-                        <span>3.</span>
-                        <span>Position opened on our LOB</span>
-                    </div>
-                </div>
-                
-                <button class="submit-order buy" id="submitBtn" onclick="submitOrder()">Place Buy Order</button>
+                <button class="submit-btn buy" id="submitBtn" onclick="submitOrder()">BUY XAU-MNT-PERP</button>
             </div>
         </aside>
-        
-        <div class="positions-bar">
-            <div class="positions-tabs">
-                <div class="positions-tab active">Positions <span class="count" id="posCount">0</span></div>
-                <div class="positions-tab">Orders <span class="count">0</span></div>
-                <div class="positions-tab">Trade History</div>
-            </div>
+    </div>
+    
+    <!-- POSITIONS BAR -->
+    <div class="positions-bar">
+        <div class="positions-tabs">
+            <div class="positions-tab active">Positions <span class="count" id="posCount">0</span></div>
+            <div class="positions-tab">Open Orders <span class="count">0</span></div>
+            <div class="positions-tab">History</div>
+        </div>
+        <div class="positions-content">
             <table class="positions-table">
-                <thead><tr><th>Symbol</th><th>Side</th><th>Size</th><th>Entry</th><th>Mark</th><th>PnL</th><th>Margin</th><th></th></tr></thead>
+                <thead><tr><th>Symbol</th><th>Side</th><th>Size</th><th>Entry</th><th>Mark</th><th>P&L</th><th>Margin</th><th></th></tr></thead>
                 <tbody id="positionsBody"><tr><td colspan="8" class="empty-state">No open positions</td></tr></tbody>
             </table>
         </div>
-    </main>
+    </div>
+    
+    <!-- BOTTOM STATUS BAR -->
+    <div class="statusbar">
+        <div class="status-section">
+            <div class="status-dot online"></div>
+            <span class="status-label">Engine:</span>
+            <span class="status-value">Online</span>
+        </div>
+        <div class="status-section">
+            <div class="status-dot online"></div>
+            <span class="status-label">FXCM:</span>
+            <span class="status-value" id="fxcmStatus">Connected</span>
+        </div>
+        <div class="status-section">
+            <span class="status-label">USD/MNT:</span>
+            <span class="status-value" id="rateStatus">3,450</span>
+        </div>
+        <div class="status-section">
+            <span class="status-label">Used:</span>
+            <span class="status-value" id="usedMargin">0.00 MNT</span>
+        </div>
+        <div class="status-section">
+            <span class="status-label">Free:</span>
+            <span class="status-value green" id="freeMargin">0.00 MNT</span>
+        </div>
+        <div class="status-spacer"></div>
+        <div class="status-section" style="border-right:none;">
+            <span class="status-time" id="serverTime">--:--:--</span>
+        </div>
+    </div>
     
     <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
     <script>
-        let state = { selected: 'XAU-MNT-PERP', side: 'long', instruments: [], quotes: {}, chart: null, candleSeries: null, priceHistory: {}, timeframe: '15' };
+        let state = { selected: 'XAU-MNT-PERP', side: 'long', instruments: [], quotes: {}, chart: null, candleSeries: null, priceHistory: {}, timeframe: '15', theme: 'dark' };
         const fmt = (n, d=0) => new Intl.NumberFormat('en-US', {minimumFractionDigits:d, maximumFractionDigits:d}).format(n);
+        
+        // Theme configurations
+        const themes = {
+            dark: { bg: '#0d1117', text: '#8b949e', grid: '#21262d', accent: '#58a6ff', up: '#3fb950', down: '#f85149' },
+            light: { bg: '#ffffff', text: '#656d76', grid: '#eaeef2', accent: '#0969da', up: '#1a7f37', down: '#cf222e' },
+            blue: { bg: '#001e3c', text: '#b0c4de', grid: '#1e4976', accent: '#5c9ce6', up: '#66bb6a', down: '#ef5350' }
+        };
+        
+        function setTheme(theme) {
+            state.theme = theme;
+            document.body.setAttribute('data-theme', theme);
+            document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector('.theme-btn.' + theme).classList.add('active');
+            localStorage.setItem('ce-theme', theme);
+            // Reinit chart with new theme
+            if (state.chart) {
+                initChart();
+                updateChartData();
+            }
+        }
         
         // Initialize lightweight chart with MNT prices
         function initChart() {
@@ -913,41 +1075,42 @@ inline void HttpServer::setup_routes() {
                 state.chart.remove();
             }
             
-            // Dark terminal theme - JForex/Bloomberg style
+            const t = themes[state.theme];
+            
             state.chart = LightweightCharts.createChart(container, {
                 width: container.clientWidth,
                 height: container.clientHeight,
                 layout: {
-                    background: { type: 'solid', color: '#0a0e14' },
-                    textColor: '#8b949e',
+                    background: { type: 'solid', color: t.bg },
+                    textColor: t.text,
                 },
                 grid: {
-                    vertLines: { color: '#21262d' },
-                    horzLines: { color: '#21262d' },
+                    vertLines: { color: t.grid },
+                    horzLines: { color: t.grid },
                 },
                 crosshair: {
                     mode: LightweightCharts.CrosshairMode.Normal,
-                    vertLine: { color: '#00bfff', width: 1, style: 2, labelBackgroundColor: '#00bfff' },
-                    horzLine: { color: '#00bfff', width: 1, style: 2, labelBackgroundColor: '#00bfff' },
+                    vertLine: { color: t.accent, width: 1, style: 2, labelBackgroundColor: t.accent },
+                    horzLine: { color: t.accent, width: 1, style: 2, labelBackgroundColor: t.accent },
                 },
                 rightPriceScale: {
-                    borderColor: '#21262d',
+                    borderColor: t.grid,
                     scaleMargins: { top: 0.1, bottom: 0.1 },
                 },
                 timeScale: {
-                    borderColor: '#21262d',
+                    borderColor: t.grid,
                     timeVisible: true,
                     secondsVisible: false,
                 },
             });
             
             state.candleSeries = state.chart.addCandlestickSeries({
-                upColor: '#00ff88',
-                downColor: '#ff4757',
-                borderDownColor: '#ff4757',
-                borderUpColor: '#00ff88',
-                wickDownColor: '#ff4757',
-                wickUpColor: '#00ff88',
+                upColor: t.up,
+                downColor: t.down,
+                borderDownColor: t.down,
+                borderUpColor: t.up,
+                wickDownColor: t.down,
+                wickUpColor: t.up,
             });
             
             // Handle resize
@@ -962,6 +1125,14 @@ inline void HttpServer::setup_routes() {
         function openQpay() {
             alert('QPay integration coming soon! Deposit MNT directly from your bank account.');
         }
+        
+        // Update server time in status bar
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('serverTime').textContent = now.toLocaleTimeString('en-US', {hour12: false});
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
         
         function updateChartData() {
             if (!state.selected || !state.quotes[state.selected]) return;
@@ -998,7 +1169,7 @@ inline void HttpServer::setup_routes() {
         
         function setTimeframe(tf) {
             state.timeframe = tf;
-            document.querySelectorAll('.chart-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
             event.target.classList.add('active');
             state.priceHistory[state.selected] = null;
             updateChartData();
@@ -1016,6 +1187,10 @@ inline void HttpServer::setup_routes() {
         });
         
         async function init() {
+            // Load saved theme
+            const savedTheme = localStorage.getItem('ce-theme') || 'dark';
+            setTheme(savedTheme);
+            
             await fetch('/api/deposit', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({user_id:'demo', amount:100000000}) });
             await refresh();
             initChart();
@@ -1035,9 +1210,14 @@ inline void HttpServer::setup_routes() {
             state.instruments = products;
             quotes.forEach(q => state.quotes[q.symbol] = q);
             
+            // Update header account display
             document.getElementById('equity').textContent = fmt(balance.balance) + ' MNT';
             document.getElementById('available').textContent = fmt(balance.available) + ' MNT';
             document.getElementById('margin').textContent = fmt(balance.margin_used) + ' MNT';
+            
+            // Update status bar
+            document.getElementById('usedMargin').textContent = fmt(balance.margin_used) + ' MNT';
+            document.getElementById('freeMargin').textContent = fmt(balance.available) + ' MNT';
             
             renderInstruments();
             renderPositions(positions);
@@ -1051,8 +1231,7 @@ inline void HttpServer::setup_routes() {
                 const sel = state.selected === p.symbol ? 'selected' : '';
                 return `<div class="instrument-row ${sel}" onclick="selectInstrument('${p.symbol}')">
                     <div><div class="instrument-symbol">${p.symbol}</div><div class="instrument-name">${p.name}</div></div>
-                    <div class="instrument-price"><div class="instrument-bid">${fmt(q.bid||0,2)}</div><div class="instrument-ask">${fmt(q.ask||0,2)}</div></div>
-                    <div><div class="instrument-change up">+0.12%</div><div class="instrument-spread">Spd: ${fmt((q.ask||0)-(q.bid||0),2)}</div></div>
+                    <div class="instrument-price"><div class="instrument-bid">${fmt(q.bid||0,0)}</div><div class="instrument-ask">${fmt(q.ask||0,0)}</div></div>
                 </div>`;
             }).join('');
             document.getElementById('instrumentList').innerHTML = html;
@@ -1067,12 +1246,16 @@ inline void HttpServer::setup_routes() {
             updateSelectedDisplay();
             renderOrderbook();
             updateChartData();
+            // Update UI elements
+            document.getElementById('chartSymbol').textContent = symbol;
+            document.getElementById('tabSymbol').textContent = symbol;
+            document.getElementById('submitBtn').textContent = state.side === 'long' ? 'BUY ' + symbol : 'SELL ' + symbol;
         }
         
         function updateSelectedDisplay() {
             const q = state.quotes[state.selected] || {};
-            document.getElementById('selectedSymbol').textContent = state.selected;
-            document.getElementById('selectedMid').textContent = fmt(q.mid || 0, 2) + ' MNT';
+            document.getElementById('chartSymbol').textContent = state.selected;
+            document.getElementById('chartPrice').textContent = fmt(q.mid || 0, 0) + ' MNT';
             updateSummary();
         }
         
@@ -1095,13 +1278,13 @@ inline void HttpServer::setup_routes() {
                     if (book.bids.length > 0) {
                         book.bids.slice(0, 8).forEach(b => {
                             const pct = (b.quantity / maxQty) * 100;
-                            bids += `<div class="level"><div class="level-bar" style="width:${pct}%"></div><span class="level-price">${fmt(b.price,2)}</span><span class="level-size">${fmt(b.quantity,4)}</span></div>`;
+                            bids += `<div class="ob-level"><div class="ob-bar" style="width:${pct}%"></div><span class="ob-price">${fmt(b.price,0)}</span><span class="ob-size">${fmt(b.quantity,4)}</span></div>`;
                         });
                     } else {
                         // Synthetic levels if no real orders
                         for (let i = 0; i < 8; i++) {
                             const bp = mid * (1 - 0.0002 * (i + 1));
-                            bids += `<div class="level"><div class="level-bar" style="width:${20+Math.random()*30}%"></div><span class="level-price">${fmt(bp,2)}</span><span class="level-size">-</span></div>`;
+                            bids += `<div class="ob-level"><div class="ob-bar" style="width:${20+Math.random()*30}%"></div><span class="ob-price">${fmt(bp,0)}</span><span class="ob-size">-</span></div>`;
                         }
                     }
                     
@@ -1109,13 +1292,13 @@ inline void HttpServer::setup_routes() {
                     if (book.asks.length > 0) {
                         book.asks.slice(0, 8).forEach(a => {
                             const pct = (a.quantity / maxQty) * 100;
-                            asks += `<div class="level"><div class="level-bar" style="width:${pct}%"></div><span class="level-price">${fmt(a.price,2)}</span><span class="level-size">${fmt(a.quantity,4)}</span></div>`;
+                            asks += `<div class="ob-level"><div class="ob-bar" style="width:${pct}%"></div><span class="ob-price">${fmt(a.price,0)}</span><span class="ob-size">${fmt(a.quantity,4)}</span></div>`;
                         });
                     } else {
                         // Synthetic levels if no real orders
                         for (let i = 0; i < 8; i++) {
                             const ap = mid * (1 + 0.0002 * (i + 1));
-                            asks += `<div class="level"><div class="level-bar" style="width:${20+Math.random()*30}%"></div><span class="level-price">${fmt(ap,2)}</span><span class="level-size">-</span></div>`;
+                            asks += `<div class="ob-level"><div class="ob-bar" style="width:${20+Math.random()*30}%"></div><span class="ob-price">${fmt(ap,0)}</span><span class="ob-size">-</span></div>`;
                         }
                     }
                     
@@ -1128,8 +1311,8 @@ inline void HttpServer::setup_routes() {
                     const mid = q.mid || 1000000;
                     let bids = '', asks = '';
                     for (let i = 0; i < 8; i++) {
-                        bids += `<div class="level"><div class="level-bar" style="width:30%"></div><span class="level-price">${fmt(mid*(1-0.0002*(i+1)),2)}</span><span class="level-size">-</span></div>`;
-                        asks += `<div class="level"><div class="level-bar" style="width:30%"></div><span class="level-price">${fmt(mid*(1+0.0002*(i+1)),2)}</span><span class="level-size">-</span></div>`;
+                        bids += `<div class="ob-level"><div class="ob-bar" style="width:30%"></div><span class="ob-price">${fmt(mid*(1-0.0002*(i+1)),0)}</span><span class="ob-size">-</span></div>`;
+                        asks += `<div class="ob-level"><div class="ob-bar" style="width:30%"></div><span class="ob-price">${fmt(mid*(1+0.0002*(i+1)),0)}</span><span class="ob-size">-</span></div>`;
                     }
                     document.getElementById('bidsLevels').innerHTML = bids;
                     document.getElementById('asksLevels').innerHTML = asks;
@@ -1141,8 +1324,8 @@ inline void HttpServer::setup_routes() {
             document.getElementById('buyBtn').classList.toggle('active', s === 'long');
             document.getElementById('sellBtn').classList.toggle('active', s === 'short');
             const btn = document.getElementById('submitBtn');
-            btn.className = 'submit-order ' + (s === 'long' ? 'buy' : 'sell');
-            btn.textContent = s === 'long' ? 'Place Buy Order' : 'Place Sell Order';
+            btn.className = 'submit-btn ' + (s === 'long' ? 'buy' : 'sell');
+            btn.textContent = s === 'long' ? 'BUY ' + state.selected : 'SELL ' + state.selected;
             updateSummary();
         }
         
@@ -1155,24 +1338,11 @@ inline void HttpServer::setup_routes() {
             const value = price * qty;
             const margin = value / lev;
             const fee = value * 0.0005;
-            const usdMntRate = 3450;
-            const usdValue = value / usdMntRate;
             
-            document.getElementById('entryPrice').textContent = fmt(price, 2) + ' MNT';
-            document.getElementById('posValue').textContent = fmt(value, 2) + ' MNT';
-            document.getElementById('reqMargin').textContent = fmt(margin, 2) + ' MNT';
-            document.getElementById('estFee').textContent = fmt(fee, 2) + ' MNT';
-            
-            // Show clearing flow for hedgeable products
-            const isHedgeable = state.selected && !state.selected.includes('MN-') && state.selected !== 'USD-MNT-PERP';
-            const clearingFlow = document.getElementById('clearingFlow');
-            if (clearingFlow) {
-                clearingFlow.style.display = isHedgeable ? 'block' : 'none';
-                if (isHedgeable) {
-                    document.getElementById('clearMnt').textContent = fmt(value, 0) + ' MNT';
-                    document.getElementById('clearUsd').textContent = '$' + fmt(usdValue, 2) + ' USD';
-                }
-            }
+            document.getElementById('entryPrice').textContent = fmt(price, 0) + ' MNT';
+            document.getElementById('posValue').textContent = fmt(value, 0) + ' MNT';
+            document.getElementById('reqMargin').textContent = fmt(margin, 0) + ' MNT';
+            document.getElementById('estFee').textContent = fmt(fee, 0) + ' MNT';
         }
         
         async function submitOrder() {
