@@ -1,0 +1,7 @@
+<svg viewBox="0 0 240 80" xmlns="http://www.w3.org/2000/svg">
+  <rect width="240" height="80" fill="#ffffff"/>
+  <text x="24" y="52" font-family="Segoe UI, Arial, sans-serif" font-size="42" font-weight="600" fill="#282c34">CRE</text>
+  <text x="115" y="38" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#5c6370" letter-spacing="1">CENTRAL RISK</text>
+  <text x="115" y="52" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#5c6370" letter-spacing="1">EXCHANGE</text>
+  <line x1="112" y1="28" x2="112" y2="56" stroke="#dcdfe4" stroke-width="1"/>
+</svg>

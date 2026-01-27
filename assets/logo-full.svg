@@ -1,0 +1,14 @@
+<svg viewBox="0 0 240 80" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="240" height="80" fill="#282c34"/>
+  
+  <!-- Main CRE text -->
+  <text x="24" y="52" font-family="Segoe UI, Arial, sans-serif" font-size="42" font-weight="600" fill="#e5c07b">CRE</text>
+  
+  <!-- Subtext -->
+  <text x="115" y="38" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#abb2bf" letter-spacing="1">CENTRAL RISK</text>
+  <text x="115" y="52" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#abb2bf" letter-spacing="1">EXCHANGE</text>
+  
+  <!-- Subtle line accent -->
+  <line x1="112" y1="28" x2="112" y2="56" stroke="#3e4451" stroke-width="1"/>
+</svg>
