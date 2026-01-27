@@ -33,7 +33,8 @@ enum class ProductCategory {
     FXCM_FX_LOCAL,
     FXCM_INDEX,
     FXCM_CRYPTO,
-    MN_PERPETUAL  // Mongolia-unique, no FXCM hedge
+    MN_PERPETUAL,  // Mongolia-unique, no FXCM hedge
+    FX_PERP        // Currency perpetuals (USD/MNT etc)
 };
 
 enum class HedgeMode {
@@ -222,20 +223,20 @@ inline void ProductCatalog::initialize() {
     add_product({
         .symbol = "USD-MNT-PERP",
         .name = "USD/MNT Perpetual",
-        .description = "US Dollar vs Mongolian Tugrik",
-        .category = ProductCategory::FXCM_FX_LOCAL,
-        .fxcm_symbol = "",  // Internal pricing
+        .description = "US Dollar vs Mongolian Tugrik - Currency hedge instrument",
+        .category = ProductCategory::FX_PERP,  // FX perpetual category
+        .fxcm_symbol = "",  // Internal pricing - WE are the source
         .usd_multiplier = 1.0,
-        .hedge_mode = HedgeMode::NONE,  // Can't hedge - we ARE the source
-        .contract_size = 1000.0,  // $1000 notional
-        .tick_size = 1.0,
+        .hedge_mode = HedgeMode::NONE,  // Can't hedge - we ARE the USD/MNT source
+        .contract_size = 1000.0,  // $1000 USD notional per contract
+        .tick_size = 1.0,         // 1 MNT minimum increment
         .min_order_size = 0.1,
         .max_order_size = 10000.0,
-        .margin_rate = 0.02,      // 2% margin (50x)
+        .margin_rate = 0.05,      // 5% margin = 20x leverage (Conductor spec)
         .maker_fee = 0.0001,
         .taker_fee = 0.0003,
-        .mark_price_mnt = 3450.0,
-        .funding_rate = 0.0001,
+        .mark_price_mnt = 3450.0, // Current Bank of Mongolia rate
+        .funding_rate = 0.0001,   // Daily funding based on interest rate diff
         .is_active = true
     });
     

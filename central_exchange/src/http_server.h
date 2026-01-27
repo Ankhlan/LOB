@@ -10,6 +10,7 @@
 #include "position_manager.h"
 #include "product_catalog.h"
 #include "fxcm_feed.h"
+#include "bom_feed.h"
 
 #include <httplib.h>
 #include <nlohmann/json.hpp>
@@ -522,6 +523,44 @@ inline void HttpServer::setup_routes() {
             std::chrono::system_clock::now().time_since_epoch()).count();
         
         res.set_content(result.dump(), "application/json");
+    });
+    
+    // ==================== USD/MNT RATE API ====================
+    
+    // GET /api/rate - Current USD/MNT exchange rate
+    server_->Get("/api/rate", [](const httplib::Request&, httplib::Response& res) {
+        auto rate = BomFeed::instance().get_rate();
+        res.set_content(json{
+            {"rate", rate.rate},
+            {"source", rate.source},
+            {"timestamp", rate.timestamp},
+            {"is_valid", rate.is_valid}
+        }.dump(), "application/json");
+    });
+    
+    // POST /api/rate - Admin endpoint to update rate (testing)
+    server_->Post("/api/rate", [](const httplib::Request& req, httplib::Response& res) {
+        try {
+            auto body = json::parse(req.body);
+            double new_rate = body["rate"];
+            
+            if (new_rate <= 0 || new_rate > 100000) {
+                res.status = 400;
+                res.set_content(R"({"error":"Rate must be between 0 and 100000"})", "application/json");
+                return;
+            }
+            
+            BomFeed::instance().set_rate(new_rate);
+            
+            res.set_content(json{
+                {"success", true},
+                {"new_rate", new_rate}
+            }.dump(), "application/json");
+            
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
     });
     
     // ==================== HEALTH ====================

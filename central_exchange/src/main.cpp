@@ -16,6 +16,7 @@
 #include "matching_engine.h"
 #include "position_manager.h"
 #include "fxcm_feed.h"
+#include "bom_feed.h"
 #include "http_server.h"
 
 #include <iostream>
@@ -136,6 +137,11 @@ int main(int argc, char* argv[]) {
     std::cout << "[INIT] Initializing hedging engine...\n";
     HedgingEngine::instance().set_hedge_threshold(0.05);  // 5%
     HedgingEngine::instance().set_max_position(100000);   // $100k USD max
+    
+    // Start Bank of Mongolia rate feed (hourly updates)
+    std::cout << "[INIT] Starting Bank of Mongolia USD/MNT rate feed...\n";
+    BomFeed::instance().start();
+    std::cout << "       Current USD/MNT rate: " << USD_MNT_RATE << " MNT\n";
     
     // Setup signal handlers
     std::signal(SIGINT, signal_handler);
