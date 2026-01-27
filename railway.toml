@@ -1,5 +1,6 @@
 [build]
-dockerfile = "Dockerfile"
+# Use Python Procfile (faster builds)
+# For C++ build, change to: dockerfile = "Dockerfile"
 
 [deploy]
 healthcheckPath = "/health"
