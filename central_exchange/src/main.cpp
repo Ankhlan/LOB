@@ -3,6 +3,7 @@
  * =====================================
  * 
  * Mongolia's First Digital Derivatives Exchange
+ * Build: v4.0.0 - 2026-01-27
  * 
  * Features:
  * - 18+ products: Commodities, FX, Indices, Crypto (MNT-quoted)
