@@ -22,6 +22,13 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(httplib)
 
+# SQLite3 for order persistence
+find_package(SQLite3 QUIET)
+if(NOT SQLite3_FOUND)
+    # On Ubuntu, install libsqlite3-dev
+    message(STATUS "SQLite3 not found via find_package, will use system package")
+endif()
+
 add_executable(central_exchange src/main.cpp)
 
 target_include_directories(central_exchange PRIVATE 
@@ -31,6 +38,7 @@ target_include_directories(central_exchange PRIVATE
 
 target_link_libraries(central_exchange PRIVATE
     nlohmann_json::nlohmann_json
+    sqlite3
 )
 
 if(UNIX)

@@ -11,6 +11,7 @@
 #include "product_catalog.h"
 #include "fxcm_feed.h"
 #include "bom_feed.h"
+#include "database.h"
 
 #include <httplib.h>
 #include <nlohmann/json.hpp>
@@ -438,6 +439,67 @@ inline void HttpServer::setup_routes() {
             {"balance", pm.get_balance(user_id)},
             {"equity", pm.get_equity(user_id)},
             {"currency", "MNT"}
+        }.dump(), "application/json");
+    });
+    
+    // ==================== ORDER HISTORY (Persistent) ====================
+    
+    server_->Get("/api/orders/history", [](const httplib::Request& req, httplib::Response& res) {
+        std::string user_id = req.get_param_value("user_id");
+        if (user_id.empty()) user_id = "demo";
+        
+        auto orders = Database::instance().get_user_orders(user_id, 100);
+        
+        json arr = json::array();
+        for (const auto& o : orders) {
+            arr.push_back({
+                {"id", o.id},
+                {"symbol", o.symbol},
+                {"side", o.side},
+                {"quantity", o.quantity},
+                {"price", o.price},
+                {"type", o.order_type},
+                {"status", o.status},
+                {"created_at", o.created_at},
+                {"updated_at", o.updated_at}
+            });
+        }
+        
+        res.set_content(arr.dump(), "application/json");
+    });
+    
+    // ==================== TRADE HISTORY (Persistent) ====================
+    
+    server_->Get("/api/trades/history", [](const httplib::Request& req, httplib::Response& res) {
+        std::string symbol = req.get_param_value("symbol");
+        if (symbol.empty()) symbol = "XAU-MNT-PERP";
+        
+        auto trades = Database::instance().get_recent_trades(symbol, 50);
+        
+        json arr = json::array();
+        for (const auto& t : trades) {
+            arr.push_back({
+                {"id", t.id},
+                {"symbol", t.symbol},
+                {"quantity", t.quantity},
+                {"price", t.price},
+                {"timestamp", t.timestamp}
+            });
+        }
+        
+        res.set_content(arr.dump(), "application/json");
+    });
+    
+    // ==================== STATS (Persistent) ====================
+    
+    server_->Get("/api/stats", [](const httplib::Request&, httplib::Response& res) {
+        auto& db = Database::instance();
+        
+        res.set_content(json{
+            {"total_trades", db.get_total_trades()},
+            {"total_volume_mnt", db.get_total_volume()},
+            {"products", ProductCatalog::instance().count()},
+            {"order_books", MatchingEngine::instance().book_count()}
         }.dump(), "application/json");
     });
     
