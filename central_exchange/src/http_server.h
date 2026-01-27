@@ -18,6 +18,7 @@
 #include <nlohmann/json.hpp>
 #include <thread>
 #include <atomic>
+#include <tuple>
 
 namespace central_exchange {
 
@@ -188,7 +189,10 @@ inline void HttpServer::setup_routes() {
             auto body = json::parse(req.body);
             std::string phone = body.value("phone", "");
             
-            auto [success, otp, error] = Auth::instance().request_otp(phone);
+            auto result = Auth::instance().request_otp(phone);
+            bool success = std::get<0>(result);
+            std::string otp = std::get<1>(result);
+            std::string error = std::get<2>(result);
             
             if (success) {
                 // In production, OTP would be sent via SMS
@@ -221,7 +225,10 @@ inline void HttpServer::setup_routes() {
             std::string phone = body.value("phone", "");
             std::string otp = body.value("otp", "");
             
-            auto [success, token, error] = Auth::instance().verify_otp(phone, otp);
+            auto result = Auth::instance().verify_otp(phone, otp);
+            bool success = std::get<0>(result);
+            std::string token = std::get<1>(result);
+            std::string error = std::get<2>(result);
             
             if (success) {
                 res.set_content(json({
