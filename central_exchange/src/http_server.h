@@ -587,30 +587,30 @@ inline void HttpServer::setup_routes() {
     <title>Central Exchange | Professional Trading Platform</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        /* Theme Variables - Dark (Default) */
+        /* Theme Variables - One Half Dark (Default) */
         :root {
-            --bg-app: #1a1d21;
-            --bg-primary: #0d1117;
-            --bg-secondary: #161b22;
-            --bg-tertiary: #21262d;
-            --bg-panel: #0d1117;
-            --bg-hover: #30363d;
-            --bg-menu: #21262d;
-            --border: #30363d;
-            --border-bright: #484f58;
-            --text-primary: #e6edf3;
-            --text-secondary: #8b949e;
-            --text-muted: #6e7681;
-            --accent: #58a6ff;
-            --accent-dim: rgba(88, 166, 255, 0.15);
-            --green: #3fb950;
-            --green-bright: #56d364;
-            --green-dim: rgba(63, 185, 80, 0.15);
-            --red: #f85149;
-            --red-bright: #ff7b72;
-            --red-dim: rgba(248, 81, 73, 0.15);
-            --yellow: #d29922;
-            --menu-hover: #30363d;
+            --bg-app: #21252b;
+            --bg-primary: #282c34;
+            --bg-secondary: #2c313c;
+            --bg-tertiary: #3e4451;
+            --bg-panel: #282c34;
+            --bg-hover: #3e4451;
+            --bg-menu: #2c313c;
+            --border: #3e4451;
+            --border-bright: #5c6370;
+            --text-primary: #dcdfe4;
+            --text-secondary: #abb2bf;
+            --text-muted: #5c6370;
+            --accent: #61afef;
+            --accent-dim: rgba(97, 175, 239, 0.15);
+            --green: #98c379;
+            --green-bright: #a8d08d;
+            --green-dim: rgba(152, 195, 121, 0.15);
+            --red: #e06c75;
+            --red-bright: #e88991;
+            --red-dim: rgba(224, 108, 117, 0.15);
+            --yellow: #e5c07b;
+            --menu-hover: #3e4451;
         }
         
         /* Light Theme */
@@ -666,6 +666,9 @@ inline void HttpServer::setup_routes() {
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { height: 100%; overflow: hidden; }
         body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-app); color: var(--text-primary); font-size: 12px; display: flex; flex-direction: column; }
+        
+        /* Consolas for prices and mono elements */
+        .mono, .price, .quantity, .orderbook, .positions-table, .account-val, .stat-val { font-family: Consolas, 'Courier New', monospace !important; }
         
         /* ===== TOP MENU BAR - Desktop App Style ===== */
         .menubar { background: var(--bg-menu); border-bottom: 1px solid var(--border); display: flex; align-items: center; height: 28px; padding: 0 8px; user-select: none; }
@@ -1048,9 +1051,9 @@ inline void HttpServer::setup_routes() {
         let state = { selected: 'XAU-MNT-PERP', side: 'long', instruments: [], quotes: {}, chart: null, candleSeries: null, priceHistory: {}, timeframe: '15', theme: 'dark' };
         const fmt = (n, d=0) => new Intl.NumberFormat('en-US', {minimumFractionDigits:d, maximumFractionDigits:d}).format(n);
         
-        // Theme configurations
+        // Theme configurations - One Half Dark as default
         const themes = {
-            dark: { bg: '#0d1117', text: '#8b949e', grid: '#21262d', accent: '#58a6ff', up: '#3fb950', down: '#f85149' },
+            dark: { bg: '#282c34', text: '#abb2bf', grid: '#3e4451', accent: '#61afef', up: '#98c379', down: '#e06c75' },
             light: { bg: '#ffffff', text: '#656d76', grid: '#eaeef2', accent: '#0969da', up: '#1a7f37', down: '#cf222e' },
             blue: { bg: '#001e3c', text: '#b0c4de', grid: '#1e4976', accent: '#5c9ce6', up: '#66bb6a', down: '#ef5350' }
         };
