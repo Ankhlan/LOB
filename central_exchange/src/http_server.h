@@ -495,12 +495,16 @@ inline void HttpServer::setup_routes() {
     server_->Get("/api/stats", [](const httplib::Request&, httplib::Response& res) {
         auto& db = Database::instance();
         
-        res.set_content(json{
-            {"total_trades", db.get_total_trades()},
-            {"total_volume_mnt", db.get_total_volume()},
-            {"products", ProductCatalog::instance().count()},
-            {"order_books", MatchingEngine::instance().book_count()}
-        }.dump(), "application/json");
+        int64_t total_trades = db.get_total_trades();
+        double total_volume = db.get_total_volume();
+        size_t num_books = MatchingEngine::instance().book_count();
+        
+        json result;
+        result["total_trades"] = total_trades;
+        result["total_volume_mnt"] = total_volume;
+        result["order_books"] = num_books;
+        
+        res.set_content(result.dump(), "application/json");
     });
     
     server_->Post("/api/deposit", [](const httplib::Request& req, httplib::Response& res) {
