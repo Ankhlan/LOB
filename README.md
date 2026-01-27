@@ -1,101 +1,180 @@
 # CRE - Central Risk Exchange
 
-> Cash-Settled Futures for Mongolia
+> Futures. Settled in Cash. | Фючерс. Биет бус тооцоо.
+
+Mongolia's first regulated cash-settled futures exchange.
 
 ---
-
-## What We Do
-
-CRE operates a cash-settled futures exchange. Traders speculate on commodities, currencies, and indices. All positions settle in MNT. No physical delivery.
-
-## The Value We Create
-
-| Pillar | How |
-|--------|-----|
-| **Price Discovery** | Aggregated order book reveals fair market prices |
-| **Liquidity** | Connect buyers and sellers 24/7, tight spreads |
-| **Technology** | Sub-millisecond matching, real-time risk management |
-| **Transparency** | Open order book, published rates, clear fees |
-
-## Products
-
-**Cash Futures** - Contracts that settle the price difference in MNT.
-
-| Category | Instruments |
-|----------|-------------|
-| Commodities | XAU-MNT-PERP, XAG-MNT-PERP, OIL-MNT-PERP, COPPER-MNT-PERP |
-| Currencies | USD-MNT-PERP, EUR-MNT-PERP, CNY-MNT-PERP |
-| Indices | SPX-MNT-PERP, NDX-MNT-PERP, HSI-MNT-PERP |
-| Crypto | BTC-MNT-PERP, ETH-MNT-PERP |
-| Mongolia | CASHMERE-MNT-PERP, COAL-MNT-PERP |
-
-## How It Works
-
-1. **Deposit MNT** via QPay (phone-only registration)
-2. **Trade futures** with up to 20x leverage
-3. **Positions settle** in MNT based on mark price
-4. **Withdraw profits** to your QPay wallet
-
-No gold, no USD, no physical anything changes hands. Just MNT.
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    React Web Client                     │
-│       cre.mn | Mongolian Cyrillic | One Half Dark       │
-├─────────────────────────────────────────────────────────┤
-│                    REST + SSE API                       │
-│  /api/products | /api/book | /api/positions | /api/risk │
-├─────────────────────────────────────────────────────────┤
-│                 C++ Matching Engine                     │
-│  ┌──────────┬────────────┬───────────┬───────────────┐  │
-│  │  Order   │  Position  │   Hedge   │     Price     │  │
-│  │   Book   │  Manager   │  Engine   │    Oracle     │  │
-│  │ (LOB)    │ (Margin)   │ (FXCM)    │ (BOM + FXCM)  │  │
-│  └──────────┴────────────┴───────────┴───────────────┘  │
-├─────────────────────────────────────────────────────────┤
-│              Liquidity & Hedging Layer                  │
-│         FXCM ForexConnect | Bank of Mongolia Feed       │
-└─────────────────────────────────────────────────────────┘
-```
-
-## Technical Stack
-
-| Component | Technology |
-|-----------|------------|
-| Matching Engine | C++17, header-only |
-| Web Client | React 18, TypeScript, Tailwind |
-| API | cpp-httplib, REST + SSE |
-| Database | SQLite (orders, trades, audit) |
-| Hedge Provider | FXCM ForexConnect |
-| Price Oracle | FXCM + Bank of Mongolia |
-| Deployment | Railway (backend), Vercel (frontend) |
-
-## Live
-
-**Backend**: https://central-exchange-production.up.railway.app
-**Frontend**: Coming soon at cre.mn
-
-## Development
-
-```bash
-# Backend (C++)
-cd central_exchange
-mkdir build && cd build
-cmake .. && make
-./central_exchange
-
-# Frontend (React)
-cd cre-web
-npm install
-npm run dev
-```
-
-## License
-
-Proprietary. All rights reserved.
+`
+┌─────────────────────────────────────────────────────────────┐
+│                         CRE.mn                              │
+├─────────────────────────────────────────────────────────────┤
+│  Web UI (Embedded HTML)                                     │
+│  - Trading interface                                        │
+│  - Account management                                       │
+│  - Real-time prices (SSE)                                   │
+├─────────────────────────────────────────────────────────────┤
+│  REST API (cpp-httplib)                                     │
+│  - /api/auth/* (Phone OTP + JWT)                            │
+│  - /api/orders/* (Submit, cancel, query)                    │
+│  - /api/positions/* (Open positions, PnL)                   │
+│  - /api/account/* (Balance, history)                        │
+│  - /api/stream (SSE real-time quotes)                       │
+├─────────────────────────────────────────────────────────────┤
+│  Core Engine (C++17)                                        │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
+│  │  Matching    │  │  Position    │  │   Hedging    │       │
+│  │   Engine     │  │   Manager    │  │   Engine     │       │
+│  │  (LOB)       │  │  (Margin)    │  │   (FXCM)     │       │
+│  └──────────────┘  └──────────────┘  └──────────────┘       │
+├─────────────────────────────────────────────────────────────┤
+│  Accounting Engine (Ledger CLI)                             │
+│  - Double-entry bookkeeping                                 │
+│  - Multi-currency support (MNT, USD, EUR, CNY)              │
+│  - Mongolian accounting standards compliant                 │
+│  - Regulatory reporting (FRC)                               │
+├─────────────────────────────────────────────────────────────┤
+│  Persistence                                                │
+│  ┌──────────────┐  ┌──────────────┐                         │
+│  │   SQLite     │  │   Ledger     │                         │
+│  │  (orders,    │  │   Files      │                         │
+│  │   trades)    │  │  (accounting)│                         │
+│  └──────────────┘  └──────────────┘                         │
+├─────────────────────────────────────────────────────────────┤
+│  External Integrations                                      │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
+│  │    FXCM      │  │   Bank of    │  │    QPay      │       │
+│  │  (Hedging +  │  │   Mongolia   │  │  (Deposits/  │       │
+│  │   Prices)    │  │  (USD/MNT)   │  │  Withdrawals)│       │
+│  └──────────────┘  └──────────────┘  └──────────────┘       │
+└─────────────────────────────────────────────────────────────┘
+`
 
 ---
 
-*Futures. Settled in Cash.*
+## Products
+
+| Symbol | Name | Base | Margin | Leverage |
+|--------|------|------|--------|----------|
+| XAU | Gold | USD/oz | 10% | 10x |
+| XAG | Silver | USD/oz | 10% | 10x |
+| OIL | Crude Oil | USD/bbl | 10% | 10x |
+| USD-MNT-PERP | Dollar/Tugrik | MNT | 5% | 20x |
+| BTC | Bitcoin | USD | 20% | 5x |
+| ETH | Ethereum | USD | 20% | 5x |
+
+Full catalog: 19 instruments including Mongolia perpetuals.
+
+---
+
+## Accounting Engine
+
+CRE uses [Ledger CLI](https://ledger-cli.org/) for double-entry accounting.
+
+### Features
+- Multi-currency: MNT, USD, EUR, CNY, XAU, XAG, BTC, ETH
+- Reporting currency: MNT (for Mongolian regulators)
+- Real-time price database for currency conversion
+- Mongolian accounting standards (IFRS-based)
+- Segregated customer funds
+
+### Account Structure
+`
+Assets:Exchange:Bank:MNT          ; Exchange operating funds
+Assets:Customer:{phone}:Margin    ; Customer margin locked
+Liabilities:Customer:{phone}:Balance  ; Customer available balance
+Revenue:Trading:Fees              ; Exchange fee income
+Expenses:Hedging:FXCM             ; Hedging costs
+`
+
+### Reports (MNT denominated)
+- Balance Sheet (Баланс)
+- Income Statement (Орлогын тайлан)
+- Customer Account Statements
+- Daily Reconciliation
+
+---
+
+## Authentication
+
+Phone-based OTP authentication (no email, no password).
+
+1. User enters phone number
+2. SMS OTP sent (6 digits, 5-min expiry)
+3. User verifies OTP
+4. JWT issued (24h expiry)
+
+---
+
+## Technology Stack
+
+| Component | Technology |
+|-----------|------------|
+| Backend | C++17, header-only |
+| HTTP | cpp-httplib |
+| Database | SQLite |
+| Accounting | Ledger CLI |
+| Hedging | FXCM ForexConnect |
+| Streaming | Server-Sent Events |
+| Deployment | Railway (Docker) |
+
+---
+
+## Regulatory Compliance
+
+- Financial Regulatory Commission (FRC) oversight
+- IFRS-based accounting (adopted 2016)
+- Customer fund segregation
+- Anti-money laundering (AML) controls
+- Daily transaction reporting
+
+---
+
+## Brand
+
+| | |
+|-|-|
+| **Name** | Central Risk Exchange |
+| **Brand** | CRE |
+| **Domain** | cre.mn |
+| **Tagline** | Futures. Settled in Cash. |
+| **Mongolian** | Фючерс. Биет бус тооцоо. |
+
+See [Brand Book](docs/BRANDBOOK.md) for full guidelines.
+
+---
+
+## Development
+
+### Build
+`ash
+mkdir build && cd build
+cmake ..
+make
+./cre_server
+`
+
+### Run
+`ash
+docker build -t cre .
+docker run -p 8080:8080 cre
+`
+
+### Test
+`ash
+curl http://localhost:8080/api/health
+curl http://localhost:8080/api/products
+`
+
+---
+
+## License
+
+Proprietary. Central Risk Exchange LLC.
+
+---
+
+*Version 2.0 | January 2026*
