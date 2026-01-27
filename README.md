@@ -1,4 +1,4 @@
-# CRE - Central Risk Exchange
+# CRE - Central Risk Exchange (Централ Эрсдлийн Бирж)
 
 > Futures. Settled in Cash. | Фючерс. Биет бус тооцоо.
 
@@ -137,7 +137,7 @@ Phone-based OTP authentication (no email, no password).
 
 | | |
 |-|-|
-| **Name** | Central Risk Exchange |
+| **Name** | Central Risk Exchange (Централ Эрсдлийн Бирж) |
 | **Brand** | CRE |
 | **Domain** | cre.mn |
 | **Tagline** | Futures. Settled in Cash. |
@@ -178,3 +178,4 @@ Proprietary. Central Risk Exchange LLC.
 ---
 
 *Version 2.0 | January 2026*
+

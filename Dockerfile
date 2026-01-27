@@ -13,7 +13,7 @@ WORKDIR /app/central_exchange
 RUN mkdir -p build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && make -j$(nproc)
 
 FROM ubuntu:22.04
-RUN apt-get update && apt-get install -y libssl3 curl libsqlite3-0 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y libssl3 curl libsqlite3-0 ledger && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/central_exchange/build/central_exchange /usr/local/bin/
 
 ENV PORT=8080

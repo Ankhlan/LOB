@@ -1,5 +1,5 @@
 # CRE Brand Book
-## Central Risk Exchange
+## Central Risk Exchange (Централ Эрсдлийн Бирж)
 
 ---
 
@@ -16,7 +16,7 @@ CRE is Mongolia's first regulated cash-settled futures exchange. Our brand repre
 ## 1. Brand Identity
 
 ### Name
-**Central Risk Exchange** (CRE)
+**Central Risk Exchange (Централ Эрсдлийн Бирж)** (CRE)
 - Full form for legal and formal contexts
 - "CRE" for everyday use and digital presence
 - "CRE.mn" as the unified brand mark
@@ -304,7 +304,7 @@ Base unit: 4px
 ## 11. Legal
 
 ### Trademark
-"CRE" and "Central Risk Exchange" are trademarks of Central Risk Exchange LLC.
+"CRE" and "Central Risk Exchange (Централ Эрсдлийн Бирж)" are trademarks of Central Risk Exchange (Централ Эрсдлийн Бирж) LLC.
 
 ### Usage Rights
 This brand book governs use of CRE brand assets.
@@ -317,4 +317,5 @@ Legal inquiries: legal@cre.mn
 ---
 
 Version 2.0 | January 2026
-Central Risk Exchange LLC
+Central Risk Exchange (Централ Эрсдлийн Бирж) LLC
+
