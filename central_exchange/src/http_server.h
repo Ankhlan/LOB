@@ -80,6 +80,53 @@ inline void HttpServer::setup_routes() {
         res.status = 204;
     });
     
+    // ==================== SSE STREAMING ====================
+    // Real-time price updates via Server-Sent Events
+    server_->Get("/api/stream", [this](const httplib::Request&, httplib::Response& res) {
+        res.set_header("Content-Type", "text/event-stream");
+        res.set_header("Cache-Control", "no-cache");
+        res.set_header("Connection", "keep-alive");
+        res.set_header("X-Accel-Buffering", "no"); // Disable nginx buffering
+        
+        res.set_chunked_content_provider("text/event-stream",
+            [this](size_t offset, httplib::DataSink& sink) {
+                // Stream quotes every 500ms
+                while (true) {
+                    json quotes = json::array();
+                    
+                    ProductCatalog::instance().for_each([&](const Product& p) {
+                        if (!p.is_active) return;
+                        
+                        auto& engine = MatchingEngine::instance();
+                        auto [bid, ask] = engine.get_bbo(p.symbol);
+                        
+                        double bid_price = bid.value_or(p.mark_price_mnt * 0.999);
+                        double ask_price = ask.value_or(p.mark_price_mnt * 1.001);
+                        
+                        quotes.push_back({
+                            {"symbol", p.symbol},
+                            {"bid", bid_price},
+                            {"ask", ask_price},
+                            {"mid", (bid_price + ask_price) / 2},
+                            {"spread", ask_price - bid_price},
+                            {"mark", p.mark_price_mnt},
+                            {"funding", p.funding_rate},
+                            {"timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::system_clock::now().time_since_epoch()).count()}
+                        });
+                    });
+                    
+                    std::string event = "event: quotes\ndata: " + quotes.dump() + "\n\n";
+                    if (!sink.write(event.data(), event.size())) {
+                        break; // Client disconnected
+                    }
+                    
+                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                }
+                return false; // Connection closed
+            });
+    });
+    
     // ==================== PRODUCTS ====================
     
     server_->Get("/api/products", [this](const httplib::Request&, httplib::Response& res) {
@@ -1198,8 +1245,54 @@ inline void HttpServer::setup_routes() {
             await refresh();
             initChart();
             selectInstrument('XAU-MNT-PERP');
-            setInterval(refresh, 1500);
+            
+            // Start SSE streaming for real-time quotes
+            startQuoteStream();
+            
+            // Orderbook and chart updates (less frequent)
             setInterval(() => { if(state.selected) { renderOrderbook(); updateChartData(); } }, 2000);
+            
+            // Account refresh (balance/positions)
+            setInterval(refreshAccount, 3000);
+        }
+        
+        // SSE Real-time Quote Stream
+        function startQuoteStream() {
+            const evtSource = new EventSource('/api/stream');
+            
+            evtSource.addEventListener('quotes', (e) => {
+                const quotes = JSON.parse(e.data);
+                quotes.forEach(q => state.quotes[q.symbol] = q);
+                renderInstruments();
+                if (state.selected) updateSelectedDisplay();
+            });
+            
+            evtSource.onerror = () => {
+                console.log('SSE disconnected, reconnecting in 3s...');
+                evtSource.close();
+                setTimeout(startQuoteStream, 3000);
+            };
+            
+            state.evtSource = evtSource;
+        }
+        
+        // Refresh balance and positions (less frequent)
+        async function refreshAccount() {
+            const [balance, positions] = await Promise.all([
+                fetch('/api/balance?user_id=demo').then(r=>r.json()),
+                fetch('/api/positions?user_id=demo').then(r=>r.json())
+            ]);
+            
+            // Update header account display
+            document.getElementById('equity').textContent = fmt(balance.balance) + ' MNT';
+            document.getElementById('available').textContent = fmt(balance.available) + ' MNT';
+            document.getElementById('margin').textContent = fmt(balance.margin_used) + ' MNT';
+            
+            // Update status bar
+            document.getElementById('usedMargin').textContent = fmt(balance.margin_used) + ' MNT';
+            document.getElementById('freeMargin').textContent = fmt(balance.available) + ' MNT';
+            
+            renderPositions(positions);
         }
         
         async function refresh() {
