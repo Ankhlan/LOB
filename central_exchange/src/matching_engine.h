@@ -125,7 +125,25 @@ inline std::optional<Order> MatchingEngine::cancel_order(const std::string& symb
     auto it = books_.find(symbol);
     if (it == books_.end()) return std::nullopt;
     
-    return it->second->cancel(id);
+    auto cancelled = it->second->cancel(id);
+    
+    // Release margin for the cancelled order
+    if (cancelled) {
+        auto* product = ProductCatalog::instance().get(symbol);
+        if (product) {
+            double remaining_value = cancelled->remaining_qty * cancelled->price;
+            double margin_to_release = remaining_value * product->margin_rate;
+            
+            // Credit the margin back
+            auto& pm = PositionManager::instance();
+            auto* acc = pm.get_or_create_account(cancelled->user_id);
+            if (acc) {
+                acc->margin_used = std::max(0.0, acc->margin_used - margin_to_release);
+            }
+        }
+    }
+    
+    return cancelled;
 }
 
 inline OrderBook* MatchingEngine::get_book(const std::string& symbol) {

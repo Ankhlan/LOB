@@ -195,13 +195,15 @@ inline void HttpServer::setup_routes() {
             std::string error = std::get<2>(result);
             
             if (success) {
-                // In production, OTP would be sent via SMS
-                // For dev, it's logged to console
-                res.set_content(json({
+                // OTP sent via SMS in production
+                json response = {
                     {"success", true},
-                    {"message", "OTP sent to " + phone},
-                    {"dev_otp", otp}  // REMOVE IN PRODUCTION!
-                }).dump(), "application/json");
+                    {"message", "OTP sent to " + phone}
+                };
+                #ifdef DEV_MODE
+                response["dev_otp"] = otp;
+                #endif
+                res.set_content(response.dump(), "application/json");
             } else {
                 res.status = 400;
                 res.set_content(json({
@@ -299,6 +301,21 @@ inline void HttpServer::setup_routes() {
             });
     });
     
+
+    // ==================== HEALTH CHECK ====================
+    
+    static auto start_time = std::chrono::steady_clock::now();
+    
+    server_->Get("/api/health", [](const httplib::Request&, httplib::Response& res) {
+        auto now = std::chrono::steady_clock::now();
+        auto uptime = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
+        
+        res.set_content(json({
+            {"status", "ok"},
+            {"version", "1.0.0"},
+            {"uptime_seconds", uptime}
+        }).dump(), "application/json");
+    });
     // ==================== PRODUCTS ====================
     
     server_->Get("/api/products", [this](const httplib::Request&, httplib::Response& res) {

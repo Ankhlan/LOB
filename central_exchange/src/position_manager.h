@@ -113,7 +113,7 @@ private:
     // Aggregated exposure by symbol
     std::unordered_map<std::string, ExchangeExposure> exposures_;
     
-    mutable std::mutex mutex_;
+    mutable std::recursive_mutex mutex_;
     
     std::string pos_key(const std::string& user, const std::string& symbol) const {
         return user + ":" + symbol;
