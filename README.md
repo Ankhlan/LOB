@@ -1,91 +1,101 @@
-# 🇲🇳 Central Exchange - Mongolia's Transparent Digital Market
+# CRE - Central Risk Exchange
 
-> **Transparency • Accountability • Value Creation**
->
-> Building Mongolia's ethical financial infrastructure through technology and price discovery
-
-## 🎯 Mission
-
-We bring **transparency and accountability** to the financial sector. In a murky world where unethical practices flourish, Central Exchange stands for:
-
-- **Real Price Discovery** - Fair markets through our limit order book
-- **Risk Management** - Modern futures and derivatives for hedging
-- **Technology-First** - C++ matching engine with sub-millisecond execution
-- **Ethical Trading** - White and blue, the colors of Mongolia's flag, symbolizing our commitment to integrity
-
-## 🏛️ What We Offer
-
-### For Mongolian People & Businesses
-- **Commodities** - Trade gold, silver, copper, oil in MNT
-- **Currency Hedging** - USD/MNT perpetuals to manage FX risk
-- **Stock Indices** - S&P 500, NASDAQ, Hang Seng exposure
-- **Crypto** - BTC, ETH perpetual futures
-
-### For Traders
-- **20+ Products** - All quoted in MNT (Mongolian Tugrik)
-- **Leverage** - Up to 50x on select products
-- **Real Order Book** - Transparent bid/ask depth
-- **FXCM Backing** - Institutional-grade price feeds
-
-## 🔧 Architecture
-
-\\\
-┌─────────────────────────────────────────────────────────────┐
-│                    Web Trading Platform                       │
-│     White + Blue Theme | QPay Integration | MNT Charts        │
-├─────────────────────────────────────────────────────────────┤
-│                      REST API (C++)                           │
-│   /api/products | /api/book | /api/position | /api/risk      │
-├─────────────────────────────────────────────────────────────┤
-│                   C++ Matching Engine                         │
-│   ┌────────────┬────────────┬────────────┬────────────────┐  │
-│   │ Order Book │  Position  │   Hedge    │    FXCM        │  │
-│   │ (Price-Time│  Manager   │   Engine   │    Feed        │  │
-│   │  Priority) │  (Margin)  │ (Auto-Hedge)│  (Live Prices) │  │
-│   └────────────┴────────────┴────────────┴────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-\\\
-
-## 💰 How Clearing Works
-
-When you buy XAU-MNT-PERP (Gold Perpetual):
-
-1. **Your MNT** → Matched on our USD/MNT order book
-2. **USD Equivalent** → Hedged via FXCM (XAU/USD)
-3. **Position Opens** → You hold gold exposure in MNT
-
-This transparent clearing ensures:
-- ✅ No hidden costs
-- ✅ Real-time price discovery
-- ✅ Institutional-grade execution
-
-## 🚀 Live Demo
-
-**Production**: https://central-exchange-production.up.railway.app
-
-## 📊 Available Products
-
-| Category | Products |
-|----------|----------|
-| Commodities | XAU, XAG, OIL, COPPER, NGAS |
-| FX | USD/MNT, EUR/MNT, CNY/MNT, RUB/MNT |
-| Indices | SPX, NDX, HSI, NKY |
-| Crypto | BTC, ETH |
-| Mongolia-Unique | MEAT, REALESTATE, CASHMERE, COAL |
-
-## 🏗️ Technical Stack
-
-- **Backend**: C++17, header-only design
-- **HTTP**: cpp-httplib (embedded)
-- **JSON**: nlohmann/json
-- **Charts**: Lightweight Charts (MNT pricing)
-- **Deployment**: Railway (Docker)
-- **Hedge Provider**: FXCM
-
-## 📞 Contact
-
-Built with 💙 for Mongolia
+> Cash-Settled Futures for Mongolia
 
 ---
 
-*"We bring transparency and accountability and real value thru price discovery and tech to manage risk!"*
+## What We Do
+
+CRE operates a cash-settled futures exchange. Traders speculate on commodities, currencies, and indices. All positions settle in MNT. No physical delivery.
+
+## The Value We Create
+
+| Pillar | How |
+|--------|-----|
+| **Price Discovery** | Aggregated order book reveals fair market prices |
+| **Liquidity** | Connect buyers and sellers 24/7, tight spreads |
+| **Technology** | Sub-millisecond matching, real-time risk management |
+| **Transparency** | Open order book, published rates, clear fees |
+
+## Products
+
+**Cash Futures** - Contracts that settle the price difference in MNT.
+
+| Category | Instruments |
+|----------|-------------|
+| Commodities | XAU-MNT-PERP, XAG-MNT-PERP, OIL-MNT-PERP, COPPER-MNT-PERP |
+| Currencies | USD-MNT-PERP, EUR-MNT-PERP, CNY-MNT-PERP |
+| Indices | SPX-MNT-PERP, NDX-MNT-PERP, HSI-MNT-PERP |
+| Crypto | BTC-MNT-PERP, ETH-MNT-PERP |
+| Mongolia | CASHMERE-MNT-PERP, COAL-MNT-PERP |
+
+## How It Works
+
+1. **Deposit MNT** via QPay (phone-only registration)
+2. **Trade futures** with up to 20x leverage
+3. **Positions settle** in MNT based on mark price
+4. **Withdraw profits** to your QPay wallet
+
+No gold, no USD, no physical anything changes hands. Just MNT.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    React Web Client                     │
+│       cre.mn | Mongolian Cyrillic | One Half Dark       │
+├─────────────────────────────────────────────────────────┤
+│                    REST + SSE API                       │
+│  /api/products | /api/book | /api/positions | /api/risk │
+├─────────────────────────────────────────────────────────┤
+│                 C++ Matching Engine                     │
+│  ┌──────────┬────────────┬───────────┬───────────────┐  │
+│  │  Order   │  Position  │   Hedge   │     Price     │  │
+│  │   Book   │  Manager   │  Engine   │    Oracle     │  │
+│  │ (LOB)    │ (Margin)   │ (FXCM)    │ (BOM + FXCM)  │  │
+│  └──────────┴────────────┴───────────┴───────────────┘  │
+├─────────────────────────────────────────────────────────┤
+│              Liquidity & Hedging Layer                  │
+│         FXCM ForexConnect | Bank of Mongolia Feed       │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Technical Stack
+
+| Component | Technology |
+|-----------|------------|
+| Matching Engine | C++17, header-only |
+| Web Client | React 18, TypeScript, Tailwind |
+| API | cpp-httplib, REST + SSE |
+| Database | SQLite (orders, trades, audit) |
+| Hedge Provider | FXCM ForexConnect |
+| Price Oracle | FXCM + Bank of Mongolia |
+| Deployment | Railway (backend), Vercel (frontend) |
+
+## Live
+
+**Backend**: https://central-exchange-production.up.railway.app
+**Frontend**: Coming soon at cre.mn
+
+## Development
+
+```bash
+# Backend (C++)
+cd central_exchange
+mkdir build && cd build
+cmake .. && make
+./central_exchange
+
+# Frontend (React)
+cd cre-web
+npm install
+npm run dev
+```
+
+## License
+
+Proprietary. All rights reserved.
+
+---
+
+*Futures. Settled in Cash.*
