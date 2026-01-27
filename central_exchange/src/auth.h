@@ -16,6 +16,8 @@
 #include <random>
 #include <sstream>
 #include <iomanip>
+#include <tuple>
+#include <iostream>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
 #include <openssl/evp.h>
