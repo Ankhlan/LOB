@@ -1,60 +1,91 @@
-# LOB - Limit Order Book for Perpetual Futures
+# 🇲🇳 Central Exchange - Mongolia's Transparent Digital Market
 
-A high-performance matching engine for cash-settled perpetual futures.
+> **Transparency • Accountability • Value Creation**
+>
+> Building Mongolia's ethical financial infrastructure through technology and price discovery
 
-## Features
+## 🎯 Mission
 
-- **Order Book**: Price-time priority matching with O(log n) insert, O(1) cancel
-- **Matching Engine**: FIFO order matching with trade callbacks
-- **Risk Engine**: Margin calculations, liquidation detection
-- **Web Interface**: Real-time order book visualization
+We bring **transparency and accountability** to the financial sector. In a murky world where unethical practices flourish, Central Exchange stands for:
 
-## Architecture
+- **Real Price Discovery** - Fair markets through our limit order book
+- **Risk Management** - Modern futures and derivatives for hedging
+- **Technology-First** - C++ matching engine with sub-millisecond execution
+- **Ethical Trading** - White and blue, the colors of Mongolia's flag, symbolizing our commitment to integrity
+
+## 🏛️ What We Offer
+
+### For Mongolian People & Businesses
+- **Commodities** - Trade gold, silver, copper, oil in MNT
+- **Currency Hedging** - USD/MNT perpetuals to manage FX risk
+- **Stock Indices** - S&P 500, NASDAQ, Hang Seng exposure
+- **Crypto** - BTC, ETH perpetual futures
+
+### For Traders
+- **20+ Products** - All quoted in MNT (Mongolian Tugrik)
+- **Leverage** - Up to 50x on select products
+- **Real Order Book** - Transparent bid/ask depth
+- **FXCM Backing** - Institutional-grade price feeds
+
+## 🔧 Architecture
 
 \\\
-┌─────────────────────────────────────────┐
-│              Web Frontend               │
-│         (Order Entry + Book View)       │
-├─────────────────────────────────────────┤
-│            REST API (Flask)             │
-├─────────────────────────────────────────┤
-│          Matching Engine (Python)       │
-│   ┌─────────────┬─────────────────────┐ │
-│   │  OrderBook  │   RiskEngine        │ │
-│   │  (SortedDict)│  (Margin/Liq)      │ │
-│   └─────────────┴─────────────────────┘ │
-└─────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    Web Trading Platform                       │
+│     White + Blue Theme | QPay Integration | MNT Charts        │
+├─────────────────────────────────────────────────────────────┤
+│                      REST API (C++)                           │
+│   /api/products | /api/book | /api/position | /api/risk      │
+├─────────────────────────────────────────────────────────────┤
+│                   C++ Matching Engine                         │
+│   ┌────────────┬────────────┬────────────┬────────────────┐  │
+│   │ Order Book │  Position  │   Hedge    │    FXCM        │  │
+│   │ (Price-Time│  Manager   │   Engine   │    Feed        │  │
+│   │  Priority) │  (Margin)  │ (Auto-Hedge)│  (Live Prices) │  │
+│   └────────────┴────────────┴────────────┴────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
 \\\
 
-## Quick Start
+## 💰 How Clearing Works
 
-\\\ash
-# Install dependencies
-pip install -r requirements.txt
+When you buy XAU-MNT-PERP (Gold Perpetual):
 
-# Run server
-python app.py
+1. **Your MNT** → Matched on our USD/MNT order book
+2. **USD Equivalent** → Hedged via FXCM (XAU/USD)
+3. **Position Opens** → You hold gold exposure in MNT
 
-# Open browser
-http://localhost:5000
-\\\
+This transparent clearing ensures:
+- ✅ No hidden costs
+- ✅ Real-time price discovery
+- ✅ Institutional-grade execution
 
-## API Endpoints
+## 🚀 Live Demo
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | /api/book/:symbol | Get order book depth |
-| POST | /api/order | Place order |
-| DELETE | /api/order/:id | Cancel order |
-| GET | /api/trades | Recent trades |
+**Production**: https://central-exchange-production.up.railway.app
 
-## Products (Planned)
+## 📊 Available Products
 
-- BTC-PERP
-- ETH-PERP
-- CASHMERE-PERP (unique!)
-- USD-MNT-PERP
+| Category | Products |
+|----------|----------|
+| Commodities | XAU, XAG, OIL, COPPER, NGAS |
+| FX | USD/MNT, EUR/MNT, CNY/MNT, RUB/MNT |
+| Indices | SPX, NDX, HSI, NKY |
+| Crypto | BTC, ETH |
+| Mongolia-Unique | MEAT, REALESTATE, CASHMERE, COAL |
 
-## License
+## 🏗️ Technical Stack
 
-MIT
+- **Backend**: C++17, header-only design
+- **HTTP**: cpp-httplib (embedded)
+- **JSON**: nlohmann/json
+- **Charts**: Lightweight Charts (MNT pricing)
+- **Deployment**: Railway (Docker)
+- **Hedge Provider**: FXCM
+
+## 📞 Contact
+
+Built with 💙 for Mongolia
+
+---
+
+*"We bring transparency and accountability and real value thru price discovery and tech to manage risk!"*

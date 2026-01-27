@@ -587,55 +587,71 @@ inline void HttpServer::setup_routes() {
     <title>Central Exchange | Professional Trading Platform</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
+        /* 🇲🇳 Mongolian Flag Colors - White & Diplomatic Blue */
         :root {
-            --bg-primary: #0a0e17;
-            --bg-secondary: #111827;
-            --bg-tertiary: #1f2937;
-            --bg-hover: #374151;
-            --border: #2d3748;
-            --text-primary: #f9fafb;
-            --text-secondary: #9ca3af;
-            --text-muted: #6b7280;
-            --accent: #3b82f6;
-            --green: #10b981;
-            --green-dim: rgba(16, 185, 129, 0.15);
-            --red: #ef4444;
-            --red-dim: rgba(239, 68, 68, 0.15);
-            --yellow: #f59e0b;
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8fafc;
+            --bg-tertiary: #f1f5f9;
+            --bg-hover: #e2e8f0;
+            --border: #e2e8f0;
+            --text-primary: #1e293b;
+            --text-secondary: #475569;
+            --text-muted: #94a3b8;
+            --accent: #0066b3;           /* Mongolian Blue */
+            --accent-light: #e0f2fe;
+            --green: #059669;
+            --green-dim: rgba(5, 150, 105, 0.1);
+            --red: #dc2626;
+            --red-dim: rgba(220, 38, 38, 0.1);
+            --yellow: #d97706;
+            --gold: #b8860b;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; font-size: 13px; }
         
-        /* Header */
-        .header { background: var(--bg-secondary); border-bottom: 1px solid var(--border); padding: 0 20px; height: 48px; display: flex; align-items: center; justify-content: space-between; }
+        /* Header - Mongolian Blue */
+        .header { background: var(--accent); border-bottom: 1px solid var(--accent); padding: 0 20px; height: 56px; display: flex; align-items: center; justify-content: space-between; }
         .logo { display: flex; align-items: center; gap: 12px; }
-        .logo-icon { width: 28px; height: 28px; background: linear-gradient(135deg, var(--accent), #8b5cf6); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; }
-        .logo-text { font-weight: 600; font-size: 15px; letter-spacing: -0.3px; }
-        .logo-text span { color: var(--text-secondary); font-weight: 400; margin-left: 8px; }
+        .logo-icon { width: 36px; height: 36px; background: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; color: var(--accent); }
+        .logo-text { font-weight: 600; font-size: 16px; letter-spacing: -0.3px; color: white; }
+        .logo-text span { color: rgba(255,255,255,0.7); font-weight: 400; margin-left: 8px; }
         .header-right { display: flex; align-items: center; gap: 24px; }
         .header-stat { display: flex; flex-direction: column; align-items: flex-end; }
-        .header-stat-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-        .header-stat-value { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; }
-        .header-stat-value.positive { color: var(--green); }
-        .connection-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--green); }
-        .connection-dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%; animation: pulse 2s infinite; }
+        .header-stat-label { font-size: 10px; color: rgba(255,255,255,0.7); text-transform: uppercase; letter-spacing: 0.5px; }
+        .header-stat-value { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; color: white; }
+        .header-stat-value.positive { color: #86efac; }
+        .connection-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #86efac; }
+        .connection-dot { width: 6px; height: 6px; background: #86efac; border-radius: 50%; animation: pulse 2s infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         
+        /* Mission Banner */
+        .mission-banner { background: linear-gradient(90deg, #f0f9ff, #e0f2fe); border-bottom: 1px solid var(--border); padding: 8px 20px; font-size: 11px; color: var(--accent); text-align: center; }
+        .mission-banner strong { color: var(--text-primary); }
+        
+        /* System Status */
+        .system-status { background: var(--bg-secondary); border-bottom: 1px solid var(--border); padding: 8px 20px; display: flex; gap: 24px; font-size: 11px; }
+        .status-item { display: flex; align-items: center; gap: 6px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .status-dot.online { background: var(--green); }
+        .status-dot.offline { background: var(--red); }
+        .status-label { color: var(--text-muted); }
+        .status-value { font-weight: 500; font-family: 'JetBrains Mono', monospace; }
+        
         /* Main Layout */
-        .main { display: grid; grid-template-columns: 280px 1fr 320px; grid-template-rows: 1fr auto; height: calc(100vh - 48px); }
+        .main { display: grid; grid-template-columns: 280px 1fr 320px; grid-template-rows: 1fr auto; height: calc(100vh - 112px); }
         
         /* Watchlist Panel */
         .watchlist { background: var(--bg-secondary); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
-        .panel-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
-        .panel-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); }
+        .panel-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: white; }
+        .panel-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent); }
         .search-box { margin: 8px 12px; }
-        .search-box input { width: 100%; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; color: var(--text-primary); font-size: 12px; }
-        .search-box input:focus { outline: none; border-color: var(--accent); }
+        .search-box input { width: 100%; background: white; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; color: var(--text-primary); font-size: 12px; }
+        .search-box input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
         .instrument-list { flex: 1; overflow-y: auto; }
-        .instrument-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.15s; }
-        .instrument-row:hover { background: var(--bg-tertiary); }
-        .instrument-row.selected { background: rgba(59, 130, 246, 0.1); border-left: 2px solid var(--accent); }
-        .instrument-symbol { font-weight: 600; font-size: 12px; }
+        .instrument-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.15s; background: white; }
+        .instrument-row:hover { background: var(--accent-light); }
+        .instrument-row.selected { background: var(--accent-light); border-left: 3px solid var(--accent); }
+        .instrument-symbol { font-weight: 600; font-size: 12px; color: var(--accent); }
         .instrument-name { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
         .instrument-price { font-family: 'JetBrains Mono', monospace; text-align: right; }
         .instrument-bid { color: var(--green); font-size: 12px; }
@@ -645,7 +661,7 @@ inline void HttpServer::setup_routes() {
         .instrument-change.up { color: var(--green); }
         .instrument-change.down { color: var(--red); }
         
-        /* Center Panel - Chart placeholder and depth */
+        /* Center Panel - Chart and Order Flow */
         .center { display: flex; flex-direction: column; background: var(--bg-primary); }
         .chart-area { flex: 1; display: flex; flex-direction: column; border-bottom: 1px solid var(--border); position: relative; overflow: hidden; }
         .chart-toolbar { display: flex; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--bg-secondary); }
@@ -716,13 +732,24 @@ inline void HttpServer::setup_routes() {
         .close-btn { background: var(--red-dim); color: var(--red); border: 1px solid var(--red); padding: 4px 12px; border-radius: 4px; font-size: 10px; font-weight: 600; cursor: pointer; }
         .close-btn:hover { background: var(--red); color: white; }
         .empty-state { padding: 32px; text-align: center; color: var(--text-muted); font-size: 12px; }
+        
+        /* Clearing Flow Panel */
+        .clearing-flow { background: var(--accent-light); border: 1px solid var(--accent); border-radius: 8px; padding: 12px; margin: 12px; font-size: 11px; }
+        .clearing-title { font-weight: 600; color: var(--accent); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+        .clearing-step { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+        .clearing-step .arrow { color: var(--accent); }
+        .clearing-step .amount { font-family: 'JetBrains Mono', monospace; font-weight: 500; }
+        
+        /* QPAY Button */
+        .qpay-btn { background: #00a650; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 12px; }
+        .qpay-btn:hover { background: #008f45; }
     </style>
 </head>
 <body>
     <header class="header">
         <div class="logo">
-            <div class="logo-icon">CE</div>
-            <div class="logo-text">Central Exchange<span>Mongolia</span></div>
+            <div class="logo-icon">🇲🇳</div>
+            <div class="logo-text">Central Exchange<span>Mongolia's Transparent Market</span></div>
         </div>
         <div class="header-right">
             <div class="header-stat">
@@ -737,17 +764,26 @@ inline void HttpServer::setup_routes() {
                 <div class="header-stat-label">Margin Used</div>
                 <div class="header-stat-value" id="margin">0.00 MNT</div>
             </div>
-            <div class="connection-status">
-                <div class="connection-dot"></div>
-                Connected
-            </div>
+            <button class="qpay-btn" onclick="openQpay()">💳 Deposit via QPay</button>
         </div>
     </header>
+    
+    <div class="mission-banner">
+        🇲🇳 <strong>Transparency • Accountability • Value Creation</strong> — Building Mongolia's ethical financial infrastructure through technology and price discovery
+    </div>
+    
+    <div class="system-status">
+        <div class="status-item"><div class="status-dot online"></div><span class="status-label">Matching Engine:</span><span class="status-value">ONLINE</span></div>
+        <div class="status-item"><div class="status-dot online"></div><span class="status-label">Order Book:</span><span class="status-value" id="bookStatus">19 Products</span></div>
+        <div class="status-item"><div class="status-dot online"></div><span class="status-label">FXCM Feed:</span><span class="status-value" id="fxcmStatus">Connected</span></div>
+        <div class="status-item"><div class="status-dot online"></div><span class="status-label">USD/MNT Rate:</span><span class="status-value" id="rateStatus">3,450 MNT</span></div>
+        <div class="status-item"><div class="status-dot online"></div><span class="status-label">Hedge Engine:</span><span class="status-value">ACTIVE</span></div>
+    </div>
     
     <main class="main">
         <aside class="watchlist">
             <div class="panel-header">
-                <span class="panel-title">Instruments</span>
+                <span class="panel-title">🔍 Instruments</span>
             </div>
             <div class="search-box">
                 <input type="text" placeholder="Search markets..." id="searchInput" oninput="filterInstruments()">
@@ -810,6 +846,28 @@ inline void HttpServer::setup_routes() {
                     <div class="summary-row"><span class="summary-label">Required Margin</span><span class="summary-value" id="reqMargin">-</span></div>
                     <div class="summary-row"><span class="summary-label">Fee (est.)</span><span class="summary-value" id="estFee">-</span></div>
                 </div>
+                
+                <!-- Clearing Flow - Transparent order execution -->
+                <div class="clearing-flow" id="clearingFlow" style="display:none;">
+                    <div class="clearing-title">📋 Clearing Flow</div>
+                    <div class="clearing-step">
+                        <span>1.</span>
+                        <span class="amount" id="clearMnt">- MNT</span>
+                        <span class="arrow">→</span>
+                        <span>USD/MNT Book</span>
+                    </div>
+                    <div class="clearing-step">
+                        <span>2.</span>
+                        <span class="amount" id="clearUsd">- USD</span>
+                        <span class="arrow">→</span>
+                        <span>FXCM Hedge</span>
+                    </div>
+                    <div class="clearing-step">
+                        <span>3.</span>
+                        <span>Position opened on our LOB</span>
+                    </div>
+                </div>
+                
                 <button class="submit-order buy" id="submitBtn" onclick="submitOrder()">Place Buy Order</button>
             </div>
         </aside>
@@ -839,38 +897,39 @@ inline void HttpServer::setup_routes() {
                 state.chart.remove();
             }
             
+            // White theme for Mongolian branding
             state.chart = LightweightCharts.createChart(container, {
                 width: container.clientWidth,
                 height: container.clientHeight,
                 layout: {
-                    background: { type: 'solid', color: '#0a0e17' },
-                    textColor: '#9ca3af',
+                    background: { type: 'solid', color: '#ffffff' },
+                    textColor: '#475569',
                 },
                 grid: {
-                    vertLines: { color: '#1f2937' },
-                    horzLines: { color: '#1f2937' },
+                    vertLines: { color: '#e2e8f0' },
+                    horzLines: { color: '#e2e8f0' },
                 },
                 crosshair: {
                     mode: LightweightCharts.CrosshairMode.Normal,
                 },
                 rightPriceScale: {
-                    borderColor: '#2d3748',
+                    borderColor: '#e2e8f0',
                     scaleMargins: { top: 0.1, bottom: 0.1 },
                 },
                 timeScale: {
-                    borderColor: '#2d3748',
+                    borderColor: '#e2e8f0',
                     timeVisible: true,
                     secondsVisible: false,
                 },
             });
             
             state.candleSeries = state.chart.addCandlestickSeries({
-                upColor: '#10b981',
-                downColor: '#ef4444',
-                borderDownColor: '#ef4444',
-                borderUpColor: '#10b981',
-                wickDownColor: '#ef4444',
-                wickUpColor: '#10b981',
+                upColor: '#059669',
+                downColor: '#dc2626',
+                borderDownColor: '#dc2626',
+                borderUpColor: '#059669',
+                wickDownColor: '#dc2626',
+                wickUpColor: '#059669',
             });
             
             // Handle resize
@@ -879,6 +938,11 @@ inline void HttpServer::setup_routes() {
                     state.chart.resize(container.clientWidth, container.clientHeight);
                 }
             });
+        }
+        
+        // QPay deposit integration
+        function openQpay() {
+            alert('QPay integration coming soon! Deposit MNT directly from your bank account.');
         }
         
         function updateChartData() {
@@ -1073,10 +1137,24 @@ inline void HttpServer::setup_routes() {
             const value = price * qty;
             const margin = value / lev;
             const fee = value * 0.0005;
+            const usdMntRate = 3450;
+            const usdValue = value / usdMntRate;
+            
             document.getElementById('entryPrice').textContent = fmt(price, 2) + ' MNT';
             document.getElementById('posValue').textContent = fmt(value, 2) + ' MNT';
             document.getElementById('reqMargin').textContent = fmt(margin, 2) + ' MNT';
             document.getElementById('estFee').textContent = fmt(fee, 2) + ' MNT';
+            
+            // Show clearing flow for hedgeable products
+            const isHedgeable = state.selected && !state.selected.includes('MN-') && state.selected !== 'USD-MNT-PERP';
+            const clearingFlow = document.getElementById('clearingFlow');
+            if (clearingFlow) {
+                clearingFlow.style.display = isHedgeable ? 'block' : 'none';
+                if (isHedgeable) {
+                    document.getElementById('clearMnt').textContent = fmt(value, 0) + ' MNT';
+                    document.getElementById('clearUsd').textContent = '$' + fmt(usdValue, 2) + ' USD';
+                }
+            }
         }
         
         async function submitOrder() {
