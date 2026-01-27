@@ -8,6 +8,8 @@
 
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
+#include <vector>
 #include <mutex>
 #include <chrono>
 #include <optional>
