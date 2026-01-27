@@ -1,4 +1,4 @@
-# Central Exchange - C++ Build for Railway v4
+# Central Exchange - C++ Build for Railway v5
 FROM ubuntu:22.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -9,8 +9,8 @@ WORKDIR /app
 COPY central_exchange/ ./central_exchange/
 
 WORKDIR /app/central_exchange
-# Force rebuild by changing this comment: BUILD_V4_20260127_1640
-RUN mkdir -p build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && make -j$(nproc)
+# DEV_MODE enabled for testing - remove for production
+RUN mkdir -p build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-DDEV_MODE" && make -j$(nproc)
 
 FROM ubuntu:22.04
 RUN apt-get update && apt-get install -y libssl3 curl libsqlite3-0 ledger && rm -rf /var/lib/apt/lists/*
