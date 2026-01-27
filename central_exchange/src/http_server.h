@@ -1157,7 +1157,7 @@ inline void HttpServer::setup_routes() {
     <div class="modal-overlay hidden" id="loginModal">
         <div class="login-modal">
             <div class="login-header">
-                <span class="flag">🇲🇳</span>
+                <div class="menubar-logo-icon" style="width:32px;height:32px;font-size:12px;">CRE</div>
                 <div>
                     <div class="login-title" data-i18n="loginTitle">Central Exchange</div>
                     <div class="login-subtitle" data-i18n="loginSubtitle">Login with your phone number</div>
@@ -1172,7 +1172,7 @@ inline void HttpServer::setup_routes() {
                     </div>
                     <button class="login-btn" id="requestOtpBtn" onclick="requestOtp()" disabled data-i18n="sendCode">Send Code</button>
                     <div class="login-error" id="phoneError"></div>
-                    <div class="login-info" data-i18n="phoneInfo">We'll send a 6-digit code via SMS</div>
+                    <div class="login-info" data-i18n="phoneInfo">We will send a 6-digit code via SMS</div>
                 </div>
                 <!-- Step 2: OTP Input -->
                 <div class="login-step" id="stepOtp">
@@ -1195,7 +1195,7 @@ inline void HttpServer::setup_routes() {
     <!-- TOP MENU BAR - Desktop App Style -->
     <div class="menubar">
         <div class="menubar-logo">
-            <div class="menubar-logo-icon">🇲🇳</div>
+            <div class="menubar-logo-icon">CRE</div>
             <span class="menubar-logo-text" data-i18n="appName">Central Exchange</span>
         </div>
         <div class="menu-items">
@@ -1216,6 +1216,19 @@ inline void HttpServer::setup_routes() {
                     <div class="dropdown-item">Positions <span class="shortcut">F7</span></div>
                     <div class="dropdown-divider"></div>
                     <div class="dropdown-item">Full Screen <span class="shortcut">F11</span></div>
+                    <div class="dropdown-divider"></div>
+                    <div class="dropdown-item" onclick="setTheme('dark')">Theme: Dark</div>
+                    <div class="dropdown-item" onclick="setTheme('light')">Theme: Light</div>
+                    <div class="dropdown-item" onclick="setTheme('blue')">Theme: Blue</div>
+                </div>
+            </div>
+            <div class="menu-item has-dropdown">Account
+                <div class="dropdown">
+                    <div class="dropdown-item" onclick="openQpay()">Deposit <span class="shortcut">Ctrl+D</span></div>
+                    <div class="dropdown-item">Withdraw <span class="shortcut">Ctrl+W</span></div>
+                    <div class="dropdown-divider"></div>
+                    <div class="dropdown-item">Transaction History</div>
+                    <div class="dropdown-item">Account Settings</div>
                 </div>
             </div>
             <div class="menu-item has-dropdown">Trade
@@ -1246,31 +1259,22 @@ inline void HttpServer::setup_routes() {
         <div class="menu-right">
             <div class="lang-toggle">
                 <button class="lang-btn active" id="langEn" onclick="setLang('en')">EN</button>
-                <button class="lang-btn" id="langMn" onclick="setLang('mn')">МН</button>
+                <button class="lang-btn" id="langMn" onclick="setLang('mn')">MN</button>
             </div>
             <div class="user-info" id="userInfo" style="display:none;">
                 <span class="user-phone" id="userPhone">+976 ...</span>
                 <button class="logout-btn" onclick="logout()" data-i18n="logout">Logout</button>
             </div>
-            <button class="toolbar-btn" id="loginBtn" onclick="showLogin()" data-i18n="login">📱 Login</button>
-            <div class="theme-selector">
-                <button class="theme-btn dark active" onclick="setTheme('dark')" title="Dark">🌙</button>
-                <button class="theme-btn light" onclick="setTheme('light')" title="Light">☀️</button>
-                <button class="theme-btn blue" onclick="setTheme('blue')" title="Blue">💠</button>
-            </div>
+            <button class="toolbar-btn" id="loginBtn" onclick="showLogin()" data-i18n="login">Login</button>
         </div>
     </div>
     
     <!-- TOOLBAR -->
     <div class="toolbar">
         <div class="toolbar-group">
-            <button class="toolbar-btn" onclick="openQpay()">💳 Deposit</button>
-            <button class="toolbar-btn">📤 Withdraw</button>
-        </div>
-        <div class="toolbar-group">
-            <button class="toolbar-btn active">📊 Chart</button>
-            <button class="toolbar-btn">📋 Orders</button>
-            <button class="toolbar-btn">📈 Positions</button>
+            <button class="toolbar-btn active">Chart</button>
+            <button class="toolbar-btn">Orders</button>
+            <button class="toolbar-btn">Positions</button>
         </div>
         <div class="account-display">
             <div class="account-item">
@@ -1428,7 +1432,7 @@ inline void HttpServer::setup_routes() {
                 phoneInfo: "We'll send a 6-digit code via SMS",
                 verify: 'Verify',
                 changeNumber: '← Change number',
-                login: '📱 Login',
+                login: 'Login',
                 logout: 'Logout',
                 menuFile: 'File',
                 menuView: 'View',
@@ -1441,11 +1445,11 @@ inline void HttpServer::setup_routes() {
                 exit: 'Exit',
                 instruments: 'Instruments',
                 search: 'Search...',
-                deposit: '💳 Deposit',
-                withdraw: '📤 Withdraw',
-                chart: '📊 Chart',
-                orders: '📋 Orders',
-                positions: '📈 Positions',
+                deposit: 'Deposit',
+                withdraw: 'Withdraw',
+                chart: 'Chart',
+                orders: 'Orders',
+                positions: 'Positions',
                 equity: 'Equity',
                 available: 'Available',
                 margin: 'Margin',
@@ -1487,7 +1491,7 @@ inline void HttpServer::setup_routes() {
                 phoneInfo: 'SMS-ээр 6 оронтой код илгээнэ',
                 verify: 'Баталгаажуулах',
                 changeNumber: '← Дугаар солих',
-                login: '📱 Нэвтрэх',
+                login: 'Нэвтрэх',
                 logout: 'Гарах',
                 menuFile: 'Файл',
                 menuView: 'Харах',
@@ -1500,11 +1504,11 @@ inline void HttpServer::setup_routes() {
                 exit: 'Гарах',
                 instruments: 'Хэрэгсэл',
                 search: 'Хайх...',
-                deposit: '💳 Орлого',
-                withdraw: '📤 Зарлага',
-                chart: '📊 График',
-                orders: '📋 Захиалга',
-                positions: '📈 Позиц',
+                deposit: 'Орлого',
+                withdraw: 'Зарлага',
+                chart: 'График',
+                orders: 'Захиалга',
+                positions: 'Позиц',
                 equity: 'Хөрөнгө',
                 available: 'Боломжит',
                 margin: 'Барьцаа',
