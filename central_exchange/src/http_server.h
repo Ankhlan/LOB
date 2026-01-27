@@ -365,7 +365,6 @@ inline void HttpServer::setup_routes() {
             res.set_content(json{{"error", e.what()}}.dump(), "application/json");
         }
     });
-    });
     
     // ==================== ACCOUNT ====================
     
