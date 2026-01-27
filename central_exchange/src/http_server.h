@@ -12,6 +12,7 @@
 #include "fxcm_feed.h"
 #include "bom_feed.h"
 #include "database.h"
+#include "auth.h"
 
 #include <httplib.h>
 #include <nlohmann/json.hpp>
@@ -72,13 +73,112 @@ inline void HttpServer::setup_routes() {
     server_->set_pre_routing_handler([](const httplib::Request&, httplib::Response& res) {
         res.set_header("Access-Control-Allow-Origin", "*");
         res.set_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-        res.set_header("Access-Control-Allow-Headers", "Content-Type");
+        res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
         return httplib::Server::HandlerResponse::Unhandled;
     });
     
     // OPTIONS for CORS preflight
     server_->Options(".*", [](const httplib::Request&, httplib::Response& res) {
         res.status = 204;
+    });
+    
+    // ==================== AUTHENTICATION ====================
+    
+    // Register new user
+    server_->Post("/api/auth/register", [](const httplib::Request& req, httplib::Response& res) {
+        try {
+            auto body = json::parse(req.body);
+            std::string username = body["username"];
+            std::string password = body["password"];
+            std::string email = body.value("email", "");
+            
+            auto user = Auth::instance().register_user(username, password, email);
+            if (!user) {
+                res.status = 400;
+                res.set_content(R"({"error":"Username already exists"})", "application/json");
+                return;
+            }
+            
+            res.set_content(json{
+                {"success", true},
+                {"user_id", user->id},
+                {"username", user->username}
+            }.dump(), "application/json");
+            
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+    
+    // Login and get JWT token
+    server_->Post("/api/auth/login", [](const httplib::Request& req, httplib::Response& res) {
+        try {
+            auto body = json::parse(req.body);
+            std::string username = body["username"];
+            std::string password = body["password"];
+            
+            auto token = Auth::instance().login(username, password);
+            if (!token) {
+                res.status = 401;
+                res.set_content(R"({"error":"Invalid credentials"})", "application/json");
+                return;
+            }
+            
+            res.set_content(json{
+                {"success", true},
+                {"token", *token},
+                {"token_type", "Bearer"},
+                {"expires_in", 86400}
+            }.dump(), "application/json");
+            
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+    
+    // Verify token and get user info
+    server_->Get("/api/auth/me", [](const httplib::Request& req, httplib::Response& res) {
+        std::string auth_header = req.get_header_value("Authorization");
+        if (auth_header.empty()) {
+            res.status = 401;
+            res.set_content(R"({"error":"No authorization header"})", "application/json");
+            return;
+        }
+        
+        std::string token = Auth::instance().extract_token(auth_header);
+        auto payload = Auth::instance().verify_token(token);
+        
+        if (!payload) {
+            res.status = 401;
+            res.set_content(R"({"error":"Invalid or expired token"})", "application/json");
+            return;
+        }
+        
+        auto user = Auth::instance().get_user(payload->user_id);
+        if (!user) {
+            res.status = 401;
+            res.set_content(R"({"error":"User not found"})", "application/json");
+            return;
+        }
+        
+        res.set_content(json{
+            {"user_id", user->id},
+            {"username", user->username},
+            {"email", user->email},
+            {"is_active", user->is_active}
+        }.dump(), "application/json");
+    });
+    
+    // Logout (blacklist token)
+    server_->Post("/api/auth/logout", [](const httplib::Request& req, httplib::Response& res) {
+        std::string auth_header = req.get_header_value("Authorization");
+        if (!auth_header.empty()) {
+            std::string token = Auth::instance().extract_token(auth_header);
+            Auth::instance().logout(token);
+        }
+        res.set_content(R"({"success":true})", "application/json");
     });
     
     // ==================== SSE STREAMING ====================
