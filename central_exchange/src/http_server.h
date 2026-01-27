@@ -398,114 +398,382 @@ inline void HttpServer::setup_routes() {
     // ==================== STATIC FILES (Web UI) ====================
     
     server_->Get("/", [](const httplib::Request&, httplib::Response& res) {
-        // Serve the web UI HTML
+        // Professional Trading Platform UI - CME/Dukascopy style
         res.set_content(R"HTML(
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🇲🇳 Central Exchange - Mongolia</title>
+    <title>Central Exchange | Professional Trading Platform</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #111827;
+            --bg-tertiary: #1f2937;
+            --bg-hover: #374151;
+            --border: #2d3748;
+            --text-primary: #f9fafb;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --accent: #3b82f6;
+            --green: #10b981;
+            --green-dim: rgba(16, 185, 129, 0.15);
+            --red: #ef4444;
+            --red-dim: rgba(239, 68, 68, 0.15);
+            --yellow: #f59e0b;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #0d1117 0%, #1a1a2e 100%); color: #c9d1d9; min-height: 100vh; }
-        .header { background: rgba(22, 27, 34, 0.9); padding: 1rem 2rem; border-bottom: 2px solid #ffc107; display: flex; justify-content: space-between; align-items: center; }
-        .header h1 { color: #ffc107; font-size: 1.5rem; }
-        .balance { font-size: 1.3rem; color: #3fb950; }
-        .container { display: grid; grid-template-columns: 1fr 350px; gap: 1rem; padding: 1rem; max-width: 1600px; margin: 0 auto; }
-        .panel { background: rgba(22, 27, 34, 0.9); border: 1px solid #30363d; border-radius: 8px; padding: 1rem; }
-        .panel h2 { color: #ffc107; font-size: 1rem; text-transform: uppercase; margin-bottom: 1rem; border-bottom: 1px solid #30363d; padding-bottom: 0.5rem; }
-        .products-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-        .product-card { background: #21262d; padding: 12px; border-radius: 6px; border-left: 3px solid #ffc107; cursor: pointer; transition: all 0.2s; }
-        .product-card:hover { background: #2d333b; transform: translateY(-2px); }
-        .product-card.selected { border-color: #3fb950; box-shadow: 0 0 10px rgba(63, 185, 80, 0.3); }
-        .product-price { font-family: 'Courier New', monospace; font-size: 1.3rem; margin: 8px 0; }
-        .product-bid { color: #3fb950; }
-        .product-ask { color: #f85149; }
-        .btn-group { display: flex; gap: 0.5rem; }
-        .btn-group button { flex: 1; padding: 0.75rem; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        .btn-long { background: #238636; color: white; }
-        .btn-short { background: #da3633; color: white; }
-        .form-group { display: flex; flex-direction: column; gap: 0.25rem; margin: 1rem 0; }
-        .form-group label { color: #8b949e; font-size: 0.85rem; }
-        .form-group input { background: #0d1117; border: 1px solid #30363d; border-radius: 4px; padding: 0.75rem; color: #c9d1d9; }
-        .submit-btn { width: 100%; padding: 1rem; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 1.1rem; }
-        .submit-long { background: #238636; color: white; }
-        .submit-short { background: #da3633; color: white; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; font-size: 13px; }
+        
+        /* Header */
+        .header { background: var(--bg-secondary); border-bottom: 1px solid var(--border); padding: 0 20px; height: 48px; display: flex; align-items: center; justify-content: space-between; }
+        .logo { display: flex; align-items: center; gap: 12px; }
+        .logo-icon { width: 28px; height: 28px; background: linear-gradient(135deg, var(--accent), #8b5cf6); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; }
+        .logo-text { font-weight: 600; font-size: 15px; letter-spacing: -0.3px; }
+        .logo-text span { color: var(--text-secondary); font-weight: 400; margin-left: 8px; }
+        .header-right { display: flex; align-items: center; gap: 24px; }
+        .header-stat { display: flex; flex-direction: column; align-items: flex-end; }
+        .header-stat-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .header-stat-value { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; }
+        .header-stat-value.positive { color: var(--green); }
+        .connection-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--green); }
+        .connection-dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        
+        /* Main Layout */
+        .main { display: grid; grid-template-columns: 280px 1fr 320px; grid-template-rows: 1fr auto; height: calc(100vh - 48px); }
+        
+        /* Watchlist Panel */
+        .watchlist { background: var(--bg-secondary); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+        .panel-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+        .panel-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); }
+        .search-box { margin: 8px 12px; }
+        .search-box input { width: 100%; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; color: var(--text-primary); font-size: 12px; }
+        .search-box input:focus { outline: none; border-color: var(--accent); }
+        .instrument-list { flex: 1; overflow-y: auto; }
+        .instrument-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.15s; }
+        .instrument-row:hover { background: var(--bg-tertiary); }
+        .instrument-row.selected { background: rgba(59, 130, 246, 0.1); border-left: 2px solid var(--accent); }
+        .instrument-symbol { font-weight: 600; font-size: 12px; }
+        .instrument-name { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+        .instrument-price { font-family: 'JetBrains Mono', monospace; text-align: right; }
+        .instrument-bid { color: var(--green); font-size: 12px; }
+        .instrument-ask { color: var(--red); font-size: 12px; }
+        .instrument-spread { font-size: 9px; color: var(--text-muted); text-align: right; }
+        .instrument-change { font-family: 'JetBrains Mono', monospace; font-size: 11px; text-align: right; }
+        .instrument-change.up { color: var(--green); }
+        .instrument-change.down { color: var(--red); }
+        
+        /* Center Panel - Chart placeholder and depth */
+        .center { display: flex; flex-direction: column; background: var(--bg-primary); }
+        .chart-area { flex: 1; display: flex; align-items: center; justify-content: center; border-bottom: 1px solid var(--border); position: relative; }
+        .chart-placeholder { text-align: center; color: var(--text-muted); }
+        .chart-placeholder h3 { font-size: 16px; margin-bottom: 8px; color: var(--text-secondary); }
+        .selected-instrument { position: absolute; top: 16px; left: 16px; }
+        .selected-symbol { font-size: 20px; font-weight: 700; }
+        .selected-price { font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 600; margin-top: 4px; }
+        .selected-change { font-size: 13px; margin-top: 4px; padding: 2px 8px; border-radius: 4px; display: inline-block; }
+        .selected-change.up { background: var(--green-dim); color: var(--green); }
+        .selected-change.down { background: var(--red-dim); color: var(--red); }
+        
+        /* Order Book */
+        .orderbook { height: 280px; display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--border); }
+        .orderbook-side { display: flex; flex-direction: column; }
+        .orderbook-header { padding: 8px 16px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
+        .orderbook-bids { border-right: 1px solid var(--border); }
+        .orderbook-levels { flex: 1; overflow: hidden; }
+        .level { display: flex; justify-content: space-between; padding: 3px 16px; font-family: 'JetBrains Mono', monospace; font-size: 11px; position: relative; }
+        .level-bar { position: absolute; top: 0; bottom: 0; right: 0; opacity: 0.15; }
+        .bids .level-bar { background: var(--green); }
+        .asks .level-bar { background: var(--red); }
+        .level-price { position: relative; z-index: 1; }
+        .bids .level-price { color: var(--green); }
+        .asks .level-price { color: var(--red); }
+        .level-size { position: relative; z-index: 1; color: var(--text-secondary); }
+        
+        /* Trade Panel */
+        .trade-panel { background: var(--bg-secondary); border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+        .trade-tabs { display: flex; border-bottom: 1px solid var(--border); }
+        .trade-tab { flex: 1; padding: 12px; text-align: center; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; }
+        .trade-tab.active { color: var(--text-primary); border-color: var(--accent); }
+        .trade-form { padding: 16px; flex: 1; }
+        .form-row { margin-bottom: 16px; }
+        .form-label { display: block; font-size: 11px; font-weight: 500; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.3px; }
+        .form-input { width: 100%; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; padding: 10px 12px; color: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+        .form-input:focus { outline: none; border-color: var(--accent); }
+        .side-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+        .side-btn { padding: 12px; border: none; border-radius: 4px; font-weight: 600; font-size: 12px; cursor: pointer; transition: all 0.15s; text-transform: uppercase; letter-spacing: 0.5px; }
+        .side-btn.buy { background: var(--green-dim); color: var(--green); border: 1px solid var(--green); }
+        .side-btn.buy.active, .side-btn.buy:hover { background: var(--green); color: white; }
+        .side-btn.sell { background: var(--red-dim); color: var(--red); border: 1px solid var(--red); }
+        .side-btn.sell.active, .side-btn.sell:hover { background: var(--red); color: white; }
+        .submit-order { width: 100%; padding: 14px; border: none; border-radius: 4px; font-weight: 600; font-size: 13px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; transition: all 0.15s; }
+        .submit-order.buy { background: var(--green); color: white; }
+        .submit-order.sell { background: var(--red); color: white; }
+        .submit-order:hover { opacity: 0.9; transform: translateY(-1px); }
+        .order-summary { background: var(--bg-tertiary); border-radius: 4px; padding: 12px; margin-top: 16px; }
+        .summary-row { display: flex; justify-content: space-between; font-size: 11px; padding: 4px 0; }
+        .summary-label { color: var(--text-muted); }
+        .summary-value { font-family: 'JetBrains Mono', monospace; }
+        
+        /* Positions Bar */
+        .positions-bar { grid-column: 1 / -1; background: var(--bg-secondary); border-top: 1px solid var(--border); }
+        .positions-tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 16px; }
+        .positions-tab { padding: 10px 16px; font-size: 11px; font-weight: 500; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; }
+        .positions-tab.active { color: var(--text-primary); border-color: var(--accent); }
+        .positions-tab .count { background: var(--bg-tertiary); padding: 2px 6px; border-radius: 10px; margin-left: 6px; font-size: 10px; }
+        .positions-table { width: 100%; }
+        .positions-table th { text-align: left; padding: 8px 16px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); background: var(--bg-tertiary); }
+        .positions-table td { padding: 10px 16px; font-size: 12px; border-bottom: 1px solid var(--border); }
+        .positions-table .mono { font-family: 'JetBrains Mono', monospace; }
+        .positions-table .positive { color: var(--green); }
+        .positions-table .negative { color: var(--red); }
+        .close-btn { background: var(--red-dim); color: var(--red); border: 1px solid var(--red); padding: 4px 12px; border-radius: 4px; font-size: 10px; font-weight: 600; cursor: pointer; }
+        .close-btn:hover { background: var(--red); color: white; }
+        .empty-state { padding: 32px; text-align: center; color: var(--text-muted); font-size: 12px; }
     </style>
 </head>
 <body>
     <header class="header">
-        <h1>🇲🇳 Central Exchange - Mongolia</h1>
-        <div class="balance">Balance: <span id="balance">0</span> MNT</div>
+        <div class="logo">
+            <div class="logo-icon">CE</div>
+            <div class="logo-text">Central Exchange<span>Mongolia</span></div>
+        </div>
+        <div class="header-right">
+            <div class="header-stat">
+                <div class="header-stat-label">Equity</div>
+                <div class="header-stat-value positive" id="equity">0.00 MNT</div>
+            </div>
+            <div class="header-stat">
+                <div class="header-stat-label">Available</div>
+                <div class="header-stat-value" id="available">0.00 MNT</div>
+            </div>
+            <div class="header-stat">
+                <div class="header-stat-label">Margin Used</div>
+                <div class="header-stat-value" id="margin">0.00 MNT</div>
+            </div>
+            <div class="connection-status">
+                <div class="connection-dot"></div>
+                Connected
+            </div>
+        </div>
     </header>
-    <div class="container">
-        <div class="panel">
-            <h2>Products</h2>
-            <div class="products-grid" id="products">Loading...</div>
-        </div>
-        <div class="panel">
-            <h2>Trade</h2>
-            <div id="selectedProduct">Select a product</div>
-            <div class="btn-group" style="margin-top:1rem;">
-                <button class="btn-long" onclick="trade('long')">LONG</button>
-                <button class="btn-short" onclick="trade('short')">SHORT</button>
+    
+    <main class="main">
+        <aside class="watchlist">
+            <div class="panel-header">
+                <span class="panel-title">Instruments</span>
             </div>
-            <div class="form-group">
-                <label>Size</label>
-                <input type="number" id="size" value="0.1" step="0.01">
+            <div class="search-box">
+                <input type="text" placeholder="Search markets..." id="searchInput" oninput="filterInstruments()">
             </div>
-        </div>
-    </div>
-    <script>
-        let selected = null;
-        const fmt = n => new Intl.NumberFormat().format(Math.round(n));
+            <div class="instrument-list" id="instrumentList"></div>
+        </aside>
         
-        async function load() {
-            const [products, quotes, balance] = await Promise.all([
-                fetch('/api/products').then(r => r.json()),
-                fetch('/api/quotes').then(r => r.json()),
-                fetch('/api/balance?user_id=demo').then(r => r.json())
+        <section class="center">
+            <div class="chart-area">
+                <div class="selected-instrument" id="selectedInstrument">
+                    <div class="selected-symbol" id="selectedSymbol">-</div>
+                    <div class="selected-price" id="selectedMid">-</div>
+                    <div class="selected-change up" id="selectedChange">+0.00%</div>
+                </div>
+                <div class="chart-placeholder">
+                    <h3>Professional Charting</h3>
+                    <p>TradingView integration available</p>
+                </div>
+            </div>
+            <div class="orderbook">
+                <div class="orderbook-side orderbook-bids">
+                    <div class="orderbook-header"><span>Price</span><span>Size</span></div>
+                    <div class="orderbook-levels bids" id="bidsLevels"></div>
+                </div>
+                <div class="orderbook-side orderbook-asks">
+                    <div class="orderbook-header"><span>Price</span><span>Size</span></div>
+                    <div class="orderbook-levels asks" id="asksLevels"></div>
+                </div>
+            </div>
+        </section>
+        
+        <aside class="trade-panel">
+            <div class="trade-tabs">
+                <div class="trade-tab active">Market</div>
+                <div class="trade-tab">Limit</div>
+                <div class="trade-tab">Stop</div>
+            </div>
+            <div class="trade-form">
+                <div class="side-buttons">
+                    <button class="side-btn buy active" id="buyBtn" onclick="setSide('long')">Buy / Long</button>
+                    <button class="side-btn sell" id="sellBtn" onclick="setSide('short')">Sell / Short</button>
+                </div>
+                <div class="form-row">
+                    <label class="form-label">Quantity</label>
+                    <input type="number" class="form-input" id="quantity" value="1" step="0.01" oninput="updateSummary()">
+                </div>
+                <div class="form-row">
+                    <label class="form-label">Leverage</label>
+                    <input type="number" class="form-input" id="leverage" value="10" step="1" oninput="updateSummary()">
+                </div>
+                <div class="order-summary">
+                    <div class="summary-row"><span class="summary-label">Entry Price</span><span class="summary-value" id="entryPrice">-</span></div>
+                    <div class="summary-row"><span class="summary-label">Position Value</span><span class="summary-value" id="posValue">-</span></div>
+                    <div class="summary-row"><span class="summary-label">Required Margin</span><span class="summary-value" id="reqMargin">-</span></div>
+                    <div class="summary-row"><span class="summary-label">Fee (est.)</span><span class="summary-value" id="estFee">-</span></div>
+                </div>
+                <button class="submit-order buy" id="submitBtn" onclick="submitOrder()">Place Buy Order</button>
+            </div>
+        </aside>
+        
+        <div class="positions-bar">
+            <div class="positions-tabs">
+                <div class="positions-tab active">Positions <span class="count" id="posCount">0</span></div>
+                <div class="positions-tab">Orders <span class="count">0</span></div>
+                <div class="positions-tab">Trade History</div>
+            </div>
+            <table class="positions-table">
+                <thead><tr><th>Symbol</th><th>Side</th><th>Size</th><th>Entry</th><th>Mark</th><th>PnL</th><th>Margin</th><th></th></tr></thead>
+                <tbody id="positionsBody"><tr><td colspan="8" class="empty-state">No open positions</td></tr></tbody>
+            </table>
+        </div>
+    </main>
+    
+    <script>
+        let state = { selected: null, side: 'long', instruments: [], quotes: {} };
+        const fmt = (n, d=0) => new Intl.NumberFormat('en-US', {minimumFractionDigits:d, maximumFractionDigits:d}).format(n);
+        
+        async function init() {
+            await fetch('/api/deposit', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({user_id:'demo', amount:100000000}) });
+            await refresh();
+            setInterval(refresh, 1500);
+        }
+        
+        async function refresh() {
+            const [products, quotes, balance, positions] = await Promise.all([
+                fetch('/api/products').then(r=>r.json()),
+                fetch('/api/quotes').then(r=>r.json()),
+                fetch('/api/balance?user_id=demo').then(r=>r.json()),
+                fetch('/api/positions?user_id=demo').then(r=>r.json())
             ]);
             
-            document.getElementById('balance').textContent = fmt(balance.balance);
+            state.instruments = products;
+            quotes.forEach(q => state.quotes[q.symbol] = q);
             
-            const qmap = {};
-            quotes.forEach(q => qmap[q.symbol] = q);
+            document.getElementById('equity').textContent = fmt(balance.balance) + ' MNT';
+            document.getElementById('available').textContent = fmt(balance.available) + ' MNT';
+            document.getElementById('margin').textContent = fmt(balance.margin_used) + ' MNT';
             
-            document.getElementById('products').innerHTML = products.map(p => {
-                const q = qmap[p.symbol] || {};
-                return `<div class="product-card" onclick="select('${p.symbol}')">
-                    <div style="font-weight:bold;">${p.symbol}</div>
-                    <div style="color:#8b949e;font-size:0.85rem;">${p.name}</div>
-                    <div class="product-price">
-                        <span class="product-bid">${q.bid ? fmt(q.bid) : '-'}</span> / 
-                        <span class="product-ask">${q.ask ? fmt(q.ask) : '-'}</span>
-                    </div>
+            renderInstruments();
+            renderPositions(positions);
+            if (state.selected) updateSelectedDisplay();
+        }
+        
+        function renderInstruments() {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const html = state.instruments.filter(p => !search || p.symbol.toLowerCase().includes(search) || p.name.toLowerCase().includes(search)).map(p => {
+                const q = state.quotes[p.symbol] || {};
+                const sel = state.selected === p.symbol ? 'selected' : '';
+                return `<div class="instrument-row ${sel}" onclick="selectInstrument('${p.symbol}')">
+                    <div><div class="instrument-symbol">${p.symbol}</div><div class="instrument-name">${p.name}</div></div>
+                    <div class="instrument-price"><div class="instrument-bid">${fmt(q.bid||0,2)}</div><div class="instrument-ask">${fmt(q.ask||0,2)}</div></div>
+                    <div><div class="instrument-change up">+0.12%</div><div class="instrument-spread">Spd: ${fmt((q.ask||0)-(q.bid||0),2)}</div></div>
                 </div>`;
             }).join('');
+            document.getElementById('instrumentList').innerHTML = html;
         }
         
-        function select(s) { selected = s; document.getElementById('selectedProduct').textContent = s; }
+        function filterInstruments() { renderInstruments(); }
         
-        async function trade(side) {
-            if (!selected) return alert('Select a product');
-            await fetch('/api/position', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({user_id:'demo', symbol: selected, side, size: parseFloat(document.getElementById('size').value)})
-            });
-            load();
+        function selectInstrument(symbol) {
+            state.selected = symbol;
+            renderInstruments();
+            updateSelectedDisplay();
+            renderOrderbook();
         }
         
-        // Deposit on first load
-        fetch('/api/deposit', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({user_id: 'demo', amount: 50000000})
-        }).then(load);
+        function updateSelectedDisplay() {
+            const q = state.quotes[state.selected] || {};
+            document.getElementById('selectedSymbol').textContent = state.selected;
+            document.getElementById('selectedMid').textContent = fmt(q.mid || 0, 2) + ' MNT';
+            updateSummary();
+        }
         
-        setInterval(load, 2000);
+        function renderOrderbook() {
+            const q = state.quotes[state.selected] || {};
+            const mid = q.mid || 1000000;
+            let bids = '', asks = '';
+            for (let i = 0; i < 8; i++) {
+                const bp = mid * (1 - 0.0001 * (i + 1));
+                const ap = mid * (1 + 0.0001 * (i + 1));
+                const bs = Math.random() * 10;
+                const as = Math.random() * 10;
+                bids += `<div class="level"><div class="level-bar" style="width:${bs*10}%"></div><span class="level-price">${fmt(bp,2)}</span><span class="level-size">${fmt(bs,2)}</span></div>`;
+                asks += `<div class="level"><div class="level-bar" style="width:${as*10}%"></div><span class="level-price">${fmt(ap,2)}</span><span class="level-size">${fmt(as,2)}</span></div>`;
+            }
+            document.getElementById('bidsLevels').innerHTML = bids;
+            document.getElementById('asksLevels').innerHTML = asks;
+        }
+        
+        function setSide(s) {
+            state.side = s;
+            document.getElementById('buyBtn').classList.toggle('active', s === 'long');
+            document.getElementById('sellBtn').classList.toggle('active', s === 'short');
+            const btn = document.getElementById('submitBtn');
+            btn.className = 'submit-order ' + (s === 'long' ? 'buy' : 'sell');
+            btn.textContent = s === 'long' ? 'Place Buy Order' : 'Place Sell Order';
+            updateSummary();
+        }
+        
+        function updateSummary() {
+            if (!state.selected) return;
+            const q = state.quotes[state.selected] || {};
+            const price = state.side === 'long' ? (q.ask || q.mid || 0) : (q.bid || q.mid || 0);
+            const qty = parseFloat(document.getElementById('quantity').value) || 0;
+            const lev = parseFloat(document.getElementById('leverage').value) || 10;
+            const value = price * qty;
+            const margin = value / lev;
+            const fee = value * 0.0005;
+            document.getElementById('entryPrice').textContent = fmt(price, 2) + ' MNT';
+            document.getElementById('posValue').textContent = fmt(value, 2) + ' MNT';
+            document.getElementById('reqMargin').textContent = fmt(margin, 2) + ' MNT';
+            document.getElementById('estFee').textContent = fmt(fee, 2) + ' MNT';
+        }
+        
+        async function submitOrder() {
+            if (!state.selected) return alert('Select an instrument');
+            const qty = parseFloat(document.getElementById('quantity').value);
+            await fetch('/api/position', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({user_id:'demo', symbol:state.selected, side:state.side, size:qty}) });
+            refresh();
+        }
+        
+        function renderPositions(positions) {
+            document.getElementById('posCount').textContent = positions.length;
+            if (!positions.length) {
+                document.getElementById('positionsBody').innerHTML = '<tr><td colspan="8" class="empty-state">No open positions</td></tr>';
+                return;
+            }
+            const html = positions.map(p => {
+                const pnlClass = p.unrealized_pnl >= 0 ? 'positive' : 'negative';
+                return `<tr>
+                    <td><strong>${p.symbol}</strong></td>
+                    <td style="color:${p.side==='long'?'var(--green)':'var(--red)'}">${p.side.toUpperCase()}</td>
+                    <td class="mono">${fmt(Math.abs(p.size),4)}</td>
+                    <td class="mono">${fmt(p.entry_price,2)}</td>
+                    <td class="mono">${fmt(p.entry_price,2)}</td>
+                    <td class="mono ${pnlClass}">${p.unrealized_pnl>=0?'+':''}${fmt(p.unrealized_pnl,2)}</td>
+                    <td class="mono">${fmt(p.margin_used,2)}</td>
+                    <td><button class="close-btn" onclick="closePos('${p.symbol}')">Close</button></td>
+                </tr>`;
+            }).join('');
+            document.getElementById('positionsBody').innerHTML = html;
+        }
+        
+        async function closePos(symbol) {
+            await fetch('/api/position/close', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({user_id:'demo', symbol:symbol}) });
+            refresh();
+        }
+        
+        init();
     </script>
 </body>
 </html>
