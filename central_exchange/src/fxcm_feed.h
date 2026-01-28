@@ -71,18 +71,28 @@ public:
     
     void onLoginFailed(const char* error) override {
         std::cerr << "[FXCM] Login failed: " << (error ? error : "unknown") << std::endl;
+        {
+            std::lock_guard<std::mutex> lock(mMutex);
+            mLoginFailed = true;
+        }
         mCV.notify_one();
     }
     
     bool waitEvents(int timeout_ms = 30000) {
         std::unique_lock<std::mutex> lock(mMutex);
         return mCV.wait_for(lock, std::chrono::milliseconds(timeout_ms), 
-            [this] { return mStatus != IO2GSessionStatus::Disconnected; });
+            [this] { 
+                return mStatus == IO2GSessionStatus::Connected ||
+                       mStatus == IO2GSessionStatus::TradingSessionRequested ||
+                       mStatus == IO2GSessionStatus::Disconnected ||
+                       mStatus == IO2GSessionStatus::SessionLost ||
+                       mLoginFailed; 
+            });
     }
     
     void reset() { 
         std::lock_guard<std::mutex> lock(mMutex);
-        // Reset handled by condition variable
+        mLoginFailed = false;
     }
     
     O2GSessionStatus getStatus() {
@@ -91,10 +101,15 @@ public:
     }
     
     bool isConnected() { return getStatus() == IO2GSessionStatus::Connected; }
+    bool loginFailed() { 
+        std::lock_guard<std::mutex> lock(mMutex);
+        return mLoginFailed;
+    }
     
 private:
     std::atomic<long> mRefCount{1};
     O2GSessionStatus mStatus;
+    bool mLoginFailed{false};
     std::mutex mMutex;
     std::condition_variable mCV;
 };
@@ -271,26 +286,34 @@ inline bool FxcmFeed::connect(const std::string& user,
     // Real FXCM ForexConnect connection
     std::cout << "[FXCM] Initializing ForexConnect..." << std::endl;
     
-    CO2GTransport::setTransportModulesPath("");  // Empty = exe directory
+    // For Linux, we need the module path to find libForexConnect.so
+    // Empty string means look in exe directory and LD_LIBRARY_PATH
+    CO2GTransport::setTransportModulesPath("");
     session_ = CO2GTransport::createSession();
     
     if (!session_) {
         std::cerr << "[FXCM] Failed to create session!" << std::endl;
         return false;
     }
+    std::cout << "[FXCM] Session created successfully" << std::endl;
     
     // Create and subscribe status listener BEFORE login
     status_listener_ = new SessionStatusListener();
     session_->subscribeSessionStatus(status_listener_);
+    std::cout << "[FXCM] Status listener subscribed" << std::endl;
     
     // Enable table manager BEFORE login (critical!)
     session_->useTableManager(Yes, 0);
+    std::cout << "[FXCM] Table manager enabled" << std::endl;
     
     std::cout << "[FXCM] Logging in as " << user << "..." << std::endl;
+    std::cout << "[FXCM] URL: " << url << ", Connection: " << connection << std::endl;
     
     const char* conn = (connection == "Real" ? "Real" : "Demo");
     status_listener_->reset();
     session_->login(user.c_str(), password.c_str(), url.c_str(), conn);
+    
+    std::cout << "[FXCM] Waiting for login response (30s timeout)..." << std::endl;
     
     // Wait for login result
     if (!status_listener_->waitEvents(30000)) {
@@ -298,7 +321,13 @@ inline bool FxcmFeed::connect(const std::string& user,
         return false;
     }
     
+    if (status_listener_->loginFailed()) {
+        std::cerr << "[FXCM] Login failed (check credentials)" << std::endl;
+        return false;
+    }
+    
     auto status = status_listener_->getStatus();
+    std::cout << "[FXCM] Status after wait: " << (int)status << std::endl;
     
     // Handle TradingSessionRequested
     if (status == IO2GSessionStatus::TradingSessionRequested) {
@@ -310,10 +339,12 @@ inline bool FxcmFeed::connect(const std::string& user,
             std::cerr << "[FXCM] Session selection timeout!" << std::endl;
             return false;
         }
+        status = status_listener_->getStatus();
+        std::cout << "[FXCM] Status after session select: " << (int)status << std::endl;
     }
     
     if (!status_listener_->isConnected()) {
-        std::cerr << "[FXCM] Not connected!" << std::endl;
+        std::cerr << "[FXCM] Not connected! (status=" << (int)status << ")" << std::endl;
         return false;
     }
     
