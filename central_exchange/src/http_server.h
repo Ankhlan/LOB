@@ -1641,6 +1641,43 @@ inline void HttpServer::setup_routes() {
         }.dump(), "application/json");
     });
     
+    // ==================== MINIMAL TEST PAGE ====================
+    
+    server_->Get("/test", [](const httplib::Request&, httplib::Response& res) {
+        res.set_content(R"HTML(
+<!DOCTYPE html>
+<html>
+<head><title>CRE Test Page</title></head>
+<body style="background:#1e1e1e;color:#fff;font-family:sans-serif;padding:20px;">
+<h1>Central Exchange - Minimal Test</h1>
+<p id="status">Loading...</p>
+<div id="products"></div>
+<script>
+    console.log('TEST: Script started');
+    document.getElementById('status').textContent = 'Script running...';
+    
+    fetch('/api/products')
+        .then(r => {
+            console.log('TEST: Fetch response:', r.status);
+            return r.json();
+        })
+        .then(products => {
+            console.log('TEST: Got products:', products.length);
+            document.getElementById('status').textContent = 'Loaded ' + products.length + ' products';
+            document.getElementById('products').innerHTML = products.map(p => 
+                '<div style="padding:5px;border-bottom:1px solid #333;">' + p.symbol + ' - ' + p.name + '</div>'
+            ).join('');
+        })
+        .catch(err => {
+            console.error('TEST: Error:', err);
+            document.getElementById('status').textContent = 'ERROR: ' + err.message;
+        });
+</script>
+</body>
+</html>
+)HTML", "text/html");
+    });
+    
     // ==================== STATIC FILES (Web UI) ====================
     
     server_->Get("/", [](const httplib::Request&, httplib::Response& res) {
@@ -2620,16 +2657,21 @@ inline void HttpServer::setup_routes() {
         });
         
         async function init() {
+            console.log('=== CRE INIT STARTED ===');
+            document.title = 'CRE Loading...';
             try {
                 // Load saved language
+                console.log('Step 1: Loading language...');
                 const savedLang = localStorage.getItem('ce-lang') || 'en';
                 setLang(savedLang);
 
                 // Load saved theme
+                console.log('Step 2: Loading theme...');
                 const savedTheme = localStorage.getItem('ce-theme') || 'dark';
                 setTheme(savedTheme);
 
                 // Load saved auth
+                console.log('Step 3: Checking auth...');
                 const savedToken = localStorage.getItem('ce-token');
                 const savedPhone = localStorage.getItem('ce-phone');
                 if (savedToken && savedPhone) {
@@ -2639,20 +2681,26 @@ inline void HttpServer::setup_routes() {
                 }
 
                 // Deposit for demo (ignore errors)
+                console.log('Step 4: Depositing demo funds...');
                 await fetch('/api/deposit', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({user_id:'demo', amount:100000000}) }).catch(()=>{});
 
+                console.log('Step 5: Calling refresh()...');
                 await refresh();
+                console.log('Step 5 DONE: refresh() completed');
 
                 // Init chart if library loaded
+                console.log('Step 6: Initializing chart...');
                 if (typeof LightweightCharts !== 'undefined') {
                     initChart();
                 } else {
                     console.warn('LightweightCharts not loaded - chart disabled');
                 }
 
+                console.log('Step 7: Selecting default instrument...');
                 selectInstrument('XAU-MNT-PERP');
 
                 // Start SSE streaming for real-time quotes
+                console.log('Step 8: Starting SSE quote stream...');
                 startQuoteStream();
 
                 // Orderbook and chart updates (less frequent)
@@ -2661,9 +2709,12 @@ inline void HttpServer::setup_routes() {
                 // Account refresh (balance/positions)
                 setInterval(refreshAccount, 3000);
 
-                console.log('CRE UI initialized successfully');
+                console.log('=== CRE INIT COMPLETE ===');
+                document.title = 'Central Exchange';
             } catch (err) {
-                console.error('Init error:', err);
+                console.error('=== INIT ERROR ===', err);
+                document.title = 'CRE ERROR: ' + err.message;
+                alert('CRE Init Error: ' + err.message);
             }
         }
         
@@ -2765,15 +2816,19 @@ inline void HttpServer::setup_routes() {
         
         async function refresh() {
             try {
+                console.log('  refresh(): Fetching data from APIs...');
                 const [products, quotes, account, posData] = await Promise.all([
-                    fetch('/api/products').then(r=>r.json()).catch(()=>[]),
-                    fetch('/api/quotes').then(r=>r.json()).catch(()=>[]),
-                    fetch('/api/account?user_id=demo').then(r=>r.json()).catch(()=>({equity:0,available:0,margin_used:0})),
-                    fetch('/api/positions?user_id=demo').then(r=>r.json()).catch(()=>({positions:[]}))
+                    fetch('/api/products').then(r=>r.json()).catch(e=>{console.error('products fetch failed:', e); return [];}),
+                    fetch('/api/quotes').then(r=>r.json()).catch(e=>{console.error('quotes fetch failed:', e); return [];}),
+                    fetch('/api/account?user_id=demo').then(r=>r.json()).catch(e=>{console.error('account fetch failed:', e); return {equity:0,available:0,margin_used:0};}),
+                    fetch('/api/positions?user_id=demo').then(r=>r.json()).catch(e=>{console.error('positions fetch failed:', e); return {positions:[]};})
                 ]);
 
+                console.log('  refresh(): Products loaded:', products.length, 'Quotes:', quotes.length);
                 if (Array.isArray(products)) state.instruments = products;
                 if (Array.isArray(quotes)) quotes.forEach(q => state.quotes[q.symbol] = q);
+
+                console.log('  refresh(): state.instruments =', state.instruments.length);
 
                 // Update header account display
                 document.getElementById('equity').textContent = fmt(account.equity || 0) + ' MNT';
@@ -2784,7 +2839,9 @@ inline void HttpServer::setup_routes() {
                 document.getElementById('usedMargin').textContent = fmt(account.margin_used || 0) + ' MNT';
                 document.getElementById('freeMargin').textContent = fmt(account.available || 0) + ' MNT';
 
+                console.log('  refresh(): Calling renderInstruments()...');
                 renderInstruments();
+                console.log('  refresh(): renderInstruments() done');
                 if (posData && posData.positions) {
                     renderPositionsLive(posData.positions, posData.summary);
                 }

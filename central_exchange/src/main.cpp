@@ -112,11 +112,11 @@ int main(int argc, char* argv[]) {
     ProductCatalog::instance();
 
     // Initialize SQLite database
-    std::cout << "[INIT] Initializing SQLite database...\\n";
+    std::cout << "[INIT] Initializing SQLite database...\n";
     if (!Database::instance().init()) {
-        std::cerr << "[ERROR] Failed to initialize database!\\n";
+        std::cerr << "[ERROR] Failed to initialize database!\n";
     } else {
-        std::cout << "       Database ready at /tmp/exchange.db\\n";
+        std::cout << "       Database ready at /tmp/exchange.db\n";
     }
     print_products();
     
