@@ -6,10 +6,6 @@
  */
 
 #include "product_catalog.h"
-#include "ledger_writer.h"
-#include <sstream>
-#include <iomanip>
-#include <chrono>
 #include <unordered_map>
 #include <mutex>
 #include <vector>
@@ -118,63 +114,12 @@ private:
     std::unordered_map<std::string, ExchangeExposure> exposures_;
     
     mutable std::recursive_mutex mutex_;
-    cre::LedgerWriter ledger_;
     
     std::string pos_key(const std::string& user, const std::string& symbol) const {
         return user + ":" + symbol;
     }
     
     void update_exposure(const std::string& symbol, double delta);
-
-    // Ledger helper methods
-    std::string get_current_date() const {
-        auto now = std::chrono::system_clock::now();
-        auto time = std::chrono::system_clock::to_time_t(now);
-        std::stringstream ss;
-        ss << std::put_time(std::localtime(&time), "%Y/%m/%d");
-        return ss.str();
-    }
-
-    void record_margin_lock(const std::string& user_id, double margin) {
-        cre::Transaction tx;
-        tx.date = get_current_date();
-        tx.description = "Margin lock";
-        tx.postings = {
-            {"Liabilities:Customer:" + user_id + ":Balance", -margin, "MNT"},
-            {"Assets:Customer:" + user_id + ":Margin", margin, "MNT"}
-        };
-        ledger_.write_transaction("margin.ledger", tx);
-    }
-
-    void record_margin_release(const std::string& user_id, double margin) {
-        cre::Transaction tx;
-        tx.date = get_current_date();
-        tx.description = "Margin release";
-        tx.postings = {
-            {"Assets:Customer:" + user_id + ":Margin", -margin, "MNT"},
-            {"Liabilities:Customer:" + user_id + ":Balance", margin, "MNT"}
-        };
-        ledger_.write_transaction("margin.ledger", tx);
-    }
-
-    void record_pnl(const std::string& user_id, double pnl) {
-        cre::Transaction tx;
-        tx.date = get_current_date();
-        if (pnl >= 0) {
-            tx.description = "Customer profit";
-            tx.postings = {
-                {"Expenses:Trading:CustomerPayout", pnl, "MNT"},
-                {"Liabilities:Customer:" + user_id + ":Balance", pnl, "MNT"}
-            };
-        } else {
-            tx.description = "Customer loss";
-            tx.postings = {
-                {"Revenue:Trading:CustomerLoss", std::abs(pnl), "MNT"},
-                {"Liabilities:Customer:" + user_id + ":Balance", pnl, "MNT"}
-            };
-        }
-        ledger_.write_transaction("pnl.ledger", tx);
-    }
 };
 
 // ========== IMPLEMENTATION ==========
@@ -201,7 +146,6 @@ inline bool PositionManager::deposit(const std::string& user_id, double amount) 
     auto* acc = get_or_create_account(user_id);
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     acc->balance += amount;
-    ledger_.record_deposit(user_id, amount, "MNT");
     return true;
 }
 
@@ -213,15 +157,6 @@ inline bool PositionManager::withdraw(const std::string& user_id, double amount)
     
     if (it->second.available() < amount) return false;
     it->second.balance -= amount;
-    // Ledger: withdrawal
-    cre::Transaction tx;
-    tx.date = get_current_date();
-    tx.description = "Withdrawal";
-    tx.postings = {
-        {"Assets:Exchange:Bank:MNT", -amount, "MNT"},
-        {"Liabilities:Customer:" + user_id + ":Balance", -amount, "MNT"}
-    };
-    ledger_.write_transaction("withdrawals.ledger", tx);
     return true;
 }
 
@@ -277,7 +212,6 @@ inline std::optional<Position> PositionManager::open_position(
         };
         positions_[key] = pos;
         acc->margin_used += margin_needed;
-        record_margin_lock(user_id, margin_needed);
         
         update_exposure(symbol, size);
         return pos;
@@ -297,20 +231,17 @@ inline std::optional<Position> PositionManager::open_position(
             pos.size = new_size;
             pos.margin_used += margin_needed;
             acc->margin_used += margin_needed;
-            record_margin_lock(user_id, margin_needed);
         } else {
             // Reducing position
             double close_size = std::min(pos.abs_size(), std::abs(size));
             double pnl = close_size * (price - pos.entry_price) * (pos.is_long() ? 1.0 : -1.0);
             pos.realized_pnl += pnl;
             acc->balance += pnl;
-            record_pnl(user_id, pnl);
             
             // Release margin proportionally
             double margin_release = pos.margin_used * (close_size / pos.abs_size());
             pos.margin_used -= margin_release;
             acc->margin_used -= margin_release;
-            record_margin_release(user_id, margin_release);
             
             double remaining = std::abs(size) - close_size;
             if (remaining > 0) {
@@ -480,5 +411,4 @@ inline std::unordered_map<std::string, double> PositionManager::get_all_net_expo
 
 } // namespace central_exchange
 
- 
-// Ledger integration v1
+
