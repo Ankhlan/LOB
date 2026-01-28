@@ -10,6 +10,7 @@
 #include "position_manager.h"
 #include "product_catalog.h"
 #include "fxcm_feed.h"
+#include "qpay_handler.h"
 #include "bom_feed.h"
 #include "database.h"
 #include "auth.h"
@@ -1044,6 +1045,208 @@ inline void HttpServer::setup_routes() {
         }
     });
     
+
+    // ==================== QPAY WEBHOOKS ====================
+
+    // QPay payment webhook - receives deposit notifications
+    server_->Post("/api/webhook/qpay", [](const httplib::Request& req, httplib::Response& res) {
+        try {
+            // Verify signature from QPay
+            std::string signature = req.get_header_value("X-QPay-Signature");
+            if (signature.empty()) {
+                signature = req.get_header_value("x-qpay-signature");
+            }
+            
+            auto& qpay = QPayHandler::instance();
+            
+            if (!signature.empty() && !qpay.verify_signature(req.body, signature)) {
+                res.status = 401;
+                res.set_content(R"({"error":"Invalid signature"})", "application/json");
+                return;
+            }
+            
+            // Parse and process payment
+            auto body = json::parse(req.body);
+            auto [success, txn_id, error] = qpay.process_deposit(body);
+            
+            if (success) {
+                res.set_content(json{
+                    {"success", true},
+                    {"transaction_id", txn_id}
+                }.dump(), "application/json");
+            } else {
+                res.status = 400;
+                res.set_content(json{
+                    {"success", false},
+                    {"error", error}
+                }.dump(), "application/json");
+            }
+            
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+
+    // Request withdrawal
+    server_->Post("/api/withdraw", [](const httplib::Request& req, httplib::Response& res) {
+        try {
+            // Require JWT authentication
+            auto auth = authenticate(req);
+            if (!auth.success) {
+                res.status = auth.error_code;
+                res.set_content(json{{"error", auth.error}}.dump(), "application/json");
+                return;
+            }
+            
+            auto body = json::parse(req.body);
+            double amount = body["amount"];
+            std::string phone = body.value("phone", auth.phone);
+            
+            // Validate amount
+            auto v_amt = validate_quantity(amount);
+            if (!v_amt.valid) {
+                res.status = 400;
+                res.set_content(json{{"error", v_amt.error}}.dump(), "application/json");
+                return;
+            }
+            
+            auto& qpay = QPayHandler::instance();
+            auto [success, txn_id, error] = qpay.request_withdrawal(auth.user_id, amount, phone);
+            
+            if (success) {
+                res.set_content(json{
+                    {"success", true},
+                    {"transaction_id", txn_id},
+                    {"status", "pending"}
+                }.dump(), "application/json");
+            } else {
+                res.status = 400;
+                res.set_content(json{
+                    {"success", false},
+                    {"error", error}
+                }.dump(), "application/json");
+            }
+            
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+
+    // Check transaction status
+    server_->Get("/api/transaction/:id", [](const httplib::Request& req, httplib::Response& res) {
+        try {
+            // Require JWT authentication
+            auto auth = authenticate(req);
+            if (!auth.success) {
+                res.status = auth.error_code;
+                res.set_content(json{{"error", auth.error}}.dump(), "application/json");
+                return;
+            }
+            
+            std::string txn_id = req.path_params.at("id");
+            auto& qpay = QPayHandler::instance();
+            auto txn = qpay.get_transaction(txn_id);
+            
+            if (txn) {
+                // Verify user owns this transaction
+                if (txn->user_id != auth.user_id) {
+                    res.status = 403;
+                    res.set_content(R"({"error":"Forbidden"})", "application/json");
+                    return;
+                }
+                
+                res.set_content(json{
+                    {"id", txn->id},
+                    {"qpay_id", txn->qpay_txn_id},
+                    {"type", txn->type == TxnType::DEPOSIT ? "deposit" : "withdrawal"},
+                    {"status", txn->status == TxnStatus::CONFIRMED ? "confirmed" :
+                               txn->status == TxnStatus::PENDING ? "pending" :
+                               txn->status == TxnStatus::FAILED ? "failed" : "cancelled"},
+                    {"amount", txn->amount_mnt},
+                    {"currency", txn->currency}
+                }.dump(), "application/json");
+            } else {
+                res.status = 404;
+                res.set_content(R"({"error":"Transaction not found"})", "application/json");
+            }
+            
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+
+    // Get user's transaction history
+    server_->Get("/api/transactions", [](const httplib::Request& req, httplib::Response& res) {
+        try {
+            // Require JWT authentication
+            auto auth = authenticate(req);
+            if (!auth.success) {
+                res.status = auth.error_code;
+                res.set_content(json{{"error", auth.error}}.dump(), "application/json");
+                return;
+            }
+            
+            int limit = 50;
+            if (req.has_param("limit")) {
+                limit = std::stoi(req.get_param_value("limit"));
+            }
+            
+            auto& qpay = QPayHandler::instance();
+            auto txns = qpay.get_user_transactions(auth.user_id, limit);
+            
+            json arr = json::array();
+            for (const auto& txn : txns) {
+                arr.push_back({
+                    {"id", txn.id},
+                    {"type", txn.type == TxnType::DEPOSIT ? "deposit" : "withdrawal"},
+                    {"status", txn.status == TxnStatus::CONFIRMED ? "confirmed" :
+                               txn.status == TxnStatus::PENDING ? "pending" :
+                               txn.status == TxnStatus::FAILED ? "failed" : "cancelled"},
+                    {"amount", txn.amount_mnt},
+                    {"currency", txn.currency},
+                    {"created_at", txn.created_at}
+                });
+            }
+            
+            res.set_content(json{{"transactions", arr}}.dump(), "application/json");
+            
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+
+    // Generate payment invoice for deposits
+    server_->Post("/api/deposit/invoice", [](const httplib::Request& req, httplib::Response& res) {
+        try {
+            // Require JWT authentication
+            auto auth = authenticate(req);
+            if (!auth.success) {
+                res.status = auth.error_code;
+                res.set_content(json{{"error", auth.error}}.dump(), "application/json");
+                return;
+            }
+            
+            auto& qpay = QPayHandler::instance();
+            std::string invoice = qpay.generate_invoice(auth.user_id);
+            
+            res.set_content(json{
+                {"success", true},
+                {"invoice_number", invoice},
+                {"merchant_id", "CRE_EXCHANGE"},  // Display merchant name
+                {"instructions", "Use this invoice number when paying via QPay"}
+            }.dump(), "application/json");
+            
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+
+
     // ==================== HEALTH ====================
     
     server_->Get("/health", [](const httplib::Request&, httplib::Response& res) {
