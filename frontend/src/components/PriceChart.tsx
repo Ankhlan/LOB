@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, UTCTimestamp, CandlestickData } from 'lightweight-charts';
+import { createChart, ColorType } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, UTCTimestamp, CandlestickData } from 'lightweight-charts';
 import { api } from '../api';
-import type { Quote } from '../api/types';
 import './PriceChart.css';
 
 interface PriceChartProps {
@@ -20,8 +20,7 @@ export function PriceChart({ symbol }: PriceChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
-  const [bars, setBars] = useState<OHLCBar[]>([]);
-  const lastBarRef = useRef<OHLCBar | null>(null);
+  const barsRef = useRef<OHLCBar[]>([]);
 
   // Create chart on mount
   useEffect(() => {
@@ -97,8 +96,7 @@ export function PriceChart({ symbol }: PriceChartProps) {
       });
     }
 
-    setBars(initialBars);
-    lastBarRef.current = null;
+    barsRef.current = initialBars;
 
     const unsubscribe = api.subscribeToQuotes((quotes) => {
       const q = quotes.find(q => q.symbol === symbol);

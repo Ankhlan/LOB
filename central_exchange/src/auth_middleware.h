@@ -63,7 +63,8 @@ inline void set_secure_cors_headers(const httplib::Request& req, httplib::Respon
     res.set_header("X-Frame-Options", "DENY");
     res.set_header("X-XSS-Protection", "1; mode=block");
     res.set_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-    res.set_header("Content-Security-Policy", "default-src 'self'");
+    // CSP: Allow inline styles, Google Fonts, and lightweight-charts CDN
+    res.set_header("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' https://unpkg.com; connect-src 'self' *");
 }
 
 // Authentication result
