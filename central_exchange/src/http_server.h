@@ -13,8 +13,12 @@
 #include "bom_feed.h"
 #include "database.h"
 #include "auth.h"
+#include "ledger_writer.h"
 
 #include <httplib.h>
+#include <array>
+#include <memory>
+#include <cstdio>
 #include <nlohmann/json.hpp>
 #include <thread>
 #include <atomic>
@@ -627,6 +631,114 @@ inline void HttpServer::setup_routes() {
             {"balance", pm.get_balance(user_id)},
             {"equity", pm.get_equity(user_id)},
             {"currency", "MNT"}
+        }.dump(), "application/json");
+    });
+
+    // ==================== LEDGER QUERIES ====================
+
+    // Customer: Query account balance from ledger
+    server_->Get("/api/account/balance", [](const httplib::Request& req, httplib::Response& res) {
+        std::string account = req.get_param_value("account");
+        if (account.empty()) {
+            res.status = 400;
+            res.set_content(R"({"error":"account parameter required"})", "application/json");
+            return;
+        }
+
+        std::string cmd = "ledger -f /app/ledger/*.ledger bal \"" + account + "\" -X MNT 2>&1";
+        std::array<char, 256> buffer;
+        std::string result;
+        std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
+        if (pipe) {
+            while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+                result += buffer.data();
+            }
+        }
+
+        res.set_content(json{
+            {"account", account},
+            {"balance", result}
+        }.dump(), "application/json");
+    });
+
+    // Customer: Query account transaction history from ledger
+    server_->Get("/api/account/history", [](const httplib::Request& req, httplib::Response& res) {
+        std::string account = req.get_param_value("account");
+        int limit = 50;
+        if (!req.get_param_value("limit").empty()) {
+            limit = std::stoi(req.get_param_value("limit"));
+        }
+        if (account.empty()) {
+            res.status = 400;
+            res.set_content(R"({"error":"account parameter required"})", "application/json");
+            return;
+        }
+
+        std::string cmd = "ledger -f /app/ledger/*.ledger reg \"" + account + "\" -n " + std::to_string(limit) + " 2>&1";
+        std::array<char, 256> buffer;
+        std::string result;
+        std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
+        if (pipe) {
+            while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+                result += buffer.data();
+            }
+        }
+
+        res.set_content(json{
+            {"account", account},
+            {"transactions", result}
+        }.dump(), "application/json");
+    });
+
+    // Admin: Balance Sheet
+    server_->Get("/api/admin/balance-sheet", [](const httplib::Request& req, httplib::Response& res) {
+        // Simple API key auth
+        std::string api_key = req.get_header_value("X-Admin-Key");
+        if (api_key != "admin-secret-key-2024") {
+            res.status = 401;
+            res.set_content(R"({"error":"Unauthorized"})", "application/json");
+            return;
+        }
+
+        std::string cmd = "ledger -f /app/ledger/*.ledger bal Assets Liabilities Equity -X MNT 2>&1";
+        std::array<char, 256> buffer;
+        std::string result;
+        std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
+        if (pipe) {
+            while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+                result += buffer.data();
+            }
+        }
+
+        res.set_content(json{
+            {"report", "balance-sheet"},
+            {"data", result}
+        }.dump(), "application/json");
+    });
+
+    // Admin: Income Statement
+    server_->Get("/api/admin/income-statement", [](const httplib::Request& req, httplib::Response& res) {
+        // Simple API key auth
+        std::string api_key = req.get_header_value("X-Admin-Key");
+        if (api_key != "admin-secret-key-2024") {
+            res.status = 401;
+            res.set_content(R"({"error":"Unauthorized"})", "application/json");
+            return;
+        }
+
+        std::string cmd = "ledger -f /app/ledger/*.ledger bal Revenue Expenses -X MNT 2>&1";
+        std::array<char, 256> buffer;
+        std::string result;
+        std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
+        if (pipe) {
+            while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+                result += buffer.data();
+            }
+        }
+
+        res.set_content(json{
+            {"report", "income-statement"},
+            {"data", result}
         }.dump(), "application/json");
     });
     
