@@ -28,7 +28,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
-#include "ForexConnect.h"
+#include "forexconnect/ForexConnect.h"
 
 //=============================================================================
 // SessionStatusListener - handles login/disconnect events

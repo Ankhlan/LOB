@@ -51,3 +51,24 @@ if(OpenSSL_FOUND)
     target_link_libraries(central_exchange PRIVATE OpenSSL::SSL OpenSSL::Crypto)
     target_compile_definitions(central_exchange PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
 endif()
+
+# ForexConnect SDK (Windows only)
+option(FXCM_ENABLED "Enable FXCM ForexConnect integration" OFF)
+if(WIN32 AND FXCM_ENABLED)
+    set(FXCM_SDK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/fxcm")
+    if(EXISTS "${FXCM_SDK_DIR}/include/ForexConnect.h")
+        message(STATUS "ForexConnect SDK found at ${FXCM_SDK_DIR}")
+        target_include_directories(central_exchange PRIVATE 
+            "${FXCM_SDK_DIR}/include"
+        )
+        target_link_directories(central_exchange PRIVATE 
+            "${FXCM_SDK_DIR}/lib"
+        )
+        target_link_libraries(central_exchange PRIVATE 
+            ForexConnect
+        )
+        target_compile_definitions(central_exchange PRIVATE FXCM_ENABLED)
+    else()
+        message(WARNING "FXCM_ENABLED=ON but ForexConnect SDK not found at ${FXCM_SDK_DIR}")
+    endif()
+endif()
