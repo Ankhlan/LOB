@@ -8,3 +8,6 @@ dist/
 .idea/
 .vscode/
 *.db
+
+# ForexConnect Linux SDK (symlinks don't work on Windows)
+central_exchange/deps/fxcm-linux/

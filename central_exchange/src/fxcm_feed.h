@@ -23,29 +23,30 @@
 #include <iostream>
 
 #ifdef FXCM_ENABLED
-// ForexConnect SDK (Windows only)
+// ForexConnect SDK
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+
+#ifdef _WIN32
 #include <windows.h>
+#else
+// Linux: use POSIX
+#include <pthread.h>
+#endif
+
 #include "forexconnect/ForexConnect.h"
 
 //=============================================================================
 // SessionStatusListener - handles login/disconnect events
-// Ported from cortex_daemon/src/SessionStatusListener.h
+// Cross-platform version using condition variables
 //=============================================================================
 class SessionStatusListener : public IO2GSessionStatus
 {
 public:
-    SessionStatusListener() : mStatus(IO2GSessionStatus::Disconnected) {
-        InitializeCriticalSection(&mCS);
-        mEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
-    }
+    SessionStatusListener() : mStatus(IO2GSessionStatus::Disconnected) {}
     
-    ~SessionStatusListener() {
-        CloseHandle(mEvent);
-        DeleteCriticalSection(&mCS);
-    }
+    ~SessionStatusListener() = default;
     
     long addRef() override { return ++mRefCount; }
     long release() override { 
@@ -55,34 +56,38 @@ public:
     }
     
     void onSessionStatusChanged(O2GSessionStatus status) override {
-        EnterCriticalSection(&mCS);
-        mStatus = status;
-        LeaveCriticalSection(&mCS);
+        {
+            std::lock_guard<std::mutex> lock(mMutex);
+            mStatus = status;
+        }
         
         if (status == IO2GSessionStatus::Connected ||
             status == IO2GSessionStatus::Disconnected ||
             status == IO2GSessionStatus::SessionLost ||
             status == IO2GSessionStatus::TradingSessionRequested) {
-            SetEvent(mEvent);
+            mCV.notify_one();
         }
     }
     
     void onLoginFailed(const char* error) override {
         std::cerr << "[FXCM] Login failed: " << (error ? error : "unknown") << std::endl;
-        SetEvent(mEvent);
+        mCV.notify_one();
     }
     
-    bool waitEvents(DWORD timeout = 30000) {
-        return WaitForSingleObject(mEvent, timeout) == WAIT_OBJECT_0;
+    bool waitEvents(int timeout_ms = 30000) {
+        std::unique_lock<std::mutex> lock(mMutex);
+        return mCV.wait_for(lock, std::chrono::milliseconds(timeout_ms), 
+            [this] { return mStatus != IO2GSessionStatus::Disconnected; });
     }
     
-    void reset() { ResetEvent(mEvent); }
+    void reset() { 
+        std::lock_guard<std::mutex> lock(mMutex);
+        // Reset handled by condition variable
+    }
     
     O2GSessionStatus getStatus() {
-        EnterCriticalSection(&mCS);
-        auto s = mStatus;
-        LeaveCriticalSection(&mCS);
-        return s;
+        std::lock_guard<std::mutex> lock(mMutex);
+        return mStatus;
     }
     
     bool isConnected() { return getStatus() == IO2GSessionStatus::Connected; }
@@ -90,22 +95,22 @@ public:
 private:
     std::atomic<long> mRefCount{1};
     O2GSessionStatus mStatus;
-    CRITICAL_SECTION mCS;
-    HANDLE mEvent;
+    std::mutex mMutex;
+    std::condition_variable mCV;
 };
 
 //=============================================================================
 // OffersUpdatesListener - real-time price streaming
-// Ported from cortex_daemon/src/fxcm_session.h
+// Cross-platform version using std::mutex
 //=============================================================================
 class OffersUpdatesListener : public IO2GResponseListener
 {
 public:
     OffersUpdatesListener(IO2GSession* session,
                           std::unordered_map<std::string, double>& prices,
-                          CRITICAL_SECTION& cs,
+                          std::mutex& mtx,
                           std::atomic<bool>& dirty)
-        : mSession(session), mPrices(prices), mCS(cs), mDirtyFlag(dirty) {}
+        : mSession(session), mPrices(prices), mMutex(mtx), mDirtyFlag(dirty) {}
     
     long addRef() override { return ++mRefCount; }
     long release() override { 
@@ -135,9 +140,10 @@ public:
                 double mid = (bid > 0 && ask > 0) ? (bid + ask) / 2.0 : 0.0;
                 if (mid <= 0.0) { offer->release(); continue; }
                 
-                EnterCriticalSection(&mCS);
-                mPrices[instr] = mid;
-                LeaveCriticalSection(&mCS);
+                {
+                    std::lock_guard<std::mutex> lock(mMutex);
+                    mPrices[instr] = mid;
+                }
                 
                 mDirtyFlag.store(true);
                 offer->release();
@@ -150,7 +156,7 @@ private:
     std::atomic<long> mRefCount{1};
     IO2GSession* mSession;
     std::unordered_map<std::string, double>& mPrices;
-    CRITICAL_SECTION& mCS;
+    std::mutex& mMutex;
     std::atomic<bool>& mDirtyFlag;
 };
 
@@ -213,17 +219,8 @@ public:
     bool prices_updated() { return prices_dirty_.exchange(false); }
     
 private:
-    FxcmFeed() {
-#ifdef FXCM_ENABLED
-        InitializeCriticalSection(&price_cs_);
-#endif
-    }
-    ~FxcmFeed() { 
-        disconnect(); 
-#ifdef FXCM_ENABLED
-        DeleteCriticalSection(&price_cs_);
-#endif
-    }
+    FxcmFeed() = default;
+    ~FxcmFeed() { disconnect(); }
     
     std::atomic<bool> connected_{false};
     std::atomic<bool> running_{false};
@@ -234,6 +231,7 @@ private:
     
     // Cached prices (mid prices)
     std::unordered_map<std::string, double> fxcm_prices_;
+    mutable std::mutex fxcm_price_mutex_;  // For FXCM SDK mode
     
     // For PriceUpdate with bid/ask
     std::unordered_map<std::string, PriceUpdate> prices_;
@@ -248,7 +246,6 @@ private:
     IO2GTableManager* table_manager_{nullptr};
     SessionStatusListener* status_listener_{nullptr};
     IO2GResponseListener* offers_listener_{nullptr};
-    CRITICAL_SECTION price_cs_;
 #else
     // REST API mode for Linux
     std::string api_token_;
@@ -345,7 +342,7 @@ inline bool FxcmFeed::connect(const std::string& user,
         fetch_initial_prices();
         
         // Subscribe to price updates
-        offers_listener_ = new OffersUpdatesListener(session_, fxcm_prices_, price_cs_, prices_dirty_);
+        offers_listener_ = new OffersUpdatesListener(session_, fxcm_prices_, fxcm_price_mutex_, prices_dirty_);
         session_->subscribeResponse(offers_listener_);
     }
     
@@ -439,28 +436,29 @@ inline bool FxcmFeed::fetch_initial_prices() {
     IO2GOffersTableResponseReader* reader = rf->createOffersTableReader(resp);
     if (!reader) { resp->release(); return false; }
     
-    EnterCriticalSection(&price_cs_);
-    for (int i = 0; i < reader->size(); ++i) {
-        IO2GOfferRow* row = reader->getRow(i);
-        if (!row) continue;
-        const char* instr = row->getInstrument();
-        if (!instr) { row->release(); continue; }
-        double bid = row->getBid();
-        double ask = row->getAsk();
-        if (bid > 0 && ask > 0) {
-            fxcm_prices_[instr] = (bid + ask) / 2.0;
-            
-            // Also populate PriceUpdate cache
-            PriceUpdate update;
-            update.symbol = instr;
-            update.bid = bid;
-            update.ask = ask;
-            update.timestamp = now_micros();
-            prices_[instr] = update;
+    {
+        std::lock_guard<std::mutex> lock(fxcm_price_mutex_);
+        for (int i = 0; i < reader->size(); ++i) {
+            IO2GOfferRow* row = reader->getRow(i);
+            if (!row) continue;
+            const char* instr = row->getInstrument();
+            if (!instr) { row->release(); continue; }
+            double bid = row->getBid();
+            double ask = row->getAsk();
+            if (bid > 0 && ask > 0) {
+                fxcm_prices_[instr] = (bid + ask) / 2.0;
+                
+                // Also populate PriceUpdate cache
+                PriceUpdate update;
+                update.symbol = instr;
+                update.bid = bid;
+                update.ask = ask;
+                update.timestamp = now_micros();
+                prices_[instr] = update;
+            }
+            row->release();
         }
-        row->release();
     }
-    LeaveCriticalSection(&price_cs_);
     
     reader->release();
     resp->release();
@@ -633,7 +631,7 @@ inline void FxcmFeed::price_loop() {
         // Check if prices were updated by OffersUpdatesListener
         if (prices_dirty_.load()) {
             // Sync fxcm_prices_ to prices_ map with PriceUpdate struct
-            EnterCriticalSection(&price_cs_);
+            std::lock_guard<std::mutex> lock(fxcm_price_mutex_);
             for (const auto& [symbol, mid] : fxcm_prices_) {
                 double spread = mid * 0.0005;  // Estimate spread
                 PriceUpdate update;
@@ -645,7 +643,6 @@ inline void FxcmFeed::price_loop() {
                 
                 if (on_price_) on_price_(update);
             }
-            LeaveCriticalSection(&price_cs_);
         }
 #else
         // Try REST API first, fall back to simulation

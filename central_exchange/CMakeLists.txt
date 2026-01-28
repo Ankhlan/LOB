@@ -52,10 +52,16 @@ if(OpenSSL_FOUND)
     target_compile_definitions(central_exchange PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
 endif()
 
-# ForexConnect SDK (Windows only)
+# ForexConnect SDK
 option(FXCM_ENABLED "Enable FXCM ForexConnect integration" OFF)
-if(WIN32 AND FXCM_ENABLED)
-    set(FXCM_SDK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/fxcm")
+if(FXCM_ENABLED)
+    if(WIN32)
+        set(FXCM_SDK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/fxcm")
+    else()
+        # Linux SDK
+        set(FXCM_SDK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/fxcm-linux/ForexConnectAPI-1.6.5-Linux-x86_64")
+    endif()
+    
     if(EXISTS "${FXCM_SDK_DIR}/include/ForexConnect.h")
         message(STATUS "ForexConnect SDK found at ${FXCM_SDK_DIR}")
         target_include_directories(central_exchange PRIVATE 
@@ -64,9 +70,21 @@ if(WIN32 AND FXCM_ENABLED)
         target_link_directories(central_exchange PRIVATE 
             "${FXCM_SDK_DIR}/lib"
         )
-        target_link_libraries(central_exchange PRIVATE 
-            ForexConnect
-        )
+        if(WIN32)
+            target_link_libraries(central_exchange PRIVATE ForexConnect)
+        else()
+            # Linux needs pthread and dl
+            target_link_libraries(central_exchange PRIVATE 
+                ForexConnect
+                pthread
+                dl
+            )
+            # Set rpath for runtime library loading
+            set_target_properties(central_exchange PROPERTIES
+                BUILD_RPATH "${FXCM_SDK_DIR}/lib"
+                INSTALL_RPATH "${FXCM_SDK_DIR}/lib"
+            )
+        endif()
         target_compile_definitions(central_exchange PRIVATE FXCM_ENABLED)
     else()
         message(WARNING "FXCM_ENABLED=ON but ForexConnect SDK not found at ${FXCM_SDK_DIR}")
