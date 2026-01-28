@@ -11,6 +11,7 @@
 #include <vector>
 #include <optional>
 #include <mutex>
+#include "security_config.h"
 #include <chrono>
 
 namespace central_exchange {
@@ -52,10 +53,12 @@ public:
         return db;
     }
     
-    bool init(const std::string& db_path = "/tmp/exchange.db") {
+    // SECURITY FIX #7: Use secure DB path (was /tmp which is world-writable)
+    bool init(const std::string& db_path = "") {
+        std::string actual_path = db_path.empty() ? get_db_path() : db_path;
         std::lock_guard<std::mutex> lock(mutex_);
         
-        int rc = sqlite3_open(db_path.c_str(), &db_);
+        int rc = sqlite3_open(actual_path.c_str(), &db_);
         if (rc != SQLITE_OK) {
             return false;
         }

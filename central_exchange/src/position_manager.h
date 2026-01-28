@@ -368,6 +368,9 @@ inline std::vector<Position> PositionManager::get_all_positions(const std::strin
     return result;
 }
 
+// WARNING: Do NOT use check_margin() followed by open_position() separately!
+// Use open_position() directly which does atomic check+action.
+// This function is for UI display purposes only.
 inline bool PositionManager::check_margin(const std::string& user_id, const std::string& symbol, double size, double price) {
     auto* product = ProductCatalog::instance().get(symbol);
     if (!product) return false;
