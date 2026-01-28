@@ -168,16 +168,36 @@ class ApiService {
   subscribeToQuotes(onQuote: (quotes: Quote[]) => void): () => void {
     const eventSource = new EventSource(`${API_BASE}/api/stream`);
     
-    eventSource.onmessage = (event) => {
+    // Backend sends named events: 'quotes' and 'positions'
+    eventSource.addEventListener('quotes', (event: MessageEvent) => {
       try {
         const data = JSON.parse(event.data);
         if (Array.isArray(data)) {
           onQuote(data);
         }
       } catch (e) {
-        console.error('Failed to parse SSE data:', e);
+        console.error('Failed to parse SSE quotes data:', e);
       }
+    });
+
+    eventSource.onerror = (e) => {
+      console.error('SSE error:', e);
     };
+
+    return () => eventSource.close();
+  }
+
+  subscribeToPositions(onPositions: (data: { positions: Position[]; account?: Account }) => void): () => void {
+    const eventSource = new EventSource(`${API_BASE}/api/stream`);
+    
+    eventSource.addEventListener('positions', (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        onPositions(data);
+      } catch (e) {
+        console.error('Failed to parse SSE positions data:', e);
+      }
+    });
 
     eventSource.onerror = (e) => {
       console.error('SSE error:', e);
