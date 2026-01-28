@@ -723,9 +723,31 @@ inline void HttpServer::setup_routes() {
     
     server_->Post("/api/position", [this](const httplib::Request& req, httplib::Response& res) {
         try {
+            // SECURITY: Prefer JWT authentication for user_id
+            std::string auth_header = req.get_header_value("Authorization");
+            std::string user_id;
+            
+            if (!auth_header.empty()) {
+                std::string token = Auth::instance().extract_token(auth_header);
+                auto payload = Auth::instance().verify_token(token);
+                if (payload) {
+                    user_id = payload->user_id;
+                }
+            }
+            
             auto body = json::parse(req.body);
             
-            std::string user_id = body.value("user_id", "demo");
+            // Only allow body user_id for "demo" in development
+            if (user_id.empty()) {
+                std::string body_user = body.value("user_id", "");
+                if (body_user == "demo" && !is_production()) {
+                    user_id = "demo";  // Allow demo trading without auth in dev
+                } else {
+                    send_unauthorized(res, "Authentication required for trading");
+                    return;
+                }
+            }
+            
             std::string symbol = body["symbol"];
             std::string side_str = body.value("side", "long");
             double size = body["size"];
@@ -768,8 +790,28 @@ inline void HttpServer::setup_routes() {
     });
     
     server_->Delete("/api/position/:symbol", [this](const httplib::Request& req, httplib::Response& res) {
-        std::string user_id = req.get_param_value("user_id");
-        if (user_id.empty()) user_id = "demo";
+        // SECURITY: Prefer JWT authentication for user_id
+        std::string auth_header = req.get_header_value("Authorization");
+        std::string user_id;
+        
+        if (!auth_header.empty()) {
+            std::string token = Auth::instance().extract_token(auth_header);
+            auto payload = Auth::instance().verify_token(token);
+            if (payload) {
+                user_id = payload->user_id;
+            }
+        }
+        
+        // Only allow query param user_id for "demo" in development
+        if (user_id.empty()) {
+            std::string param_user = req.get_param_value("user_id");
+            if (param_user == "demo" && !is_production()) {
+                user_id = "demo";
+            } else {
+                send_unauthorized(res, "Authentication required");
+                return;
+            }
+        }
         
         auto symbol = req.path_params.at("symbol");
         
@@ -802,8 +844,31 @@ inline void HttpServer::setup_routes() {
     // POST endpoint for closing position (alternative to DELETE)
     server_->Post("/api/position/close", [this](const httplib::Request& req, httplib::Response& res) {
         try {
+            // SECURITY: Prefer JWT authentication for user_id
+            std::string auth_header = req.get_header_value("Authorization");
+            std::string user_id;
+            
+            if (!auth_header.empty()) {
+                std::string token = Auth::instance().extract_token(auth_header);
+                auto payload = Auth::instance().verify_token(token);
+                if (payload) {
+                    user_id = payload->user_id;
+                }
+            }
+            
             auto body = json::parse(req.body);
-            std::string user_id = body.value("user_id", "demo");
+            
+            // Only allow body user_id for "demo" in development
+            if (user_id.empty()) {
+                std::string body_user = body.value("user_id", "");
+                if (body_user == "demo" && !is_production()) {
+                    user_id = "demo";
+                } else {
+                    send_unauthorized(res, "Authentication required");
+                    return;
+                }
+            }
+            
             std::string symbol = body["symbol"];
             
             auto* pos = PositionManager::instance().get_position(user_id, symbol);
@@ -983,8 +1048,15 @@ inline void HttpServer::setup_routes() {
             res.set_content(R"({"error":"account parameter required"})", "application/json");
             return;
         }
+        
+        // SECURITY: Validate account identifier to prevent shell injection
+        if (!is_valid_account_id(account)) {
+            res.status = 400;
+            res.set_content(R"({"error":"Invalid account identifier"})", "application/json");
+            return;
+        }
 
-        std::string cmd = "ledger -f " + get_ledger_path() + " bal \"" + account + "\" -X MNT 2>&1";
+        std::string cmd = "ledger -f " + get_ledger_path() + " bal \"" + sanitize_for_shell(account) + "\" -X MNT 2>&1";
         std::array<char, 256> buffer;
         std::string result;
         std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
@@ -1006,14 +1078,23 @@ inline void HttpServer::setup_routes() {
         int limit = 50;
         if (!req.get_param_value("limit").empty()) {
             limit = std::stoi(req.get_param_value("limit"));
+            if (limit < 1) limit = 1;
+            if (limit > 1000) limit = 1000;  // Cap at 1000
         }
         if (account.empty()) {
             res.status = 400;
             res.set_content(R"({"error":"account parameter required"})", "application/json");
             return;
         }
+        
+        // SECURITY: Validate account identifier to prevent shell injection
+        if (!is_valid_account_id(account)) {
+            res.status = 400;
+            res.set_content(R"({"error":"Invalid account identifier"})", "application/json");
+            return;
+        }
 
-        std::string cmd = "ledger -f " + get_ledger_path() + " reg \"" + account + "\" -n " + std::to_string(limit) + " 2>&1";
+        std::string cmd = "ledger -f " + get_ledger_path() + " reg \"" + sanitize_for_shell(account) + "\" -n " + std::to_string(limit) + " 2>&1";
         std::array<char, 256> buffer;
         std::string result;
         std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
@@ -1031,9 +1112,10 @@ inline void HttpServer::setup_routes() {
 
     // Admin: Balance Sheet
     server_->Get("/api/admin/balance-sheet", [](const httplib::Request& req, httplib::Response& res) {
-        // Simple API key auth
+        // Admin API key auth from environment
         std::string api_key = req.get_header_value("X-Admin-Key");
-        if (api_key != "admin-secret-key-2024") {
+        std::string expected = get_admin_key();
+        if (expected.empty() || !constant_time_compare(api_key, expected)) {
             res.status = 401;
             res.set_content(R"({"error":"Unauthorized"})", "application/json");
             return;
@@ -1057,9 +1139,10 @@ inline void HttpServer::setup_routes() {
 
     // Admin: Income Statement
     server_->Get("/api/admin/income-statement", [](const httplib::Request& req, httplib::Response& res) {
-        // Simple API key auth
+        // Admin API key auth from environment
         std::string api_key = req.get_header_value("X-Admin-Key");
-        if (api_key != "admin-secret-key-2024") {
+        std::string expected = get_admin_key();
+        if (expected.empty() || !constant_time_compare(api_key, expected)) {
             res.status = 401;
             res.set_content(R"({"error":"Unauthorized"})", "application/json");
             return;
@@ -1148,9 +1231,39 @@ inline void HttpServer::setup_routes() {
     
     server_->Post("/api/deposit", [](const httplib::Request& req, httplib::Response& res) {
         try {
+            // SECURITY: Require JWT authentication for deposits
+            std::string auth_header = req.get_header_value("Authorization");
+            std::string user_id;
+            
+            if (!auth_header.empty()) {
+                std::string token = Auth::instance().extract_token(auth_header);
+                auto payload = Auth::instance().verify_token(token);
+                if (payload) {
+                    user_id = payload->user_id;
+                }
+            }
+            
             auto body = json::parse(req.body);
-            std::string user_id = body.value("user_id", "demo");
+            
+            // Only allow body user_id in development for "demo" account
+            if (user_id.empty()) {
+                std::string body_user = body.value("user_id", "");
+                if (body_user == "demo" && !is_production()) {
+                    user_id = "demo";  // Allow demo deposits without auth in dev
+                } else {
+                    send_unauthorized(res, "Authentication required for deposits");
+                    return;
+                }
+            }
+            
             double amount = body["amount"];
+            
+            // Validate deposit amount
+            if (amount <= 0 || amount > 1e12) {  // Max 1 trillion MNT
+                res.status = 400;
+                res.set_content(R"({"error":"Invalid deposit amount"})", "application/json");
+                return;
+            }
             
             PositionManager::instance().deposit(user_id, amount);
             

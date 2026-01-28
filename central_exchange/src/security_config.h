@@ -179,4 +179,59 @@ inline bool is_debug_logging() {
     return env && (strcmp(env, "1") == 0 || strcmp(env, "true") == 0);
 }
 
+
+// ==================== ADMIN KEY ====================
+
+/**
+ * Get admin API key from environment
+ * NEVER hardcode admin keys!
+ */
+inline std::string get_admin_key() {
+    const char* env = std::getenv("ADMIN_API_KEY");
+    if (env && strlen(env) >= 16) {
+        return std::string(env);
+    }
+    // Return empty in production (blocks all admin access)
+    if (is_production()) {
+        return "";
+    }
+    // Dev fallback - should be replaced!
+    return "dev-admin-key-replace-in-prod";
+}
+
+// ==================== SHELL INJECTION PREVENTION ====================
+
+/**
+ * Sanitize input for shell command execution
+ * Only allows alphanumeric, dash, underscore, colon, slash, dot
+ * Prevents shell injection via popen()
+ */
+inline std::string sanitize_for_shell(const std::string& input) {
+    std::string safe;
+    safe.reserve(input.size());
+    for (char c : input) {
+        if (std::isalnum(static_cast<unsigned char>(c)) ||
+            c == '-' || c == '_' || c == ':' || c == '/' || c == '.' || c == ' ') {
+            safe += c;
+        }
+        // Skip dangerous characters: ; | & $ ` " ' \ ( ) { } [ ] ! ? * < > ~
+    }
+    return safe;
+}
+
+/**
+ * Check if a string is a valid account identifier
+ * Only allows alphanumeric, colon, space (for ledger accounts like "Assets:Cash")
+ */
+inline bool is_valid_account_id(const std::string& account) {
+    if (account.empty() || account.size() > 100) return false;
+    for (char c : account) {
+        if (!std::isalnum(static_cast<unsigned char>(c)) &&
+            c != ':' && c != ' ' && c != '-' && c != '_') {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace central_exchange
