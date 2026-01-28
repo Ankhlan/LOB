@@ -11,6 +11,9 @@ if(DEV_MODE)
     message(STATUS "DEV_MODE enabled - dev_otp will be returned in auth responses")
 endif()
 
+# Native GUI client option
+option(BUILD_GUI_CLIENT "Build native Dear ImGui trading client" OFF)
+
 include(FetchContent)
 
 FetchContent_Declare(
@@ -96,4 +99,74 @@ if(FXCM_ENABLED)
     else()
         message(WARNING "FXCM_ENABLED=ON but ForexConnect SDK not found at ${FXCM_SDK_DIR}")
     endif()
+endif()
+
+# =============================================================================
+# NATIVE GUI CLIENT (Dear ImGui + GLFW + OpenGL)
+# =============================================================================
+if(BUILD_GUI_CLIENT)
+    message(STATUS "Building native GUI client (cre_client)")
+    
+    # Fetch Dear ImGui
+    FetchContent_Declare(
+        imgui
+        GIT_REPOSITORY https://github.com/ocornut/imgui.git
+        GIT_TAG v1.90.1
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(imgui)
+    
+    # Fetch GLFW
+    FetchContent_Declare(
+        glfw
+        GIT_REPOSITORY https://github.com/glfw/glfw.git
+        GIT_TAG 3.3.9
+        GIT_SHALLOW TRUE
+    )
+    set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(glfw)
+    
+    # Find OpenGL
+    find_package(OpenGL REQUIRED)
+    
+    # ImGui sources (core + backends)
+    set(IMGUI_SOURCES
+        ${imgui_SOURCE_DIR}/imgui.cpp
+        ${imgui_SOURCE_DIR}/imgui_demo.cpp
+        ${imgui_SOURCE_DIR}/imgui_draw.cpp
+        ${imgui_SOURCE_DIR}/imgui_tables.cpp
+        ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
+    )
+    
+    # GUI client executable
+    add_executable(cre_client
+        src/client_main.cpp
+        ${IMGUI_SOURCES}
+    )
+    
+    target_include_directories(cre_client PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${imgui_SOURCE_DIR}
+        ${imgui_SOURCE_DIR}/backends
+    )
+    
+    target_link_libraries(cre_client PRIVATE
+        glfw
+        OpenGL::GL
+        nlohmann_json::nlohmann_json
+    )
+    
+    if(WIN32)
+        target_link_libraries(cre_client PRIVATE opengl32)
+    endif()
+    
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(cre_client PRIVATE dl)
+    endif()
+    
+    message(STATUS "GUI client will be built: cre_client")
 endif()

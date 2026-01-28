@@ -2486,7 +2486,7 @@ inline void HttpServer::setup_routes() {
             state.theme = theme;
             document.body.setAttribute('data-theme', theme);
             document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
-            document.querySelector('.theme-btn.' + theme).classList.add('active');
+            const btn = document.querySelector('.theme-btn.' + theme); if (btn) btn.classList.add('active');
             localStorage.setItem('ce-theme', theme);
             // Reinit chart with new theme
             if (state.chart) {
@@ -2498,15 +2498,20 @@ inline void HttpServer::setup_routes() {
         // Initialize lightweight chart with MNT prices
         function initChart() {
             const container = document.getElementById('chartContainer');
+            if (!container) { console.warn('Chart container not found'); return; }
+            if (typeof LightweightCharts === 'undefined') { console.warn('LightweightCharts not loaded'); return; }
+
             if (state.chart) {
                 state.chart.remove();
             }
-            
+
             const t = themes[state.theme];
-            
+            const width = container.clientWidth || 600;
+            const height = container.clientHeight || 400;
+
             state.chart = LightweightCharts.createChart(container, {
-                width: container.clientWidth,
-                height: container.clientHeight,
+                width: width,
+                height: height,
                 layout: {
                     background: { type: 'solid', color: t.bg },
                     textColor: t.text,
@@ -2563,11 +2568,12 @@ inline void HttpServer::setup_routes() {
         
         function updateChartData() {
             if (!state.selected || !state.quotes[state.selected]) return;
-            
+            if (!state.candleSeries) return; // Chart not initialized
+
             const q = state.quotes[state.selected];
             const mid = q.mid || q.mark_price || 100000;
             const now = Math.floor(Date.now() / 1000);
-            
+
             // Generate synthetic candle data (prices in MNT)
             if (!state.priceHistory[state.selected]) {
                 state.priceHistory[state.selected] = [];
@@ -2582,7 +2588,7 @@ inline void HttpServer::setup_routes() {
                     state.priceHistory[state.selected].push({ time: t, open: o, high: h, low: l, close: c });
                 }
             }
-            
+
             const history = state.priceHistory[state.selected];
             if (history.length > 0) {
                 const last = history[history.length - 1];
@@ -2590,7 +2596,7 @@ inline void HttpServer::setup_routes() {
                 last.high = Math.max(last.high, mid);
                 last.low = Math.min(last.low, mid);
             }
-            
+
             state.candleSeries.setData(history);
         }
         
@@ -2614,36 +2620,51 @@ inline void HttpServer::setup_routes() {
         });
         
         async function init() {
-            // Load saved language
-            const savedLang = localStorage.getItem('ce-lang') || 'en';
-            setLang(savedLang);
-            
-            // Load saved theme
-            const savedTheme = localStorage.getItem('ce-theme') || 'dark';
-            setTheme(savedTheme);
-            
-            // Load saved auth
-            const savedToken = localStorage.getItem('ce-token');
-            const savedPhone = localStorage.getItem('ce-phone');
-            if (savedToken && savedPhone) {
-                state.authToken = savedToken;
-                state.user = { phone: savedPhone };
-                updateUserUI();
+            try {
+                // Load saved language
+                const savedLang = localStorage.getItem('ce-lang') || 'en';
+                setLang(savedLang);
+
+                // Load saved theme
+                const savedTheme = localStorage.getItem('ce-theme') || 'dark';
+                setTheme(savedTheme);
+
+                // Load saved auth
+                const savedToken = localStorage.getItem('ce-token');
+                const savedPhone = localStorage.getItem('ce-phone');
+                if (savedToken && savedPhone) {
+                    state.authToken = savedToken;
+                    state.user = { phone: savedPhone };
+                    updateUserUI();
+                }
+
+                // Deposit for demo (ignore errors)
+                await fetch('/api/deposit', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({user_id:'demo', amount:100000000}) }).catch(()=>{});
+
+                await refresh();
+
+                // Init chart if library loaded
+                if (typeof LightweightCharts !== 'undefined') {
+                    initChart();
+                } else {
+                    console.warn('LightweightCharts not loaded - chart disabled');
+                }
+
+                selectInstrument('XAU-MNT-PERP');
+
+                // Start SSE streaming for real-time quotes
+                startQuoteStream();
+
+                // Orderbook and chart updates (less frequent)
+                setInterval(() => { if(state.selected) { renderOrderbook(); updateChartData(); } }, 2000);
+
+                // Account refresh (balance/positions)
+                setInterval(refreshAccount, 3000);
+
+                console.log('CRE UI initialized successfully');
+            } catch (err) {
+                console.error('Init error:', err);
             }
-            
-            await fetch('/api/deposit', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({user_id:'demo', amount:100000000}) });
-            await refresh();
-            initChart();
-            selectInstrument('XAU-MNT-PERP');
-            
-            // Start SSE streaming for real-time quotes
-            startQuoteStream();
-            
-            // Orderbook and chart updates (less frequent)
-            setInterval(() => { if(state.selected) { renderOrderbook(); updateChartData(); } }, 2000);
-            
-            // Account refresh (balance/positions)
-            setInterval(refreshAccount, 3000);
         }
         
         // SSE Real-time Quote Stream
@@ -2743,35 +2764,55 @@ inline void HttpServer::setup_routes() {
         }
         
         async function refresh() {
-            const [products, quotes, account, posData] = await Promise.all([
-                fetch('/api/products').then(r=>r.json()),
-                fetch('/api/quotes').then(r=>r.json()),
-                fetch('/api/account?user_id=demo').then(r=>r.json()),
-                fetch('/api/positions?user_id=demo').then(r=>r.json())
-            ]);
-            
-            state.instruments = products;
-            quotes.forEach(q => state.quotes[q.symbol] = q);
-            
-            // Update header account display
-            document.getElementById('equity').textContent = fmt(account.equity) + ' MNT';
-            document.getElementById('available').textContent = fmt(account.available) + ' MNT';
-            document.getElementById('margin').textContent = fmt(account.margin_used) + ' MNT';
-            
-            // Update status bar
-            document.getElementById('usedMargin').textContent = fmt(account.margin_used) + ' MNT';
-            document.getElementById('freeMargin').textContent = fmt(account.available) + ' MNT';
-            
-            renderInstruments();
-            if (posData.positions) {
-                renderPositionsLive(posData.positions, posData.summary);
+            try {
+                const [products, quotes, account, posData] = await Promise.all([
+                    fetch('/api/products').then(r=>r.json()).catch(()=>[]),
+                    fetch('/api/quotes').then(r=>r.json()).catch(()=>[]),
+                    fetch('/api/account?user_id=demo').then(r=>r.json()).catch(()=>({equity:0,available:0,margin_used:0})),
+                    fetch('/api/positions?user_id=demo').then(r=>r.json()).catch(()=>({positions:[]}))
+                ]);
+
+                if (Array.isArray(products)) state.instruments = products;
+                if (Array.isArray(quotes)) quotes.forEach(q => state.quotes[q.symbol] = q);
+
+                // Update header account display
+                document.getElementById('equity').textContent = fmt(account.equity || 0) + ' MNT';
+                document.getElementById('available').textContent = fmt(account.available || 0) + ' MNT';
+                document.getElementById('margin').textContent = fmt(account.margin_used || 0) + ' MNT';
+
+                // Update status bar
+                document.getElementById('usedMargin').textContent = fmt(account.margin_used || 0) + ' MNT';
+                document.getElementById('freeMargin').textContent = fmt(account.available || 0) + ' MNT';
+
+                renderInstruments();
+                if (posData && posData.positions) {
+                    renderPositionsLive(posData.positions, posData.summary);
+                }
+                if (state.selected) updateSelectedDisplay();
+            } catch (err) {
+                console.error('Refresh error:', err);
             }
-            if (state.selected) updateSelectedDisplay();
         }
         
         function renderInstruments() {
+            const list = document.getElementById('instrumentList');
+            if (!list) { console.error('instrumentList element not found'); return; }
+
+            if (!state.instruments || state.instruments.length === 0) {
+                list.innerHTML = '<div class="empty-state">Loading instruments...</div>';
+                console.log('No instruments loaded yet');
+                return;
+            }
+
             const search = document.getElementById('searchInput').value.toLowerCase();
-            const html = state.instruments.filter(p => !search || p.symbol.toLowerCase().includes(search) || p.name.toLowerCase().includes(search)).map(p => {
+            const filtered = state.instruments.filter(p => !search || p.symbol.toLowerCase().includes(search) || p.name.toLowerCase().includes(search));
+
+            if (filtered.length === 0) {
+                list.innerHTML = '<div class="empty-state">No matching instruments</div>';
+                return;
+            }
+
+            const html = filtered.map(p => {
                 const q = state.quotes[p.symbol] || {};
                 const sel = state.selected === p.symbol ? 'selected' : '';
                 return `<div class="instrument-row ${sel}" onclick="selectInstrument('${p.symbol}')">
@@ -2779,7 +2820,8 @@ inline void HttpServer::setup_routes() {
                     <div class="instrument-price"><div class="instrument-bid">${fmt(q.bid||0,0)}</div><div class="instrument-ask">${fmt(q.ask||0,0)}</div></div>
                 </div>`;
             }).join('');
-            document.getElementById('instrumentList').innerHTML = html;
+            list.innerHTML = html;
+            console.log('Rendered', filtered.length, 'instruments');
         }
         
         function filterInstruments() { renderInstruments(); }
