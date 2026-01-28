@@ -14,6 +14,9 @@
 #include "database.h"
 #include "auth.h"
 #include "ledger_writer.h"
+#include "auth_middleware.h"
+#include "input_validator.h"
+#include "security_config.h"
 
 #include <httplib.h>
 #include <array>
@@ -85,10 +88,8 @@ inline void HttpServer::stop() {
 
 inline void HttpServer::setup_routes() {
     // CORS headers
-    server_->set_pre_routing_handler([](const httplib::Request&, httplib::Response& res) {
-        res.set_header("Access-Control-Allow-Origin", "*");
-        res.set_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-        res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    server_->set_pre_routing_handler([](const httplib::Request& req, httplib::Response& res) {
+        set_secure_cors_headers(req, res);
         return httplib::Server::HandlerResponse::Unhandled;
     });
     
@@ -438,53 +439,110 @@ inline void HttpServer::setup_routes() {
     });
     
     // ==================== ORDERS ====================
-    
+
     server_->Post("/api/order", [this](const httplib::Request& req, httplib::Response& res) {
         try {
+            // SECURITY FIX: Require JWT authentication
+            auto auth = authenticate(req);
+            if (!auth.success) {
+                res.status = auth.error_code;
+                res.set_content(json{{"error", auth.error}}.dump(), "application/json");
+                return;
+            }
+
             auto body = json::parse(req.body);
-            
+
             std::string symbol = body["symbol"];
-            std::string user_id = body.value("user_id", "anonymous");
+            // SECURITY FIX: Use user_id from VERIFIED JWT, not request body
+            std::string user_id = auth.user_id;
             std::string side_str = body["side"];
             std::string type_str = body.value("type", "LIMIT");
             double price = body.value("price", 0.0);
             double quantity = body["quantity"];
             std::string client_id = body.value("client_id", "");
-            
+
+            // SECURITY FIX: Input validation
+            auto v_symbol = validate_symbol(symbol);
+            if (!v_symbol.valid) {
+                res.status = 400;
+                res.set_content(json{{"error", v_symbol.error}}.dump(), "application/json");
+                return;
+            }
+
+            auto v_side = validate_side(side_str);
+            if (!v_side.valid) {
+                res.status = 400;
+                res.set_content(json{{"error", v_side.error}}.dump(), "application/json");
+                return;
+            }
+
+            auto v_qty = validate_quantity(quantity);
+            if (!v_qty.valid) {
+                res.status = 400;
+                res.set_content(json{{"error", v_qty.error}}.dump(), "application/json");
+                return;
+            }
+
+            if (type_str != "MARKET") {
+                auto v_price = validate_price(price);
+                if (!v_price.valid) {
+                    res.status = 400;
+                    res.set_content(json{{"error", v_price.error}}.dump(), "application/json");
+                    return;
+                }
+            }
+
             Side side = (side_str == "BUY" || side_str == "buy") ? Side::BUY : Side::SELL;
-            
+
             OrderType type = OrderType::LIMIT;
             if (type_str == "MARKET") type = OrderType::MARKET;
             else if (type_str == "IOC") type = OrderType::IOC;
             else if (type_str == "FOK") type = OrderType::FOK;
             else if (type_str == "POST_ONLY") type = OrderType::POST_ONLY;
-            
+
             auto trades = MatchingEngine::instance().submit_order(
                 symbol, user_id, side, type, price, quantity, client_id
             );
-            
+
             json trade_arr = json::array();
             for (const auto& t : trades) {
                 trade_arr.push_back(trade_to_json(t));
             }
-            
+
             res.set_content(json{
                 {"success", true},
+                {"user_id", user_id},
                 {"trades", trade_arr}
             }.dump(), "application/json");
-            
+
         } catch (const std::exception& e) {
             res.status = 400;
             res.set_content(json{{"error", e.what()}}.dump(), "application/json");
         }
     });
-    
+
     server_->Delete("/api/order/:symbol/:id", [](const httplib::Request& req, httplib::Response& res) {
+        // SECURITY FIX: Require JWT authentication
+        auto auth = authenticate(req);
+        if (!auth.success) {
+            res.status = auth.error_code;
+            res.set_content(json{{"error", auth.error}}.dump(), "application/json");
+            return;
+        }
+
         auto symbol = req.path_params.at("symbol");
         OrderId id = std::stoull(req.path_params.at("id"));
-        
+
+        // Validate symbol
+        auto v_symbol = validate_symbol(symbol);
+        if (!v_symbol.valid) {
+            res.status = 400;
+            res.set_content(json{{"error", v_symbol.error}}.dump(), "application/json");
+            return;
+        }
+
         auto cancelled = MatchingEngine::instance().cancel_order(symbol, id);
-        
+
         if (cancelled) {
             res.set_content(json{{"success", true}, {"cancelled", cancelled->id}}.dump(), "application/json");
         } else {
@@ -492,7 +550,7 @@ inline void HttpServer::setup_routes() {
             res.set_content(R"({"error":"Order not found"})", "application/json");
         }
     });
-    
+
     // ==================== POSITIONS ====================
     
     server_->Get("/api/positions", [this](const httplib::Request& req, httplib::Response& res) {
