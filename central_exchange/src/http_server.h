@@ -28,6 +28,16 @@ namespace central_exchange {
 
 using json = nlohmann::json;
 
+// Helper: Get ledger path from environment or default
+inline std::string get_ledger_path() {
+    const char* env_path = std::getenv("LEDGER_PATH");
+    if (env_path && env_path[0] != '\0') {
+        return std::string(env_path) + "/*.ledger";
+    }
+    // Default: Docker container path
+    return "/app/ledger/*.ledger";
+}
+
 class HttpServer {
 public:
     explicit HttpServer(int port = 8080) : port_(port) {}
@@ -645,7 +655,7 @@ inline void HttpServer::setup_routes() {
             return;
         }
 
-        std::string cmd = "ledger -f /app/ledger/*.ledger bal \"" + account + "\" -X MNT 2>&1";
+        std::string cmd = "ledger -f " + get_ledger_path() + " bal \"" + account + "\" -X MNT 2>&1";
         std::array<char, 256> buffer;
         std::string result;
         std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
@@ -674,7 +684,7 @@ inline void HttpServer::setup_routes() {
             return;
         }
 
-        std::string cmd = "ledger -f /app/ledger/*.ledger reg \"" + account + "\" -n " + std::to_string(limit) + " 2>&1";
+        std::string cmd = "ledger -f " + get_ledger_path() + " reg \"" + account + "\" -n " + std::to_string(limit) + " 2>&1";
         std::array<char, 256> buffer;
         std::string result;
         std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
@@ -700,7 +710,7 @@ inline void HttpServer::setup_routes() {
             return;
         }
 
-        std::string cmd = "ledger -f /app/ledger/*.ledger bal Assets Liabilities Equity -X MNT 2>&1";
+        std::string cmd = "ledger -f " + get_ledger_path() + " bal Assets Liabilities Equity -X MNT 2>&1";
         std::array<char, 256> buffer;
         std::string result;
         std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
@@ -726,7 +736,7 @@ inline void HttpServer::setup_routes() {
             return;
         }
 
-        std::string cmd = "ledger -f /app/ledger/*.ledger bal Revenue Expenses -X MNT 2>&1";
+        std::string cmd = "ledger -f " + get_ledger_path() + " bal Revenue Expenses -X MNT 2>&1";
         std::array<char, 256> buffer;
         std::string result;
         std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
