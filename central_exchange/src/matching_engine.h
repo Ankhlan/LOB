@@ -9,6 +9,7 @@
 #include "order_book.h"
 #include "product_catalog.h"
 #include "position_manager.h"
+#include "ledger_writer.h"
 #include <unordered_map>
 #include <memory>
 #include <mutex>
@@ -56,6 +57,7 @@ private:
     TradeCallback on_trade_;
     OrderCallback on_order_;
     mutable std::mutex mutex_;
+    cre::LedgerWriter ledger_;
     
     void on_trade_internal(const Trade& trade);
     void on_order_internal(const Order& order);
@@ -186,7 +188,19 @@ inline void MatchingEngine::on_trade_internal(const Trade& trade) {
     
     pm.withdraw(trade.taker_user, taker_fee);
     pm.withdraw(trade.maker_user, maker_fee);
-    
+
+    // Record trade in ledger (double-entry accounting)
+    double total_fees = taker_fee + maker_fee;
+    ledger_.record_trade(
+        trade.taker_side == Side::BUY ? trade.taker_user : trade.maker_user,  // buyer
+        trade.taker_side == Side::BUY ? trade.maker_user : trade.taker_user,  // seller
+        trade.symbol,
+        trade.quantity,
+        trade.price,
+        total_fees,
+        "MNT"  // Base currency
+    );
+
     // Forward to external callback
     if (on_trade_) on_trade_(trade);
 }
@@ -196,3 +210,4 @@ inline void MatchingEngine::on_order_internal(const Order& order) {
 }
 
 } // namespace central_exchange
+
