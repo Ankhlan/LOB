@@ -4,6 +4,13 @@ project(CentralExchange VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Development mode - enables dev_otp in auth responses
+option(DEV_MODE "Enable development features (dev_otp, etc)" ON)
+if(DEV_MODE)
+    add_compile_definitions(DEV_MODE)
+    message(STATUS "DEV_MODE enabled - dev_otp will be returned in auth responses")
+endif()
+
 include(FetchContent)
 
 FetchContent_Declare(
