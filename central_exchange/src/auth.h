@@ -20,6 +20,7 @@
 #include <iostream>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
+#include "security_config.h"
 #include <openssl/evp.h>
 #include <nlohmann/json.hpp>
 
@@ -32,6 +33,7 @@ struct User {
     std::string phone;         // Primary identifier (+976...)
     std::string username;      // Optional display name
     std::string password_hash; // Optional for password login
+    std::string password_salt;  // Per-user random salt
     std::string email;         // Optional
     bool is_active = true;
     int64_t created_at;
@@ -81,7 +83,8 @@ public:
         User user;
         user.id = generate_id();
         user.username = username;
-        user.password_hash = hash_password(password);
+        user.password_salt = generate_secure_hex(32);
+        user.password_hash = hash_password(password, user.password_salt);
         user.email = email;
         user.is_active = true;
         user.created_at = now_ms();
@@ -107,7 +110,8 @@ public:
             return std::nullopt;
         }
         
-        if (hash_password(password) != user.password_hash) {
+        // SECURITY FIX: Use stored salt and constant-time compare (Critical #1, #3)
+        if (!constant_time_compare(hash_password(password, user.password_salt), user.password_hash)) {
             return std::nullopt;
         }
         
@@ -138,7 +142,8 @@ public:
         
         // Verify signature
         std::string expected_sig = hmac_sha256(header_payload, secret_);
-        if (signature != expected_sig) {
+        // SECURITY FIX: Constant-time compare (Critical #3)
+        if (!constant_time_compare(signature, expected_sig)) {
             return std::nullopt;
         }
         
@@ -340,12 +345,14 @@ public:
     
 private:
     Auth() {
-        secret_ = "central_exchange_secret_" + generate_id(); // Random secret on start
+        // SECURITY FIX: Use cryptographically secure random (Critical #2)
+        secret_ = get_jwt_secret();
     }
     
-    std::string hash_password(const std::string& password) {
+    // SECURITY FIX: Per-user salt (Critical #1)
+    std::string hash_password(const std::string& password, const std::string& salt = "CE_SALT_2025") {
         unsigned char hash[SHA256_DIGEST_LENGTH];
-        std::string salted = password + "CE_SALT_2025";
+        std::string salted = password + salt;
         
         EVP_MD_CTX* ctx = EVP_MD_CTX_new();
         EVP_DigestInit_ex(ctx, EVP_sha256(), nullptr);
