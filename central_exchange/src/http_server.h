@@ -272,16 +272,36 @@ inline void HttpServer::setup_routes() {
     
     // ==================== SSE STREAMING ====================
     // Real-time price updates via Server-Sent Events
-    server_->Get("/api/stream", [this](const httplib::Request&, httplib::Response& res) {
+    server_->Get("/api/stream", [this](const httplib::Request& req, httplib::Response& res) {
         res.set_header("Content-Type", "text/event-stream");
         res.set_header("Cache-Control", "no-cache");
         res.set_header("Connection", "keep-alive");
         res.set_header("X-Accel-Buffering", "no"); // Disable nginx buffering
         
+        // Get user_id for position updates (optional)
+        std::string user_id = req.get_param_value("user_id");
+        
+        // Try JWT auth for user_id
+        std::string auth_header = req.get_header_value("Authorization");
+        if (!auth_header.empty()) {
+            std::string token = Auth::instance().extract_token(auth_header);
+            auto payload = Auth::instance().verify_token(token);
+            if (payload) {
+                user_id = payload->user_id;
+            }
+        }
+        
+        if (user_id.empty()) user_id = "demo";  // Fallback for testing
+        
         res.set_chunked_content_provider("text/event-stream",
-            [this](size_t offset, httplib::DataSink& sink) {
+            [this, user_id](size_t offset, httplib::DataSink& sink) {
+                int tick_count = 0;
+                
                 // Stream quotes every 500ms
                 while (true) {
+                    tick_count++;
+                    
+                    // ===== QUOTES EVENT (every 500ms) =====
                     json quotes = json::array();
                     
                     ProductCatalog::instance().for_each([&](const Product& p) {
@@ -306,9 +326,77 @@ inline void HttpServer::setup_routes() {
                         });
                     });
                     
-                    std::string event = "event: quotes\ndata: " + quotes.dump() + "\n\n";
-                    if (!sink.write(event.data(), event.size())) {
+                    std::string quotes_event = "event: quotes\ndata: " + quotes.dump() + "\n\n";
+                    if (!sink.write(quotes_event.data(), quotes_event.size())) {
                         break; // Client disconnected
+                    }
+                    
+                    // ===== POSITIONS EVENT (every 1s for performance) =====
+                    if (!user_id.empty() && (tick_count % 2 == 0)) {
+                        auto& pm = PositionManager::instance();
+                        auto positions = pm.get_all_positions(user_id);
+                        
+                        json pos_arr = json::array();
+                        double total_unrealized = 0.0;
+                        double total_margin = 0.0;
+                        
+                        for (const auto& pos : positions) {
+                            if (std::abs(pos.size) < 0.0001) continue;  // Skip closed
+                            
+                            // Get current price for P&L calc
+                            auto [bid, ask] = MatchingEngine::instance().get_bbo(pos.symbol);
+                            auto* product = ProductCatalog::instance().get(pos.symbol);
+                            
+                            double exit_price = pos.is_long() ?
+                                bid.value_or(product ? product->mark_price_mnt * 0.999 : pos.entry_price) :
+                                ask.value_or(product ? product->mark_price_mnt * 1.001 : pos.entry_price);
+                            
+                            // Calculate real-time P&L
+                            double pnl = pos.is_long() ?
+                                (exit_price - pos.entry_price) * std::abs(pos.size) :
+                                (pos.entry_price - exit_price) * std::abs(pos.size);
+                            
+                            double pnl_pct = pos.entry_price > 0 ? 
+                                (pnl / (pos.entry_price * std::abs(pos.size))) * 100.0 : 0.0;
+                            
+                            total_unrealized += pnl;
+                            total_margin += pos.margin_used;
+                            
+                            pos_arr.push_back({
+                                {"symbol", pos.symbol},
+                                {"side", pos.is_long() ? "long" : "short"},
+                                {"size", std::abs(pos.size)},
+                                {"entry_price", pos.entry_price},
+                                {"current_price", exit_price},
+                                {"unrealized_pnl", pnl},
+                                {"pnl_percent", pnl_pct},
+                                {"margin_used", pos.margin_used},
+                                {"liquidation_price", 0.0}  // TODO: Calculate
+                            });
+                        }
+                        
+                        double balance = pm.get_balance(user_id);
+                        double equity = balance + total_unrealized;
+                        
+                        json positions_data = {
+                            {"user_id", user_id},
+                            {"positions", pos_arr},
+                            {"summary", {
+                                {"balance", balance},
+                                {"equity", equity},
+                                {"unrealized_pnl", total_unrealized},
+                                {"margin_used", total_margin},
+                                {"available", equity - total_margin},
+                                {"margin_level", total_margin > 0 ? (equity / total_margin) * 100.0 : 0.0}
+                            }},
+                            {"timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::system_clock::now().time_since_epoch()).count()}
+                        };
+                        
+                        std::string pos_event = "event: positions\ndata: " + positions_data.dump() + "\n\n";
+                        if (!sink.write(pos_event.data(), pos_event.size())) {
+                            break;
+                        }
                     }
                     
                     std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -554,18 +642,83 @@ inline void HttpServer::setup_routes() {
 
     // ==================== POSITIONS ====================
     
+    // GET /api/positions - Get all user positions with real-time P&L
     server_->Get("/api/positions", [this](const httplib::Request& req, httplib::Response& res) {
-        std::string user_id = req.get_param_value("user_id");
+        std::string user_id;
+        
+        // Try JWT auth first
+        std::string auth_header = req.get_header_value("Authorization");
+        if (!auth_header.empty()) {
+            std::string token = Auth::instance().extract_token(auth_header);
+            auto payload = Auth::instance().verify_token(token);
+            if (payload) {
+                user_id = payload->user_id;
+            }
+        }
+        
+        // Fallback to query param (for demo/legacy)
+        if (user_id.empty()) {
+            user_id = req.get_param_value("user_id");
+        }
         if (user_id.empty()) user_id = "demo";
         
         auto positions = PositionManager::instance().get_all_positions(user_id);
         
         json pos_arr = json::array();
-        for (const auto& p : positions) {
-            pos_arr.push_back(position_to_json(p));
+        double total_unrealized = 0.0;
+        double total_margin = 0.0;
+        
+        for (const auto& pos : positions) {
+            if (std::abs(pos.size) < 0.0001) continue;  // Skip closed positions
+            
+            // Get current price for P&L calculation
+            auto [bid, ask] = MatchingEngine::instance().get_bbo(pos.symbol);
+            auto* product = ProductCatalog::instance().get(pos.symbol);
+            
+            double current_price = pos.is_long() ?
+                bid.value_or(product ? product->mark_price_mnt * 0.999 : pos.entry_price) :
+                ask.value_or(product ? product->mark_price_mnt * 1.001 : pos.entry_price);
+            
+            // Calculate real-time P&L
+            double pnl = pos.is_long() ?
+                (current_price - pos.entry_price) * std::abs(pos.size) :
+                (pos.entry_price - current_price) * std::abs(pos.size);
+            
+            double pnl_pct = pos.entry_price > 0 ?
+                (pnl / (pos.entry_price * std::abs(pos.size))) * 100.0 : 0.0;
+            
+            total_unrealized += pnl;
+            total_margin += pos.margin_used;
+            
+            pos_arr.push_back({
+                {"symbol", pos.symbol},
+                {"side", pos.is_long() ? "long" : "short"},
+                {"size", std::abs(pos.size)},
+                {"entry_price", pos.entry_price},
+                {"current_price", current_price},
+                {"unrealized_pnl", pnl},
+                {"pnl_percent", pnl_pct},
+                {"margin_used", pos.margin_used},
+                {"realized_pnl", pos.realized_pnl},
+                {"opened_at", pos.opened_at}
+            });
         }
         
-        res.set_content(pos_arr.dump(), "application/json");
+        auto& pm = PositionManager::instance();
+        double balance = pm.get_balance(user_id);
+        double equity = pm.get_equity(user_id);
+        
+        res.set_content(json{
+            {"positions", pos_arr},
+            {"summary", {
+                {"balance", balance},
+                {"equity", equity},
+                {"unrealized_pnl", total_unrealized},
+                {"margin_used", total_margin},
+                {"available", equity - total_margin},
+                {"open_count", pos_arr.size()}
+            }}
+        }.dump(), "application/json");
     });
     
     server_->Post("/api/position", [this](const httplib::Request& req, httplib::Response& res) {
@@ -689,6 +842,62 @@ inline void HttpServer::setup_routes() {
     
     // ==================== ACCOUNT ====================
     
+    // GET /api/account - Primary account endpoint with full trading info
+    // Supports both JWT auth (preferred) and user_id param (legacy)
+    server_->Get("/api/account", [](const httplib::Request& req, httplib::Response& res) {
+        std::string user_id;
+        
+        // Try JWT auth first
+        std::string auth_header = req.get_header_value("Authorization");
+        if (!auth_header.empty()) {
+            std::string token = Auth::instance().extract_token(auth_header);
+            auto payload = Auth::instance().verify_token(token);
+            if (payload) {
+                user_id = payload->user_id;
+            }
+        }
+        
+        // Fallback to query param (for demo/legacy)
+        if (user_id.empty()) {
+            user_id = req.get_param_value("user_id");
+        }
+        if (user_id.empty()) user_id = "demo";
+        
+        auto& pm = PositionManager::instance();
+        
+        // Get all user positions for summary
+        auto positions = pm.get_all_positions(user_id);
+        double total_margin = 0.0;
+        double total_unrealized_pnl = 0.0;
+        int open_positions = 0;
+        
+        for (const auto& pos : positions) {
+            if (std::abs(pos.size) > 0.0001) {  // Position is open
+                total_margin += pos.margin_used;
+                total_unrealized_pnl += pos.unrealized_pnl;
+                open_positions++;
+            }
+        }
+        
+        double balance = pm.get_balance(user_id);
+        double equity = pm.get_equity(user_id);
+        double available = equity - total_margin;
+        double margin_level = total_margin > 0 ? (equity / total_margin) * 100.0 : 0.0;
+        
+        res.set_content(json{
+            {"user_id", user_id},
+            {"balance", balance},
+            {"equity", equity},
+            {"available", available},
+            {"margin_used", total_margin},
+            {"unrealized_pnl", total_unrealized_pnl},
+            {"margin_level", margin_level},
+            {"open_positions", open_positions},
+            {"currency", "MNT"}
+        }.dump(), "application/json");
+    });
+    
+    // Legacy /api/balance endpoint (redirects to /api/account format)
     server_->Get("/api/balance", [](const httplib::Request& req, httplib::Response& res) {
         std::string user_id = req.get_param_value("user_id");
         if (user_id.empty()) user_id = "demo";
@@ -700,6 +909,67 @@ inline void HttpServer::setup_routes() {
             {"balance", pm.get_balance(user_id)},
             {"equity", pm.get_equity(user_id)},
             {"currency", "MNT"}
+        }.dump(), "application/json");
+    });
+
+    // ==================== ORDERBOOK ====================
+    
+    // GET /api/orderbook/:symbol - Real-time order book depth
+    server_->Get("/api/orderbook/:symbol", [](const httplib::Request& req, httplib::Response& res) {
+        auto symbol = req.path_params.at("symbol");
+        int levels = 10;  // Default depth
+        
+        if (!req.get_param_value("levels").empty()) {
+            levels = std::stoi(req.get_param_value("levels"));
+            if (levels < 1) levels = 1;
+            if (levels > 50) levels = 50;  // Cap at 50 levels
+        }
+        
+        // Validate symbol exists
+        auto* product = ProductCatalog::instance().get(symbol);
+        if (!product) {
+            res.status = 404;
+            res.set_content(json{{"error", "Symbol not found: " + symbol}}.dump(), "application/json");
+            return;
+        }
+        
+        // Get order book depth
+        auto depth = MatchingEngine::instance().get_depth(symbol, levels);
+        auto [best_bid, best_ask] = MatchingEngine::instance().get_bbo(symbol);
+        
+        // Format bids
+        json bids = json::array();
+        for (const auto& [price, qty] : depth.bids) {
+            bids.push_back({{"price", price}, {"quantity", qty}});
+        }
+        
+        // Format asks
+        json asks = json::array();
+        for (const auto& [price, qty] : depth.asks) {
+            asks.push_back({{"price", price}, {"quantity", qty}});
+        }
+        
+        // If no orders, use mark price to generate synthetic book
+        if (bids.empty() && asks.empty()) {
+            double mark = product->mark_price_mnt;
+            double spread = mark * 0.001;  // 0.1% spread
+            
+            bids.push_back({{"price", mark - spread}, {"quantity", 1.0}});
+            asks.push_back({{"price", mark + spread}, {"quantity", 1.0}});
+            
+            best_bid = mark - spread;
+            best_ask = mark + spread;
+        }
+        
+        res.set_content(json{
+            {"symbol", symbol},
+            {"bids", bids},
+            {"asks", asks},
+            {"best_bid", best_bid.value_or(0.0)},
+            {"best_ask", best_ask.value_or(0.0)},
+            {"spread", best_ask.value_or(0.0) - best_bid.value_or(0.0)},
+            {"timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count()}
         }.dump(), "application/json");
     });
 
