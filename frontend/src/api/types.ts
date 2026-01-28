@@ -63,3 +63,23 @@ export interface OrderBook {
   bids: [number, number][]; // [price, qty][]
   asks: [number, number][]; // [price, qty][]
 }
+
+export interface Account {
+  balance: number;
+  equity: number;
+  margin_used: number;
+  free_margin: number;
+  unrealized_pnl: number;
+  margin_level: number;
+}
+
+export interface Position {
+  symbol: string;
+  side: 'long' | 'short';
+  size: number;
+  entry_price: number;
+  mark_price: number;
+  margin_used: number;
+  unrealized_pnl: number;
+  pnl_percent: number;
+}

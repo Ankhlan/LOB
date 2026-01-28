@@ -1,6 +1,6 @@
 // Central Exchange API Service
 
-import type { AuthResponse, Product, Quote, Order, Trade, User } from './types';
+import type { AuthResponse, Product, Quote, Order, Trade, User, Account, Position } from './types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'https://central-exchange-production.up.railway.app';
 
@@ -124,6 +124,36 @@ class ApiService {
   async getTradeHistory(): Promise<Trade[]> {
     const res = await fetch(`${API_BASE}/api/trades/history`);
     return res.json();
+  }
+
+  // ==================== ACCOUNT ====================
+
+  async getAccount(): Promise<Account | null> {
+    if (!this.token) return null;
+    try {
+      const res = await fetch(`${API_BASE}/api/account`, {
+        headers: this.headers(),
+      });
+      if (!res.ok) return null;
+      return res.json();
+    } catch {
+      return null;
+    }
+  }
+
+  // ==================== POSITIONS ====================
+
+  async getPositions(): Promise<Position[]> {
+    if (!this.token) return [];
+    try {
+      const res = await fetch(`${API_BASE}/api/positions`, {
+        headers: this.headers(),
+      });
+      if (!res.ok) return [];
+      return res.json();
+    } catch {
+      return [];
+    }
   }
 
   // ==================== STATS ====================

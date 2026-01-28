@@ -104,6 +104,24 @@
   min-height: 0;
 }
 
+.center-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.chart-section {
+  flex: 0 0 340px;
+  min-height: 340px;
+  border-bottom: 1px solid #3e4451;
+}
+
+.book-section {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
 .trade-panel {
   min-height: 0;
 }

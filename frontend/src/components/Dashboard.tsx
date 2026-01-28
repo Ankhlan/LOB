@@ -3,6 +3,7 @@ import { api } from '../api';
 import { MarketWatch } from './MarketWatch';
 import { OrderBook } from './OrderBook';
 import { TradingPanel } from './TradingPanel';
+import { PriceChart } from './PriceChart';
 import { Positions } from './Positions';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { t } from '../i18n';
@@ -65,8 +66,13 @@ export function Dashboard({ onLogout }: DashboardProps) {
               />
             </div>
 
-            <div className="panel book-panel">
-              <OrderBook symbol={selectedSymbol} />
+            <div className="panel center-panel">
+              <div className="chart-section">
+                <PriceChart symbol={selectedSymbol} />
+              </div>
+              <div className="book-section">
+                <OrderBook symbol={selectedSymbol} />
+              </div>
             </div>
 
             <div className="panel trade-panel">

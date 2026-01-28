@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
 import type { Quote } from '../api/types';
+import { ConfirmModal } from './ConfirmModal';
 import './TradingPanel.css';
 
 interface TradingPanelProps {
@@ -15,6 +16,7 @@ export function TradingPanel({ symbol }: TradingPanelProps) {
   const [price, setPrice] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
     if (!symbol) return;
@@ -32,9 +34,14 @@ export function TradingPanel({ symbol }: TradingPanelProps) {
     return () => unsubscribe();
   }, [symbol, orderType]);
 
-  const handleSubmit = async () => {
+  const handleShowConfirm = () => {
     if (!symbol || !quantity) return;
-    
+    setShowConfirm(true);
+  };
+
+  const handleConfirmOrder = async () => {
+    if (!symbol || !quantity) return;
+
     setLoading(true);
     setMessage(null);
 
@@ -48,10 +55,11 @@ export function TradingPanel({ symbol }: TradingPanelProps) {
       };
 
       const res = await api.placeOrder(order);
-      
+
       if (res.success) {
         setMessage({ type: 'success', text: `Order placed: ${res.order_id?.slice(0, 8)}...` });
         setQuantity('1');
+        setShowConfirm(false);
       } else {
         setMessage({ type: 'error', text: res.error || 'Order failed' });
       }
@@ -171,14 +179,37 @@ export function TradingPanel({ symbol }: TradingPanelProps) {
           </div>
         )}
 
-        <button 
+        <button
           className={`submit-btn ${side}`}
-          onClick={handleSubmit}
+          onClick={handleShowConfirm}
           disabled={loading || !quantity}
         >
-          {loading ? 'Placing...' : `${side.toUpperCase()} ${symbol}`}
+          {`${side.toUpperCase()} ${symbol}`}
         </button>
       </div>
+
+      <ConfirmModal
+        isOpen={showConfirm}
+        onConfirm={handleConfirmOrder}
+        onCancel={() => setShowConfirm(false)}
+        title={`Confirm ${side.toUpperCase()} Order`}
+        confirmText={`${side.toUpperCase()} ${symbol}`}
+        cancelText="Cancel"
+        confirmType={side}
+        loading={loading}
+      >
+        <div className="confirm-order-details">
+          <p><strong>Instrument:</strong> {symbol}</p>
+          <p><strong>Side:</strong> {side.toUpperCase()}</p>
+          <p><strong>Type:</strong> {orderType}</p>
+          <p><strong>Quantity:</strong> {quantity}</p>
+          {orderType === 'limit' && price && (
+            <p><strong>Price:</strong> {formatPrice(parseFloat(price))} MNT</p>
+          )}
+          <p><strong>Est. Total:</strong> {formatPrice(estimatedTotal())} MNT</p>
+          <p className="confirm-warning">This action cannot be undone.</p>
+        </div>
+      </ConfirmModal>
     </div>
   );
 }

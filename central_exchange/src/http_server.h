@@ -2550,33 +2550,90 @@ inline void HttpServer::setup_routes() {
                 setTimeout(startQuoteStream, 3000);
             };
             
+            // Listen for position P&L updates
+            evtSource.addEventListener('positions', (e) => {
+                const data = JSON.parse(e.data);
+                
+                // Update header account display with real-time data
+                if (data.summary) {
+                    document.getElementById('equity').textContent = fmt(data.summary.equity) + ' MNT';
+                    document.getElementById('available').textContent = fmt(data.summary.available) + ' MNT';
+                    document.getElementById('margin').textContent = fmt(data.summary.margin_used) + ' MNT';
+                    
+                    // Update status bar
+                    document.getElementById('usedMargin').textContent = fmt(data.summary.margin_used) + ' MNT';
+                    document.getElementById('freeMargin').textContent = fmt(data.summary.available) + ' MNT';
+                }
+                
+                // Update positions table with live P&L
+                if (data.positions) {
+                    renderPositionsLive(data.positions, data.summary);
+                }
+            });
+            
             state.evtSource = evtSource;
         }
         
-        // Refresh balance and positions (less frequent)
+        // Render positions with live P&L data from SSE
+        function renderPositionsLive(positions, summary) {
+            document.getElementById('posCount').textContent = positions.length;
+            
+            if (positions.length === 0) {
+                document.getElementById('positionsBody').innerHTML = '<tr><td colspan="8" class="empty-state">' + t('noPositions') + '</td></tr>';
+                return;
+            }
+            
+            const html = positions.map(p => {
+                const pnlClass = p.unrealized_pnl >= 0 ? 'positive' : 'negative';
+                const sideClass = p.side === 'long' ? 'positive' : 'negative';
+                const pnlSign = p.unrealized_pnl >= 0 ? '+' : '';
+                const pctSign = p.pnl_percent >= 0 ? '+' : '';
+                return `<tr>
+                    <td class="mono">${p.symbol}</td>
+                    <td class="${sideClass}">${p.side.toUpperCase()}</td>
+                    <td class="mono">${fmt(p.size, 4)}</td>
+                    <td class="mono">${fmt(p.entry_price, 0)}</td>
+                    <td class="mono">${fmt(p.current_price, 0)}</td>
+                    <td class="mono ${pnlClass}">${pnlSign}${fmt(p.unrealized_pnl, 0)} (${pctSign}${p.pnl_percent.toFixed(2)}%)</td>
+                    <td class="mono">${fmt(p.margin_used, 0)}</td>
+                    <td><button class="close-btn" onclick="closePosition('${p.symbol}')">${t('close')}</button></td>
+                </tr>`;
+            }).join('');
+            
+            document.getElementById('positionsBody').innerHTML = html;
+        }
+        
+        // Refresh account using new /api/account endpoint
         async function refreshAccount() {
-            const [balance, positions] = await Promise.all([
-                fetch('/api/balance?user_id=demo').then(r=>r.json()),
-                fetch('/api/positions?user_id=demo').then(r=>r.json())
-            ]);
-            
-            // Update header account display
-            document.getElementById('equity').textContent = fmt(balance.balance) + ' MNT';
-            document.getElementById('available').textContent = fmt(balance.available) + ' MNT';
-            document.getElementById('margin').textContent = fmt(balance.margin_used) + ' MNT';
-            
-            // Update status bar
-            document.getElementById('usedMargin').textContent = fmt(balance.margin_used) + ' MNT';
-            document.getElementById('freeMargin').textContent = fmt(balance.available) + ' MNT';
-            
-            renderPositions(positions);
+            try {
+                const [account, posData] = await Promise.all([
+                    fetch('/api/account?user_id=demo').then(r=>r.json()),
+                    fetch('/api/positions?user_id=demo').then(r=>r.json())
+                ]);
+                
+                // Update header account display
+                document.getElementById('equity').textContent = fmt(account.equity) + ' MNT';
+                document.getElementById('available').textContent = fmt(account.available) + ' MNT';
+                document.getElementById('margin').textContent = fmt(account.margin_used) + ' MNT';
+                
+                // Update status bar
+                document.getElementById('usedMargin').textContent = fmt(account.margin_used) + ' MNT';
+                document.getElementById('freeMargin').textContent = fmt(account.available) + ' MNT';
+                
+                // Render positions with new format (has .positions and .summary)
+                if (posData.positions) {
+                    renderPositionsLive(posData.positions, posData.summary);
+                }
+            } catch (e) {
+                console.log('Account refresh error:', e);
+            }
         }
         
         async function refresh() {
-            const [products, quotes, balance, positions] = await Promise.all([
+            const [products, quotes, account, posData] = await Promise.all([
                 fetch('/api/products').then(r=>r.json()),
                 fetch('/api/quotes').then(r=>r.json()),
-                fetch('/api/balance?user_id=demo').then(r=>r.json()),
+                fetch('/api/account?user_id=demo').then(r=>r.json()),
                 fetch('/api/positions?user_id=demo').then(r=>r.json())
             ]);
             
@@ -2584,16 +2641,18 @@ inline void HttpServer::setup_routes() {
             quotes.forEach(q => state.quotes[q.symbol] = q);
             
             // Update header account display
-            document.getElementById('equity').textContent = fmt(balance.balance) + ' MNT';
-            document.getElementById('available').textContent = fmt(balance.available) + ' MNT';
-            document.getElementById('margin').textContent = fmt(balance.margin_used) + ' MNT';
+            document.getElementById('equity').textContent = fmt(account.equity) + ' MNT';
+            document.getElementById('available').textContent = fmt(account.available) + ' MNT';
+            document.getElementById('margin').textContent = fmt(account.margin_used) + ' MNT';
             
             // Update status bar
-            document.getElementById('usedMargin').textContent = fmt(balance.margin_used) + ' MNT';
-            document.getElementById('freeMargin').textContent = fmt(balance.available) + ' MNT';
+            document.getElementById('usedMargin').textContent = fmt(account.margin_used) + ' MNT';
+            document.getElementById('freeMargin').textContent = fmt(account.available) + ' MNT';
             
             renderInstruments();
-            renderPositions(positions);
+            if (posData.positions) {
+                renderPositionsLive(posData.positions, posData.summary);
+            }
             if (state.selected) updateSelectedDisplay();
         }
         
@@ -2634,11 +2693,11 @@ inline void HttpServer::setup_routes() {
         
         function renderOrderbook() {
             if (!state.selected) return;
-            fetch('/api/book/' + state.selected + '?levels=10')
+            fetch('/api/orderbook/' + state.selected + '?levels=10')
                 .then(r => r.json())
                 .then(book => {
                     const q = state.quotes[state.selected] || {};
-                    const mid = q.mid || 1000000;
+                    const mid = q.mid || book.best_bid || book.best_ask || 1000000;
                     const maxQty = Math.max(
                         ...book.bids.map(b => b.quantity),
                         ...book.asks.map(a => a.quantity),
@@ -2725,10 +2784,11 @@ inline void HttpServer::setup_routes() {
             refresh();
         }
         
+        // Legacy renderPositions - kept for compatibility
         function renderPositions(positions) {
             document.getElementById('posCount').textContent = positions.length;
             if (!positions.length) {
-                document.getElementById('positionsBody').innerHTML = '<tr><td colspan="8" class="empty-state">No open positions</td></tr>';
+                document.getElementById('positionsBody').innerHTML = '<tr><td colspan="8" class="empty-state">' + t('noPositions') + '</td></tr>';
                 return;
             }
             const html = positions.map(p => {
@@ -2741,16 +2801,20 @@ inline void HttpServer::setup_routes() {
                     <td class="mono">${fmt(p.entry_price,2)}</td>
                     <td class="mono ${pnlClass}">${p.unrealized_pnl>=0?'+':''}${fmt(p.unrealized_pnl,2)}</td>
                     <td class="mono">${fmt(p.margin_used,2)}</td>
-                    <td><button class="close-btn" onclick="closePos('${p.symbol}')">Close</button></td>
+                    <td><button class="close-btn" onclick="closePosition('${p.symbol}')">${t('close')}</button></td>
                 </tr>`;
             }).join('');
             document.getElementById('positionsBody').innerHTML = html;
         }
         
-        async function closePos(symbol) {
+        // Close position - unified function
+        async function closePosition(symbol) {
             await fetch('/api/position/close', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({user_id:'demo', symbol:symbol}) });
             refresh();
         }
+        
+        // Legacy alias
+        async function closePos(symbol) { return closePosition(symbol); }
         
         init();
     </script>

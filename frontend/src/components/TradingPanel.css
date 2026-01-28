@@ -240,3 +240,30 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Order Confirmation Modal Content */
+.confirm-order-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.confirm-order-details p {
+  margin: 0;
+  color: #abb2bf;
+  font-size: 0.9rem;
+}
+
+.confirm-order-details strong {
+  color: #61afef;
+}
+
+.confirm-order-details .confirm-warning {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: rgba(224, 108, 117, 0.1);
+  border-radius: 4px;
+  color: #e06c75;
+  font-size: 0.8rem;
+  text-align: center;
+}
