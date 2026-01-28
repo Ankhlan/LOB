@@ -6,4 +6,5 @@ export { TradingPanel } from './TradingPanel';
 export { PriceChart } from './PriceChart';
 export { ConfirmModal } from './ConfirmModal';
 export { Positions } from './Positions';
+export { AccountSummary } from './AccountSummary';
 export { LanguageSwitcher } from './LanguageSwitcher';

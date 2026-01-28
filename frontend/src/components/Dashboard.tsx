@@ -5,6 +5,7 @@ import { OrderBook } from './OrderBook';
 import { TradingPanel } from './TradingPanel';
 import { PriceChart } from './PriceChart';
 import { Positions } from './Positions';
+import { AccountSummary } from './AccountSummary';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { t } from '../i18n';
 import './Dashboard.css';
@@ -51,10 +52,11 @@ export function Dashboard({ onLogout }: DashboardProps) {
         </nav>
         <div className="user-section">
           <LanguageSwitcher />
-          <span className="balance">₮ 1,000,000</span>
           <button className="logout-btn" onClick={handleLogout}>{t('logout')}</button>
         </div>
       </header>
+
+      <AccountSummary />
 
       <main className="dash-content">
         {activeTab === 'trade' ? (
