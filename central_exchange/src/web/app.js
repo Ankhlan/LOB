@@ -965,6 +965,13 @@ function renderPositionsLive(positions, summary) {
     document.getElementById('positionsBody').innerHTML = html;
 }
 
+// ===== PORTFOLIO TRACKING =====
+const portfolioState = {
+    dailyPnlHistory: [], // Store P&L values for sparkline
+    maxHistoryPoints: 60, // 1 minute at 1s refresh
+    startingEquity: null // Track starting equity for daily P&L
+};
+
 // Refresh account using new /api/account endpoint
 async function refreshAccount() {
     try {
@@ -972,16 +979,19 @@ async function refreshAccount() {
             fetch('/api/account?user_id=demo').then(r=>r.json()),
             fetch('/api/positions?user_id=demo').then(r=>r.json())
         ]);
-        
+
         // Update header account display
         document.getElementById('equity').textContent = fmt(account.equity) + ' MNT';
         document.getElementById('available').textContent = fmt(account.available) + ' MNT';
         document.getElementById('margin').textContent = fmt(account.margin_used) + ' MNT';
-        
+
         // Update status bar
         document.getElementById('usedMargin').textContent = fmt(account.margin_used) + ' MNT';
         document.getElementById('freeMargin').textContent = fmt(account.available) + ' MNT';
-        
+
+        // Update portfolio summary
+        updatePortfolioSummary(account, posData);
+
         // Render positions with new format (has .positions and .summary)
         if (posData.positions) {
             renderPositionsLive(posData.positions, posData.summary);
@@ -989,6 +999,99 @@ async function refreshAccount() {
     } catch (e) {
         console.log('Account refresh error:', e);
     }
+}
+
+function updatePortfolioSummary(account, posData) {
+    // Track starting equity
+    if (portfolioState.startingEquity === null) {
+        portfolioState.startingEquity = account.equity;
+    }
+
+    // Calculate unrealized P&L
+    const unrealizedPnl = posData.summary ? posData.summary.unrealized_pnl || 0 : 0;
+    const unrealizedEl = document.getElementById('unrealizedPnl');
+    if (unrealizedEl) {
+        unrealizedEl.textContent = (unrealizedPnl >= 0 ? '+' : '') + fmt(unrealizedPnl, 0) + ' MNT';
+        unrealizedEl.className = 'account-value ' + (unrealizedPnl >= 0 ? 'positive' : 'negative');
+    }
+
+    // Calculate margin percentage
+    const marginPct = account.equity > 0 ? (account.margin_used / account.equity * 100) : 0;
+    const marginPctEl = document.getElementById('marginPct');
+    if (marginPctEl) {
+        marginPctEl.textContent = marginPct.toFixed(1) + '%';
+        marginPctEl.className = 'account-value ' + (marginPct > 80 ? 'negative' : marginPct > 50 ? '' : 'positive');
+    }
+
+    // Track daily P&L for sparkline
+    const dailyPnl = account.equity - portfolioState.startingEquity;
+    portfolioState.dailyPnlHistory.push(dailyPnl);
+    if (portfolioState.dailyPnlHistory.length > portfolioState.maxHistoryPoints) {
+        portfolioState.dailyPnlHistory.shift();
+    }
+
+    // Draw sparkline
+    drawPnlSparkline();
+}
+
+function drawPnlSparkline() {
+    const canvas = document.getElementById('dailyPnlSparkline');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // Scale for high DPI
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+
+    ctx.clearRect(0, 0, width * dpr, height * dpr);
+
+    const data = portfolioState.dailyPnlHistory;
+    if (data.length < 2) return;
+
+    const min = Math.min(...data);
+    const max = Math.max(...data);
+    const range = max - min || 1;
+
+    // Normalize to canvas height
+    const points = data.map((v, i) => ({
+        x: (i / (data.length - 1)) * width,
+        y: height - ((v - min) / range) * (height - 4) - 2
+    }));
+
+    // Draw zero line if range crosses zero
+    if (min < 0 && max > 0) {
+        const zeroY = height - ((0 - min) / range) * (height - 4) - 2;
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.setLineDash([2, 2]);
+        ctx.moveTo(0, zeroY);
+        ctx.lineTo(width, zeroY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    // Draw line
+    ctx.beginPath();
+    const lastValue = data[data.length - 1];
+    ctx.strokeStyle = lastValue >= 0 ? 'var(--green)' : 'var(--red)';
+    ctx.lineWidth = 1.5;
+
+    points.forEach((p, i) => {
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+    });
+    ctx.stroke();
+
+    // Draw endpoint dot
+    const lastPoint = points[points.length - 1];
+    ctx.beginPath();
+    ctx.fillStyle = lastValue >= 0 ? 'var(--green)' : 'var(--red)';
+    ctx.arc(lastPoint.x, lastPoint.y, 2, 0, Math.PI * 2);
+    ctx.fill();
 }
 
 async function refresh() {
@@ -1015,6 +1118,9 @@ async function refresh() {
         // Update status bar
         document.getElementById('usedMargin').textContent = fmt(account.margin_used || 0) + ' MNT';
         document.getElementById('freeMargin').textContent = fmt(account.available || 0) + ' MNT';
+
+        // Update portfolio summary
+        updatePortfolioSummary(account, posData || {});
 
         console.log('  refresh(): Calling renderInstruments()...');
         renderInstruments();

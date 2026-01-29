@@ -825,6 +825,94 @@ inline void HttpServer::setup_routes() {
             res.set_content(R"({"error":"Order not found"})", "application/json");
         }
     });
+    
+    // Order modify (cancel + replace pattern)
+    server_->Put("/api/order/:symbol/:id", [](const httplib::Request& req, httplib::Response& res) {
+        auto auth = authenticate(req);
+        if (!auth.success) {
+            res.status = auth.error_code;
+            res.set_content(json{{"error", auth.error}}.dump(), "application/json");
+            return;
+        }
+        
+        try {
+            auto symbol = req.path_params.at("symbol");
+            OrderId old_id = std::stoull(req.path_params.at("id"));
+            auto data = json::parse(req.body);
+            
+            // Cancel old order first
+            auto cancelled = MatchingEngine::instance().cancel_order(symbol, old_id);
+            if (!cancelled) {
+                res.status = 404;
+                res.set_content(R"({"error":"Original order not found"})", "application/json");
+                return;
+            }
+            
+            // Submit new order with modified parameters
+            double new_price = data.value("price", to_mnt(cancelled->price));
+            double new_qty = data.value("quantity", cancelled->quantity);
+            std::string client_id = data.value("client_id", cancelled->client_id);
+            
+            auto trades = MatchingEngine::instance().submit_order(
+                symbol,
+                auth.user_id,
+                cancelled->side,
+                cancelled->type,
+                to_micromnt(new_price),
+                new_qty,
+                client_id
+            );
+            
+            json response;
+            response["success"] = true;
+            response["cancelled_id"] = old_id;
+            response["new_order"] = {
+                {"symbol", symbol},
+                {"side", cancelled->side == Side::BUY ? "BUY" : "SELL"},
+                {"price", new_price},
+                {"quantity", new_qty}
+            };
+            response["trades_count"] = trades.size();
+            
+            res.set_content(response.dump(), "application/json");
+            
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+    
+    // Get open orders for a user
+    server_->Get("/api/orders/open", [](const httplib::Request& req, httplib::Response& res) {
+        auto auth = authenticate(req);
+        if (!auth.success) {
+            res.status = auth.error_code;
+            res.set_content(json{{"error", auth.error}}.dump(), "application/json");
+            return;
+        }
+        
+        // Get from database
+        auto& db = Database::instance();
+        auto orders = db.get_user_orders(auth.user_id, 100);
+        
+        json orders_json = json::array();
+        for (const auto& o : orders) {
+            if (o.status == "pending" || o.status == "partial") {
+                orders_json.push_back({
+                    {"id", o.id},
+                    {"symbol", o.symbol},
+                    {"side", o.side},
+                    {"price", o.price},
+                    {"quantity", o.quantity},
+                    {"order_type", o.order_type},
+                    {"status", o.status},
+                    {"created_at", o.created_at}
+                });
+            }
+        }
+        
+        res.set_content(orders_json.dump(), "application/json");
+    });
 
     // ==================== POSITIONS ====================
     
