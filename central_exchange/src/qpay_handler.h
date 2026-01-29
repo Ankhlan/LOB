@@ -383,6 +383,45 @@ public:
         return "CRE_" + user_id + "_" + std::to_string(ts);
     }
     
+    /**
+     * Get all transactions (admin use)
+     */
+    std::vector<PaymentTransaction> get_all_transactions() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        std::vector<PaymentTransaction> result;
+        for (const auto& [id, txn] : transactions_) {
+            result.push_back(txn);
+        }
+        return result;
+    }
+    
+    /**
+     * Cancel a pending transaction
+     */
+    std::tuple<bool, std::string> cancel_transaction(const std::string& txn_id) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        
+        auto it = transactions_.find(txn_id);
+        if (it == transactions_.end()) {
+            return {false, "Transaction not found"};
+        }
+        
+        auto& txn = it->second;
+        if (txn.status != TxnStatus::PENDING) {
+            return {false, "Transaction not pending"};
+        }
+        
+        // Release pending funds for withdrawals
+        if (txn.type == TxnType::WITHDRAWAL) {
+            pending_withdrawals_[txn.user_id] -= txn.amount_mnt;
+        }
+        
+        txn.status = TxnStatus::CANCELLED;
+        txn.updated_at = now_ms();
+        
+        return {true, ""};
+    }
+    
     bool is_initialized() const { return initialized_; }
     
 private:

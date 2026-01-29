@@ -20,6 +20,7 @@
 #include "security_config.h"
 #include "accounting_engine.h"
 #include "circuit_breaker.h"
+#include "kyc_service.h"
 
 #include <httplib.h>
 #include <array>
@@ -319,6 +320,159 @@ inline void HttpServer::setup_routes() {
             Auth::instance().logout(token);
         }
         res.set_content(R"({"success":true})", "application/json");
+    });
+    
+    // ==================== KYC ENDPOINTS ====================
+    
+    // Submit KYC information
+    server_->Post("/api/kyc", [](const httplib::Request& req, httplib::Response& res) {
+        std::string auth_header = req.get_header_value("Authorization");
+        std::string token = Auth::instance().extract_token(auth_header);
+        auto payload = Auth::instance().verify_token(token);
+        
+        if (!payload) {
+            res.status = 401;
+            res.set_content(R"({"error":"Unauthorized"})", "application/json");
+            return;
+        }
+        
+        try {
+            auto body = json::parse(req.body);
+            std::string full_name = body.value("full_name", "");
+            std::string dob = body.value("date_of_birth", "");
+            std::string nationality = body.value("nationality", "");
+            std::string address = body.value("address", "");
+            std::string phone = body.value("phone", "");
+            
+            if (full_name.empty() || dob.empty() || nationality.empty()) {
+                res.status = 400;
+                res.set_content(R"({"error":"Missing required fields: full_name, date_of_birth, nationality"})", "application/json");
+                return;
+            }
+            
+            bool submitted = KYCService::instance().submit_kyc(
+                payload->user_id, full_name, dob, nationality, address, phone);
+            
+            if (submitted) {
+                res.set_content(json{
+                    {"success", true},
+                    {"status", "pending"},
+                    {"message", "KYC submitted for review"}
+                }.dump(), "application/json");
+            } else {
+                res.status = 400;
+                res.set_content(R"({"error":"KYC already approved or pending"})", "application/json");
+            }
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+    
+    // Get KYC status
+    server_->Get("/api/kyc/status", [](const httplib::Request& req, httplib::Response& res) {
+        std::string auth_header = req.get_header_value("Authorization");
+        std::string token = Auth::instance().extract_token(auth_header);
+        auto payload = Auth::instance().verify_token(token);
+        
+        if (!payload) {
+            res.status = 401;
+            res.set_content(R"({"error":"Unauthorized"})", "application/json");
+            return;
+        }
+        
+        auto record = KYCService::instance().get_record(payload->user_id);
+        auto status = KYCService::instance().get_status(payload->user_id);
+        
+        json response = {
+            {"user_id", payload->user_id},
+            {"status", KYCService::status_to_string(status)},
+            {"daily_deposit_limit_mnt", record.daily_deposit_limit / 1000000.0},
+            {"daily_withdraw_limit_mnt", record.daily_withdraw_limit / 1000000.0}
+        };
+        
+        if (status == KYCStatus::REJECTED) {
+            response["rejection_reason"] = record.rejection_reason;
+        }
+        
+        res.set_content(response.dump(), "application/json");
+    });
+    
+    // Admin: Get pending KYC reviews
+    server_->Get("/api/admin/kyc/pending", [](const httplib::Request& req, httplib::Response& res) {
+        (void)req;  // Admin endpoints open for now (add auth middleware later)
+        
+        auto pending = KYCService::instance().get_pending_kyc();
+        json response = json::array();
+        
+        for (const auto& rec : pending) {
+            response.push_back({
+                {"user_id", rec.user_id},
+                {"full_name", rec.full_name},
+                {"date_of_birth", rec.date_of_birth},
+                {"nationality", rec.nationality},
+                {"address", rec.address},
+                {"phone", rec.phone},
+                {"submitted_at", rec.submitted_at},
+                {"documents_count", rec.documents.size()}
+            });
+        }
+        
+        res.set_content(response.dump(), "application/json");
+    });
+    
+    // Admin: Approve KYC
+    server_->Post("/api/admin/kyc/approve", [](const httplib::Request& req, httplib::Response& res) {
+        // Admin endpoints open for now (add auth middleware later)
+        
+        try {
+            auto body = json::parse(req.body);
+            std::string user_id = body["user_id"];
+            
+            bool approved = KYCService::instance().approve_kyc(user_id, "admin");
+            
+            if (approved) {
+                res.set_content(json{
+                    {"success", true},
+                    {"user_id", user_id},
+                    {"status", "approved"}
+                }.dump(), "application/json");
+            } else {
+                res.status = 400;
+                res.set_content(R"({"error":"User not found or not pending"})", "application/json");
+            }
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+    
+    // Admin: Reject KYC
+    server_->Post("/api/admin/kyc/reject", [](const httplib::Request& req, httplib::Response& res) {
+        // Admin endpoints open for now (add auth middleware later)
+        
+        try {
+            auto body = json::parse(req.body);
+            std::string user_id = body["user_id"];
+            std::string reason = body.value("reason", "Verification failed");
+            
+            bool rejected = KYCService::instance().reject_kyc(user_id, "admin", reason);
+            
+            if (rejected) {
+                res.set_content(json{
+                    {"success", true},
+                    {"user_id", user_id},
+                    {"status", "rejected"},
+                    {"reason", reason}
+                }.dump(), "application/json");
+            } else {
+                res.status = 400;
+                res.set_content(R"({"error":"User not found or not pending"})", "application/json");
+            }
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
     });
     
     // ==================== PHONE OTP AUTH ====================
@@ -2038,6 +2192,71 @@ inline void HttpServer::setup_routes() {
     });
     
     // ==================== ADMIN DASHBOARD ENDPOINTS ====================
+    
+    // Admin: List pending withdrawals
+    server_->Get("/api/admin/withdrawals/pending", [](const httplib::Request&, httplib::Response& res) {
+        auto& qpay = QPayHandler::instance();
+        auto all_txns = qpay.get_all_transactions();
+        
+        json pending = json::array();
+        for (const auto& txn : all_txns) {
+            if (txn.type == TxnType::WITHDRAWAL && txn.status == TxnStatus::PENDING) {
+                pending.push_back({
+                    {"id", txn.id},
+                    {"user_id", txn.user_id},
+                    {"phone", txn.phone},
+                    {"amount_mnt", txn.amount_mnt},
+                    {"created_at", txn.created_at}
+                });
+            }
+        }
+        
+        res.set_content(pending.dump(), "application/json");
+    });
+    
+    // Admin: Approve withdrawal
+    server_->Post("/api/admin/withdraw/approve/:id", [](const httplib::Request& req, httplib::Response& res) {
+        std::string txn_id = req.path_params.at("id");
+        
+        auto& qpay = QPayHandler::instance();
+        auto [success, id, error] = qpay.confirm_withdrawal(txn_id);
+        
+        if (success) {
+            res.set_content(json{
+                {"success", true},
+                {"transaction_id", id},
+                {"status", "confirmed"}
+            }.dump(), "application/json");
+        } else {
+            res.status = 400;
+            res.set_content(json{
+                {"success", false},
+                {"error", error}
+            }.dump(), "application/json");
+        }
+    });
+    
+    // Admin: Reject withdrawal
+    server_->Post("/api/admin/withdraw/reject/:id", [](const httplib::Request& req, httplib::Response& res) {
+        std::string txn_id = req.path_params.at("id");
+        
+        auto& qpay = QPayHandler::instance();
+        auto [success, error] = qpay.cancel_transaction(txn_id);
+        
+        if (success) {
+            res.set_content(json{
+                {"success", true},
+                {"transaction_id", txn_id},
+                {"status", "cancelled"}
+            }.dump(), "application/json");
+        } else {
+            res.status = 400;
+            res.set_content(json{
+                {"success", false},
+                {"error", error}
+            }.dump(), "application/json");
+        }
+    });
     
     // Admin stats - order count, trade volume, active users
     server_->Get("/api/admin/stats", [](const httplib::Request&, httplib::Response& res) {
