@@ -1,6 +1,41 @@
 // Central Exchange - Trading Platform Application
 "use strict";
 
+// ===== QUOTE CONFLATION (60fps max) =====
+const renderQueue = { quotes: false, depth: false, trades: false, positions: false };
+let renderScheduled = false;
+
+function scheduleRender(type) {
+    renderQueue[type] = true;
+    if (!renderScheduled) {
+        renderScheduled = true;
+        requestAnimationFrame(doRender);
+    }
+}
+
+function doRender() {
+    renderScheduled = false;
+    if (renderQueue.quotes) {
+        renderQueue.quotes = false;
+        renderInstruments();
+        if (state.selected) updateSelectedDisplay();
+    }
+    if (renderQueue.depth) {
+        renderQueue.depth = false;
+        if (!obState.animFrame) {
+            obState.animFrame = requestAnimationFrame(animateOrderbook);
+        }
+    }
+    if (renderQueue.trades) {
+        renderQueue.trades = false;
+        renderTicker();
+    }
+    if (renderQueue.positions) {
+        renderQueue.positions = false;
+        // Position rendering handled by SSE handler
+    }
+}
+
 // ===== CUSTOM CANVAS CHART (Zero Dependencies) =====
 class ChartCanvas {
     constructor(container, options = {}) {
@@ -829,9 +864,45 @@ function startQuoteStream() {
 
     evtSource.addEventListener('quotes', (e) => {
         const quotes = JSON.parse(e.data);
-        quotes.forEach(q => state.quotes[q.symbol] = q);
-        renderInstruments();
-        if (state.selected) updateSelectedDisplay();
+        quotes.forEach(q => {
+            // Track price changes for flash animation
+            const prev = state.quotes[q.symbol];
+            if (prev && prev.mid !== q.mid) {
+                q._priceDir = q.mid > prev.mid ? 'up' : 'down';
+                q._flashUntil = Date.now() + 500;
+            }
+            state.quotes[q.symbol] = q;
+        });
+        scheduleRender('quotes');
+    });
+
+    // Depth updates for orderbook
+    evtSource.addEventListener('depth', (e) => {
+        const depth = JSON.parse(e.data);
+        if (depth.symbol === state.selected) {
+            obState.targetBids = (depth.bids || []).slice(0, 8).map(b => ({ price: b.price, qty: b.quantity }));
+            obState.targetAsks = (depth.asks || []).slice(0, 8).map(a => ({ price: a.price, qty: a.quantity }));
+            scheduleRender('depth');
+        }
+    });
+
+    // Trade updates for ticker
+    evtSource.addEventListener('trades', (e) => {
+        const trades = JSON.parse(e.data);
+        if (Array.isArray(trades)) {
+            trades.forEach(t => {
+                tickerState.trades.unshift({
+                    price: t.price,
+                    quantity: t.quantity,
+                    side: t.taker_side || 'BUY',
+                    timestamp: t.timestamp || Date.now() / 1000
+                });
+            });
+            if (tickerState.trades.length > tickerState.maxTrades) {
+                tickerState.trades.length = tickerState.maxTrades;
+            }
+            scheduleRender('trades');
+        }
     });
 
     evtSource.onerror = () => {
@@ -978,13 +1049,17 @@ function renderInstruments() {
     const html = filtered.map(p => {
         const q = state.quotes[p.symbol] || {};
         const sel = state.selected === p.symbol ? 'selected' : '';
-        return `<div class="instrument-row ${sel}" onclick="selectInstrument('${p.symbol}')">
-            <div><div class="instrument-symbol">${p.symbol}</div><div class="instrument-name">${p.name}</div></div>
-            <div class="instrument-price"><div class="instrument-bid">${fmt(q.bid||0,0)}</div><div class="instrument-ask">${fmt(q.ask||0,0)}</div></div>
-        </div>`;
+        // Price flash animation
+        var flashClass = '';
+        if (q._flashUntil && Date.now() < q._flashUntil) {
+            flashClass = q._priceDir === 'up' ? 'price-flash-up' : 'price-flash-down';
+        }
+        return '<div class="instrument-row ' + sel + ' ' + flashClass + '" onclick="selectInstrument(\'' + p.symbol + '\')">' +
+            '<div><div class="instrument-symbol">' + p.symbol + '</div><div class="instrument-name">' + p.name + '</div></div>' +
+            '<div class="instrument-price"><div class="instrument-bid">' + fmt(q.bid||0,0) + '</div><div class="instrument-ask">' + fmt(q.ask||0,0) + '</div></div>' +
+        '</div>';
     }).join('');
     list.innerHTML = html;
-    console.log('Rendered', filtered.length, 'instruments');
 }
 
 function filterInstruments() { renderInstruments(); }

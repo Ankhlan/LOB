@@ -48,6 +48,18 @@ public:
     void set_trade_callback(TradeCallback cb) { on_trade_ = std::move(cb); }
     void set_order_callback(OrderCallback cb) { on_order_ = std::move(cb); }
     
+    // Internal methods for Disruptor pattern (called from matching thread, NO LOCKS)
+    std::vector<Trade> submit_order_internal(
+        const std::string& symbol,
+        const std::string& user_id,
+        Side side,
+        OrderType type,
+        PriceMicromnt price,
+        double quantity,
+        const std::string& client_id = ""
+    );
+    std::optional<Order> cancel_order_internal(const std::string& symbol, OrderId id);
+    
     // Stats
     size_t book_count() const { return books_.size(); }
     
@@ -218,6 +230,72 @@ inline void MatchingEngine::on_trade_internal(const Trade& trade) {
 
 inline void MatchingEngine::on_order_internal(const Order& order) {
     if (on_order_) on_order_(order);
+}
+
+// ========== DISRUPTOR INTERNAL METHODS (NO LOCKS) ==========
+
+inline std::vector<Trade> MatchingEngine::submit_order_internal(
+    const std::string& symbol,
+    const std::string& user_id,
+    Side side,
+    OrderType type,
+    PriceMicromnt price,
+    double quantity,
+    const std::string& client_id
+) {
+    // NO LOCK - called only from matching thread!
+    
+    auto* product = ProductCatalog::instance().get(symbol);
+    if (!product || !product->is_active) return {};
+    
+    if (quantity < product->min_order_size || quantity > product->max_order_size) {
+        return {};
+    }
+    
+    auto& pm = PositionManager::instance();
+    if (type == OrderType::LIMIT && !pm.check_margin(user_id, symbol, quantity, price)) {
+        return {};
+    }
+    
+    auto it = books_.find(symbol);
+    if (it == books_.end()) return {};
+    
+    auto order = std::make_shared<Order>();
+    order->id = generate_order_id();
+    order->symbol = symbol;
+    order->user_id = user_id;
+    order->side = side;
+    order->type = type;
+    order->price = price;
+    order->quantity = quantity;
+    order->client_id = client_id;
+    
+    return it->second->submit(order);
+}
+
+inline std::optional<Order> MatchingEngine::cancel_order_internal(const std::string& symbol, OrderId id) {
+    // NO LOCK - called only from matching thread!
+    
+    auto it = books_.find(symbol);
+    if (it == books_.end()) return std::nullopt;
+    
+    auto cancelled = it->second->cancel(id);
+    
+    if (cancelled) {
+        auto* product = ProductCatalog::instance().get(symbol);
+        if (product) {
+            double remaining_value = cancelled->remaining_qty * cancelled->price;
+            double margin_to_release = remaining_value * product->margin_rate;
+            
+            auto& pm = PositionManager::instance();
+            auto* acc = pm.get_or_create_account(cancelled->user_id);
+            if (acc) {
+                acc->margin_used = std::max(0.0, acc->margin_used - margin_to_release);
+            }
+        }
+    }
+    
+    return cancelled;
 }
 
 } // namespace central_exchange
