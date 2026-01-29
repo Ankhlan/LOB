@@ -56,7 +56,7 @@ class ChartCanvas {
             ...options
         };
         this.showVolume = true;
-        this.indicators = { sma: 20, ema: 0 }; // periods, 0 = disabled
+        this.indicators = { sma: 20, ema: 0, bb: 0 }; // periods, 0 = disabled (bb = Bollinger Bands)
         this.padding = { top: 20, right: 80, bottom: 30, left: 10 };
         this.crosshair = null;
         
@@ -133,7 +133,36 @@ class ChartCanvas {
         }
         return ema;
     }
-    
+
+    // Calculate Bollinger Bands (period SMA + 2 standard deviations)
+    calcBollingerBands(period, stdDev = 2) {
+        if (!this.data || this.data.length < period) return [];
+        const bands = [];
+        for (let i = period - 1; i < this.data.length; i++) {
+            let sum = 0;
+            const prices = [];
+            for (let j = 0; j < period; j++) {
+                const price = this.data[i - j].close;
+                sum += price;
+                prices.push(price);
+            }
+            const sma = sum / period;
+            // Standard deviation
+            let variance = 0;
+            for (let j = 0; j < period; j++) {
+                variance += Math.pow(prices[j] - sma, 2);
+            }
+            const std = Math.sqrt(variance / period);
+            bands.push({
+                idx: i,
+                middle: sma,
+                upper: sma + std * stdDev,
+                lower: sma - std * stdDev
+            });
+        }
+        return bands;
+    }
+
     onMouseMove(e) {
         const rect = this.canvas.getBoundingClientRect();
         this.crosshair = { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -283,7 +312,72 @@ class ChartCanvas {
                 ctx.stroke();
             }
         }
-        
+
+        // Draw Bollinger Bands
+        if (this.indicators.bb > 0) {
+            const bands = this.calcBollingerBands(this.indicators.bb);
+            if (bands.length > 1) {
+                // Fill between bands
+                ctx.fillStyle = 'rgba(97, 175, 239, 0.1)';
+                ctx.beginPath();
+                let started = false;
+                // Draw upper band forward
+                bands.forEach(pt => {
+                    if (pt.idx >= startIdx) {
+                        const i = pt.idx - startIdx;
+                        const x = p.left + (i * (chartW / candleCount)) + (chartW / candleCount / 2);
+                        const y = p.top + ((maxPrice - pt.upper) / (maxPrice - minPrice)) * priceChartH;
+                        if (!started) { ctx.moveTo(x, y); started = true; }
+                        else ctx.lineTo(x, y);
+                    }
+                });
+                // Draw lower band backward
+                for (let j = bands.length - 1; j >= 0; j--) {
+                    const pt = bands[j];
+                    if (pt.idx >= startIdx) {
+                        const i = pt.idx - startIdx;
+                        const x = p.left + (i * (chartW / candleCount)) + (chartW / candleCount / 2);
+                        const y = p.top + ((maxPrice - pt.lower) / (maxPrice - minPrice)) * priceChartH;
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.closePath();
+                ctx.fill();
+
+                // Draw band lines
+                ctx.strokeStyle = this.options.accentColor;
+                ctx.lineWidth = 1;
+                ctx.setLineDash([2, 2]);
+                // Upper band
+                ctx.beginPath();
+                started = false;
+                bands.forEach(pt => {
+                    if (pt.idx >= startIdx) {
+                        const i = pt.idx - startIdx;
+                        const x = p.left + (i * (chartW / candleCount)) + (chartW / candleCount / 2);
+                        const y = p.top + ((maxPrice - pt.upper) / (maxPrice - minPrice)) * priceChartH;
+                        if (!started) { ctx.moveTo(x, y); started = true; }
+                        else ctx.lineTo(x, y);
+                    }
+                });
+                ctx.stroke();
+                // Lower band
+                ctx.beginPath();
+                started = false;
+                bands.forEach(pt => {
+                    if (pt.idx >= startIdx) {
+                        const i = pt.idx - startIdx;
+                        const x = p.left + (i * (chartW / candleCount)) + (chartW / candleCount / 2);
+                        const y = p.top + ((maxPrice - pt.lower) / (maxPrice - minPrice)) * priceChartH;
+                        if (!started) { ctx.moveTo(x, y); started = true; }
+                        else ctx.lineTo(x, y);
+                    }
+                });
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+
         // Crosshair
         if (this.crosshair && this.crosshair.x > p.left && this.crosshair.x < w - p.right) {
             ctx.strokeStyle = this.options.accentColor;
@@ -744,7 +838,7 @@ function setTimeframe(tf) {
     state.timeframe = tf;
     // Only remove active from timeframe buttons, not indicator buttons
     document.querySelectorAll('.tf-btn').forEach(b => {
-        if (!['volBtn','smaBtn','emaBtn'].includes(b.id)) b.classList.remove('active');
+        if (!['volBtn','smaBtn','emaBtn','bbBtn'].includes(b.id)) b.classList.remove('active');
     });
     event.target.classList.add('active');
     state.priceHistory[state.selected] = null;
@@ -774,6 +868,103 @@ function toggleEMA() {
     btn.classList.toggle('active', enabled);
     if (state.chart) state.chart.setIndicator('ema', enabled ? 12 : 0);
 }
+
+// Toggle Bollinger Bands indicator (20 period)
+function toggleBB() {
+    const btn = document.getElementById('bbBtn');
+    const enabled = !btn.classList.contains('active');
+    btn.classList.toggle('active', enabled);
+    if (state.chart) state.chart.setIndicator('bb', enabled ? 20 : 0);
+}
+
+// ===== MULTI-CHART LAYOUT =====
+let chartLayout = 'single'; // 'single' or 'quad'
+const gridCharts = [null, null, null, null];
+const gridSymbols = ['XAU-MNT-PERP', 'BTC-MNT-PERP', 'ETH-MNT-PERP', 'SPX-MNT-PERP'];
+
+function setChartLayout(layout) {
+    chartLayout = layout;
+    document.querySelectorAll('.layout-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.textContent.includes(layout === 'single' ? '▢' : '▦'));
+    });
+
+    const singleContainer = document.getElementById('chartContainer');
+    const gridContainer = document.getElementById('chartGrid');
+
+    if (layout === 'single') {
+        singleContainer.style.display = 'block';
+        gridContainer.style.display = 'none';
+    } else {
+        singleContainer.style.display = 'none';
+        gridContainer.style.display = 'grid';
+        initGridCharts();
+    }
+}
+
+function initGridCharts() {
+    // Populate symbol dropdowns
+    const selects = document.querySelectorAll('.chart-symbol-select');
+    selects.forEach((select, idx) => {
+        if (select.options.length === 0) {
+            state.instruments.forEach(inst => {
+                const opt = document.createElement('option');
+                opt.value = inst.symbol;
+                opt.textContent = inst.symbol;
+                select.appendChild(opt);
+            });
+        }
+        select.value = gridSymbols[idx];
+    });
+
+    // Create chart instances for each cell
+    for (let i = 0; i < 4; i++) {
+        const container = document.getElementById('chartCell' + i);
+        if (!gridCharts[i] && container) {
+            gridCharts[i] = new ChartCanvas(container, {
+                bgColor: getComputedStyle(document.body).getPropertyValue('--bg-primary').trim(),
+                textColor: getComputedStyle(document.body).getPropertyValue('--text-secondary').trim(),
+                gridColor: getComputedStyle(document.body).getPropertyValue('--border').trim()
+            });
+            loadGridChartData(i);
+        }
+    }
+}
+
+function setGridSymbol(slot, symbol) {
+    gridSymbols[slot] = symbol;
+    loadGridChartData(slot);
+}
+
+async function loadGridChartData(slot) {
+    if (!gridCharts[slot]) return;
+    const symbol = gridSymbols[slot];
+    try {
+        const response = await fetch('/api/candles/' + symbol + '?timeframe=' + state.timeframe + '&limit=100');
+        const data = await response.json();
+        if (data && data.length > 0) {
+            const candles = data.map(c => ({
+                time: c.time || c.timestamp,
+                open: c.open,
+                high: c.high,
+                low: c.low,
+                close: c.close,
+                volume: c.volume || 0
+            }));
+            gridCharts[slot].setData(candles);
+        }
+    } catch (e) {
+        console.log('Grid chart load error:', e);
+    }
+}
+
+// Update grid charts periodically
+setInterval(() => {
+    if (chartLayout === 'quad') {
+        for (let i = 0; i < 4; i++) {
+            loadGridChartData(i);
+        }
+    }
+}, 5000);
 
 // Keyboard shortcuts
 document.addEventListener('keydown', (e) => {

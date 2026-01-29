@@ -181,6 +181,10 @@
             <div class="chart-area">
                 <div class="chart-tabs">
                     <div class="chart-tab active"><span id="tabSymbol">XAU-MNT-PERP</span><span class="close">×</span></div>
+                    <div class="chart-layout-toggle">
+                        <button class="layout-btn active" onclick="setChartLayout('single')" title="Single Chart">▢</button>
+                        <button class="layout-btn" onclick="setChartLayout('quad')" title="2x2 Grid">▦</button>
+                    </div>
                 </div>
                 <div class="chart-toolbar">
                     <button class="tf-btn active" onclick="setTimeframe('1')">1m</button>
@@ -193,6 +197,7 @@
                     <button class="tf-btn active" id="volBtn" onclick="toggleVolume()" title="Volume">VOL</button>
                     <button class="tf-btn" id="smaBtn" onclick="toggleSMA()" title="SMA 20">SMA</button>
                     <button class="tf-btn" id="emaBtn" onclick="toggleEMA()" title="EMA 12">EMA</button>
+                    <button class="tf-btn" id="bbBtn" onclick="toggleBB()" title="Bollinger Bands 20">BB</button>
                 </div>
                 <div class="chart-info">
                     <div class="chart-symbol" id="chartSymbol">XAU-MNT-PERP</div>
@@ -200,6 +205,33 @@
                     <div class="chart-change up" id="chartChange">+0.00%</div>
                 </div>
                 <div class="chart-container" id="chartContainer"></div>
+                <!-- Multi-Chart Grid (hidden by default) -->
+                <div class="chart-grid" id="chartGrid" style="display:none;">
+                    <div class="chart-cell" data-slot="0">
+                        <div class="chart-cell-header">
+                            <select class="chart-symbol-select" onchange="setGridSymbol(0, this.value)"></select>
+                        </div>
+                        <div class="chart-cell-body" id="chartCell0"></div>
+                    </div>
+                    <div class="chart-cell" data-slot="1">
+                        <div class="chart-cell-header">
+                            <select class="chart-symbol-select" onchange="setGridSymbol(1, this.value)"></select>
+                        </div>
+                        <div class="chart-cell-body" id="chartCell1"></div>
+                    </div>
+                    <div class="chart-cell" data-slot="2">
+                        <div class="chart-cell-header">
+                            <select class="chart-symbol-select" onchange="setGridSymbol(2, this.value)"></select>
+                        </div>
+                        <div class="chart-cell-body" id="chartCell2"></div>
+                    </div>
+                    <div class="chart-cell" data-slot="3">
+                        <div class="chart-cell-header">
+                            <select class="chart-symbol-select" onchange="setGridSymbol(3, this.value)"></select>
+                        </div>
+                        <div class="chart-cell-body" id="chartCell3"></div>
+                    </div>
+                </div>
             </div>
             <div class="orderbook-area">
                 <div class="ob-toggle">

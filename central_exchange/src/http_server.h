@@ -526,6 +526,31 @@ inline void HttpServer::setup_routes() {
                         if (!sink.write(pos_event.data(), pos_event.size())) {
                             break;
                         }
+                        
+                        // ===== ORDERS EVENT (with positions, every 1s) =====
+                        if (!user_id.empty()) {
+                            auto& db = Database::instance();
+                            auto user_orders = db.get_user_orders(user_id, 20);
+                            
+                            json orders_arr = json::array();
+                            for (const auto& o : user_orders) {
+                                if (o.status == "pending" || o.status == "partial") {
+                                    orders_arr.push_back({
+                                        {"id", o.id},
+                                        {"symbol", o.symbol},
+                                        {"side", o.side},
+                                        {"price", o.price},
+                                        {"quantity", o.quantity},
+                                        {"status", o.status}
+                                    });
+                                }
+                            }
+                            
+                            std::string orders_event = "event: orders\ndata: " + orders_arr.dump() + "\n\n";
+                            if (!sink.write(orders_event.data(), orders_event.size())) {
+                                break;
+                            }
+                        }
                     }
                     
 
