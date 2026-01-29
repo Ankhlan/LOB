@@ -13,8 +13,8 @@
 --text-primary: #dcdfe4;
 --text-secondary: #abb2bf;
 --text-muted: #5c6370;
---accent: #61afef;
---accent-dim: rgba(97, 175, 239, 0.15);
+--accent: #e5c07b; /* CRE Gold - Brandbook */
+--accent-dim: rgba(229, 192, 123, 0.15); /* CRE Gold dim */
 --green: #98c379;
 --green-bright: #a8d08d;
 --green-dim: rgba(152, 195, 121, 0.15);
@@ -74,7 +74,7 @@
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { height: 100%; overflow: hidden; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; background: var(--bg-app); color: var(--text-primary); font-size: 12px; display: flex; flex-direction: column; }
+body { font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; background: var(--bg-app); color: var(--text-primary); font-size: 12px; display: flex; flex-direction: column; }
 /* Consolas for prices and mono elements */
 .mono, .price, .quantity, .orderbook, .positions-table, .account-val, .stat-val { font-family: Consolas, 'Courier New', monospace !important; }
 /* ===== TOP MENU BAR - Desktop App Style ===== */
