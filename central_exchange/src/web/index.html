@@ -9,6 +9,8 @@
     <title>Central Exchange | Professional Trading Platform</title>
     <!-- Zero external dependencies - using system fonts -->
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="datagrid.css">
+    <link rel="stylesheet" href="datagrid.css">
 </head>
 <body data-theme="dark">
     <!-- LOGIN MODAL -->
@@ -311,19 +313,19 @@
         <div class="positions-content" id="tabPositions">
             <table class="positions-table">
                 <thead><tr><th>Symbol</th><th>Side</th><th>Size</th><th>Entry</th><th>Mark</th><th>P&L</th><th>Margin</th><th></th></tr></thead>
-                <tbody id="positionsBody"><tr><td colspan="8" class="empty-state">No open positions</td></tr></tbody>
+                <div id="positionsGrid" class="grid-container"></div>
             </table>
         </div>
         <div class="positions-content" id="tabOrders" style="display:none;">
             <table class="positions-table">
                 <thead><tr><th>Symbol</th><th>Side</th><th>Type</th><th>Price</th><th>Qty</th><th>Filled</th><th>Status</th><th></th></tr></thead>
-                <tbody id="ordersBody"><tr><td colspan="8" class="empty-state">No open orders</td></tr></tbody>
+                <div id="ordersGrid" class="grid-container"></div>
             </table>
         </div>
         <div class="positions-content" id="tabHistory" style="display:none;">
             <table class="positions-table">
                 <thead><tr><th>Time</th><th>Symbol</th><th>Side</th><th>Type</th><th>Price</th><th>Qty</th><th>Status</th></tr></thead>
-                <tbody id="historyBody"><tr><td colspan="7" class="empty-state">No trade history</td></tr></tbody>
+                <div id="historyGrid" class="grid-container"></div>
             </table>
         </div>
     </div>
@@ -358,6 +360,11 @@
         </div>
     </div>
     
+    <script src="datagrid.js"></script>
+    <script src="datagrid.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
+
+
+

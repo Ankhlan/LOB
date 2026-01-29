@@ -1,0 +1,390 @@
+/* ═══════════════════════════════════════════════════════════════════
+   DATA GRID - Professional Spreadsheet-Style Component
+   Features: Sorting, Filtering, Resizing, Selection, Export
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Grid Container */
+.data-grid-container {
+    width: 100%;
+    overflow: hidden;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+/* Toolbar */
+.data-grid-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border);
+}
+
+.data-grid-toolbar-left {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.data-grid-toolbar-right {
+    display: flex;
+    gap: 6px;
+}
+
+.data-grid-search {
+    width: 200px;
+    padding: 6px 10px 6px 30px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 11px;
+}
+
+.data-grid-search:focus {
+    border-color: var(--accent);
+    outline: none;
+}
+
+.data-grid-btn {
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.15s ease;
+}
+
+.data-grid-btn:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.data-grid-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* Table Wrapper for Scroll */
+.data-grid-wrapper {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: 300px;
+}
+
+/* Main Table */
+.data-grid {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    table-layout: fixed;
+}
+
+/* Header */
+.data-grid thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.data-grid th {
+    background: linear-gradient(180deg, var(--bg-tertiary) 0%, rgba(0,0,0,0.1) 100%);
+    padding: 0;
+    text-align: left;
+    font-weight: 500;
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 2px solid var(--border);
+    border-right: 1px solid var(--border);
+    position: relative;
+    user-select: none;
+}
+
+.data-grid th:last-child {
+    border-right: none;
+}
+
+/* Header Cell Content */
+.th-content {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    gap: 6px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.th-content:hover {
+    background: rgba(255,255,255,0.05);
+}
+
+/* Sort Icons */
+.sort-icon {
+    width: 12px;
+    height: 12px;
+    opacity: 0.3;
+    transition: opacity 0.15s ease;
+}
+
+.th-content:hover .sort-icon {
+    opacity: 0.6;
+}
+
+th.sort-asc .sort-icon,
+th.sort-desc .sort-icon {
+    opacity: 1;
+    color: var(--accent);
+}
+
+th.sort-desc .sort-icon {
+    transform: rotate(180deg);
+}
+
+/* Column Resize Handle */
+.resize-handle {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    cursor: col-resize;
+    background: transparent;
+    transition: background 0.15s ease;
+}
+
+.resize-handle:hover,
+.resize-handle.active {
+    background: var(--accent);
+}
+
+/* Filter Row */
+.data-grid .filter-row th {
+    padding: 6px 8px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+}
+
+.filter-input {
+    width: 100%;
+    padding: 4px 8px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-primary);
+    font-size: 10px;
+}
+
+.filter-input:focus {
+    border-color: var(--accent);
+    outline: none;
+}
+
+.filter-input::placeholder {
+    color: var(--text-muted);
+}
+
+/* Body Rows */
+.data-grid tbody tr {
+    transition: background 0.1s ease;
+}
+
+.data-grid tbody tr:hover {
+    background: rgba(255,255,255,0.03);
+}
+
+.data-grid tbody tr.selected {
+    background: rgba(229, 192, 123, 0.1);
+}
+
+.data-grid tbody tr:nth-child(even) {
+    background: rgba(0,0,0,0.1);
+}
+
+.data-grid tbody tr:nth-child(even):hover {
+    background: rgba(255,255,255,0.03);
+}
+
+/* Cells */
+.data-grid td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid rgba(255,255,255,0.02);
+    font-family: Consolas, 'Courier New', Monaco, monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.data-grid td:last-child {
+    border-right: none;
+}
+
+/* Number Formatting */
+.data-grid .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.data-grid .positive {
+    color: var(--green);
+}
+
+.data-grid .negative {
+    color: var(--red);
+}
+
+/* Row Selection Checkbox */
+.row-checkbox {
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+    accent-color: var(--accent);
+}
+
+/* Action Buttons in Cells */
+.cell-action {
+    padding: 4px 8px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-secondary);
+    font-size: 10px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.cell-action:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.cell-action.danger:hover {
+    border-color: var(--red);
+    color: var(--red);
+}
+
+/* Empty State */
+.data-grid .empty-row td {
+    text-align: center;
+    color: var(--text-muted);
+    font-style: italic;
+    padding: 40px 20px;
+}
+
+/* Footer */
+.data-grid-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.data-grid-pagination {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.page-btn {
+    padding: 4px 10px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.page-btn:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+    border-color: var(--accent);
+}
+
+.page-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.page-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg-primary);
+}
+
+/* Status Badges */
+.status-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.open {
+    background: rgba(97, 175, 239, 0.2);
+    color: #61afef;
+}
+
+.status-badge.filled {
+    background: rgba(152, 195, 121, 0.2);
+    color: var(--green);
+}
+
+.status-badge.partial {
+    background: rgba(229, 192, 123, 0.2);
+    color: var(--accent);
+}
+
+.status-badge.cancelled {
+    background: rgba(224, 108, 117, 0.2);
+    color: var(--red);
+}
+
+/* Loading State */
+.data-grid-loading {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.data-grid-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+    .data-grid-wrapper {
+        max-height: 200px;
+    }
+}

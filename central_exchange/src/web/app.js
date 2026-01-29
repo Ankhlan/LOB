@@ -2031,3 +2031,109 @@ document.addEventListener('keydown', function(e) {
 setInterval(refreshTicker, 3000);
 
 console.log('Trade ticker and keyboard shortcuts loaded');
+
+// ===== DATA GRID INITIALIZATION =====
+let positionsGrid, ordersGrid, historyGrid;
+
+function initDataGrids() {
+    // Positions Grid
+    if (document.getElementById('positionsGrid')) {
+        positionsGrid = new DataGrid('positionsGrid', {
+            columns: [
+                { field: 'symbol', header: 'Symbol', width: '120px' },
+                { field: 'side', header: 'Side', width: '80px', type: 'side' },
+                { field: 'size', header: 'Size', width: '100px', type: 'number', decimals: 4 },
+                { field: 'entry_price', header: 'Entry', width: '100px', type: 'number', decimals: 0 },
+                { field: 'current_price', header: 'Mark', width: '100px', type: 'number', decimals: 0 },
+                { field: 'unrealized_pnl', header: 'P&L', width: '120px', type: 'currency', decimals: 0 },
+                { field: 'pnl_percent', header: '%', width: '80px', type: 'percent', decimals: 2 },
+                { field: 'margin_used', header: 'Margin', width: '100px', type: 'number', decimals: 0 },
+                { field: 'action', header: '', width: '80px' }
+            ],
+            data: [],
+            pageSize: 20,
+            selectable: true,
+            emptyMessage: 'No open positions',
+            formatters: {
+                action: (v, row) => `<button class="cell-action danger" onclick="closePosition('${row.symbol}')">Close</button>`
+            },
+            onRowClick: (row) => {
+                selectInstrument(row.symbol);
+            }
+        });
+        window.positionsGridGrid = positionsGrid;
+    }
+
+    // Orders Grid
+    if (document.getElementById('ordersGrid')) {
+        ordersGrid = new DataGrid('ordersGrid', {
+            columns: [
+                { field: 'symbol', header: 'Symbol', width: '120px' },
+                { field: 'side', header: 'Side', width: '70px', type: 'side' },
+                { field: 'type', header: 'Type', width: '80px' },
+                { field: 'price', header: 'Price', width: '100px', type: 'number', decimals: 0 },
+                { field: 'quantity', header: 'Qty', width: '80px', type: 'number', decimals: 4 },
+                { field: 'filled', header: 'Filled', width: '80px', type: 'number', decimals: 4 },
+                { field: 'status', header: 'Status', width: '90px', type: 'badge' },
+                { field: 'action', header: '', width: '80px' }
+            ],
+            data: [],
+            pageSize: 20,
+            selectable: true,
+            emptyMessage: 'No open orders',
+            formatters: {
+                action: (v, row) => row.status === 'OPEN' ? `<button class="cell-action danger" onclick="cancelOrder('${row.id}')">Cancel</button>` : ''
+            }
+        });
+        window.ordersGridGrid = ordersGrid;
+    }
+
+    // History Grid
+    if (document.getElementById('historyGrid')) {
+        historyGrid = new DataGrid('historyGrid', {
+            columns: [
+                { field: 'time', header: 'Time', width: '150px' },
+                { field: 'symbol', header: 'Symbol', width: '120px' },
+                { field: 'side', header: 'Side', width: '70px', type: 'side' },
+                { field: 'type', header: 'Type', width: '80px' },
+                { field: 'price', header: 'Price', width: '100px', type: 'number', decimals: 0 },
+                { field: 'quantity', header: 'Qty', width: '80px', type: 'number', decimals: 4 },
+                { field: 'status', header: 'Status', width: '90px', type: 'badge' }
+            ],
+            data: [],
+            pageSize: 50,
+            selectable: false,
+            emptyMessage: 'No trade history'
+        });
+        window.historyGridGrid = historyGrid;
+    }
+
+    console.log('[DataGrid] Grids initialized: positions, orders, history');
+}
+
+// Override renderPositionsLive to use DataGrid
+const originalRenderPositionsLive = typeof renderPositionsLive === 'function' ? renderPositionsLive : null;
+
+function renderPositionsLiveGrid(positions, summary) {
+    document.getElementById('posCount').textContent = positions.length;
+    
+    if (positionsGrid) {
+        const data = positions.map(p => ({
+            symbol: p.symbol,
+            side: p.side.toUpperCase(),
+            size: p.size,
+            entry_price: p.entry_price,
+            current_price: p.current_price,
+            unrealized_pnl: p.unrealized_pnl,
+            pnl_percent: p.pnl_percent,
+            margin_used: p.margin_used
+        }));
+        positionsGrid.setData(data);
+    }
+}
+
+// Initialize grids on load
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(initDataGrids, 100);
+});
+
