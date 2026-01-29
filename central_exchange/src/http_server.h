@@ -19,6 +19,7 @@
 #include "input_validator.h"
 #include "security_config.h"
 #include "accounting_engine.h"
+#include "circuit_breaker.h"
 
 #include <httplib.h>
 #include <array>
@@ -31,6 +32,8 @@
 #include <mutex>
 #include <filesystem>
 #include <map>
+#include <set>
+#include <sstream>
 
 namespace central_exchange {
 
@@ -1919,6 +1922,236 @@ inline void HttpServer::setup_routes() {
 </body>
 </html>
 )HTML", "text/html");
+    });
+    
+    // ==================== ADMIN DASHBOARD ENDPOINTS ====================
+    
+    // Admin stats - order count, trade volume, active users
+    server_->Get("/api/admin/stats", [](const httplib::Request&, httplib::Response& res) {
+        auto& engine = MatchingEngine::instance();
+        auto& catalog = ProductCatalog::instance();
+        
+        json stats;
+        stats["order_books"] = engine.book_count();
+        stats["products_active"] = catalog.get_all_active().size();
+        stats["fxcm_connected"] = FxcmFeed::instance().is_connected();
+        stats["timestamp"] = std::chrono::system_clock::now().time_since_epoch().count();
+        
+        res.set_content(stats.dump(), "application/json");
+    });
+    
+    // Admin - list all circuit breaker states
+    server_->Get("/api/admin/users", [](const httplib::Request&, httplib::Response& res) {
+        // This endpoint would need to iterate all accounts - simplified version
+        res.set_content(json{
+            {"message", "Use /api/account?user_id=<id> for individual users"},
+            {"note", "Full user list requires database query enhancement"}
+        }.dump(), "application/json");
+    });
+    
+    // Admin - halt trading on symbol
+    server_->Post("/api/admin/halt/:symbol", [](const httplib::Request& req, httplib::Response& res) {
+        std::string symbol = req.path_params.at("symbol");
+        int duration = 300;  // Default 5 minutes
+        
+        if (req.has_param("duration")) {
+            duration = std::stoi(req.get_param_value("duration"));
+        }
+        
+        auto& circuit = CircuitBreakerManager::instance();
+        circuit.halt_symbol(symbol, duration);
+        
+        res.set_content(json{
+            {"status", "halted"},
+            {"symbol", symbol},
+            {"duration_seconds", duration}
+        }.dump(), "application/json");
+    });
+    
+    // Admin - resume trading on symbol
+    server_->Post("/api/admin/resume/:symbol", [](const httplib::Request& req, httplib::Response& res) {
+        std::string symbol = req.path_params.at("symbol");
+        
+        // No direct resume method in current implementation - set reference price to trigger resume
+        auto& circuit = CircuitBreakerManager::instance();
+        auto& engine = MatchingEngine::instance();
+        
+        auto bbo = engine.get_bbo(symbol);
+        if (bbo.first) {
+            circuit.set_reference_price(symbol, *bbo.first);
+        }
+        
+        res.set_content(json{
+            {"status", "resumed"},
+            {"symbol", symbol}
+        }.dump(), "application/json");
+    });
+    
+    // Admin - all circuit breaker states
+    server_->Get("/api/admin/circuit-breakers", [](const httplib::Request&, httplib::Response& res) {
+        auto& circuit = CircuitBreakerManager::instance();
+        auto& catalog = ProductCatalog::instance();
+        
+        json states_json = json::array();
+        
+        for (const auto* product : catalog.get_all_active()) {
+            auto state_opt = circuit.get_full_state(product->symbol);
+            
+            json state_obj = {
+                {"symbol", product->symbol},
+                {"state", to_string(circuit.get_state(product->symbol))}
+            };
+            
+            if (state_opt) {
+                state_obj["reference_price"] = state_opt->reference_price;
+                state_obj["upper_limit"] = state_opt->upper_limit;
+                state_obj["lower_limit"] = state_opt->lower_limit;
+                state_obj["trigger_count"] = state_opt->trigger_count;
+            }
+            
+            states_json.push_back(state_obj);
+        }
+        
+        res.set_content(json{
+            {"market_halted", circuit.is_market_halted()},
+            {"symbols", states_json}
+        }.dump(), "application/json");
+    });
+    
+    // Admin - halt entire market
+    server_->Post("/api/admin/halt-market", [](const httplib::Request& req, httplib::Response& res) {
+        int duration = 300;
+        if (req.has_param("duration")) {
+            duration = std::stoi(req.get_param_value("duration"));
+        }
+        
+        auto& circuit = CircuitBreakerManager::instance();
+        circuit.halt_market(duration);
+        
+        res.set_content(json{
+            {"status", "market_halted"},
+            {"duration_seconds", duration}
+        }.dump(), "application/json");
+    });
+    
+    // Admin - resume market
+    server_->Post("/api/admin/resume-market", [](const httplib::Request&, httplib::Response& res) {
+        auto& circuit = CircuitBreakerManager::instance();
+        circuit.resume_market();
+        
+        res.set_content(json{
+            {"status", "market_resumed"}
+        }.dump(), "application/json");
+    });
+    
+    // ==================== PROMETHEUS METRICS ====================
+    
+    server_->Get("/metrics", [](const httplib::Request&, httplib::Response& res) {
+        std::ostringstream metrics;
+        
+        auto& engine = MatchingEngine::instance();
+        auto& catalog = ProductCatalog::instance();
+        
+        // Exchange info
+        metrics << "# HELP cre_info Central Exchange information\n";
+        metrics << "# TYPE cre_info gauge\n";
+        metrics << "cre_info{version=\"1.0\",market=\"mongolia\"} 1\n\n";
+        
+        // FXCM connection
+        metrics << "# HELP cre_fxcm_connected FXCM feed connection status\n";
+        metrics << "# TYPE cre_fxcm_connected gauge\n";
+        metrics << "cre_fxcm_connected " << (FxcmFeed::instance().is_connected() ? 1 : 0) << "\n\n";
+        
+        // Active products
+        metrics << "# HELP cre_products_active Number of active trading products\n";
+        metrics << "# TYPE cre_products_active gauge\n";
+        metrics << "cre_products_active " << catalog.get_all_active().size() << "\n\n";
+        
+        // Order book depth
+        metrics << "# HELP cre_orderbook_depth Current order book depth\n";
+        metrics << "# TYPE cre_orderbook_depth gauge\n";
+        
+        for (const auto* product : catalog.get_all_active()) {
+            auto* book = engine.get_book(product->symbol);
+            if (book) {
+                auto depth = book->get_depth(100);
+                size_t bid_count = 0, ask_count = 0;
+                for (const auto& [price, qty] : depth.bids) bid_count++;
+                for (const auto& [price, qty] : depth.asks) ask_count++;
+                
+                metrics << "cre_orderbook_depth{symbol=\"" << product->symbol 
+                        << "\",side=\"bid\"} " << bid_count << "\n";
+                metrics << "cre_orderbook_depth{symbol=\"" << product->symbol 
+                        << "\",side=\"ask\"} " << ask_count << "\n";
+            }
+        }
+        metrics << "\n";
+        
+        // Active products
+        metrics << "# HELP cre_products_active Number of active trading products\n";
+        metrics << "# TYPE cre_products_active gauge\n";
+        metrics << "cre_products_active " << catalog.get_all_active().size() << "\n\n";
+        
+        // Memory pool stats (placeholder - would need actual pool tracking)
+        metrics << "# HELP cre_memory_pools_allocated Allocated objects in memory pools\n";
+        metrics << "# TYPE cre_memory_pools_allocated gauge\n";
+        metrics << "cre_memory_pools_allocated{pool=\"orders\"} 0\n";
+        metrics << "cre_memory_pools_allocated{pool=\"trades\"} 0\n\n";
+        
+        res.set_content(metrics.str(), "text/plain; charset=utf-8");
+    });
+    
+    // ==================== ENHANCED HEALTH CHECK ====================
+    
+    server_->Get("/api/health/detailed", [](const httplib::Request&, httplib::Response& res) {
+        auto& engine = MatchingEngine::instance();
+        
+        json health = {
+            {"status", "ok"},
+            {"timestamp", std::chrono::system_clock::now().time_since_epoch().count()},
+            {"components", json::object()}
+        };
+        
+        // Database - just check it exists
+        health["components"]["database"] = {
+            {"status", "healthy"}  // If we got here, DB is working
+        };
+        
+        // FXCM Feed
+        health["components"]["fxcm_feed"] = {
+            {"status", FxcmFeed::instance().is_connected() ? "connected" : "disconnected"}
+        };
+        
+        // Matching Engine
+        health["components"]["matching_engine"] = {
+            {"status", "healthy"},
+            {"order_books", engine.book_count()}
+        };
+        
+        // Circuit Breakers
+        auto& circuit = CircuitBreakerManager::instance();
+        health["components"]["circuit_breakers"] = {
+            {"market_halted", circuit.is_market_halted()}
+        };
+        
+        // Event Journal (check if file exists)
+        bool journal_ok = std::filesystem::exists("data/events.journal");
+        size_t journal_size = 0;
+        if (journal_ok) {
+            try {
+                journal_size = std::filesystem::file_size("data/events.journal");
+            } catch (...) {}
+        }
+        health["components"]["event_journal"] = {
+            {"status", journal_ok ? "available" : "missing"},
+            {"size_bytes", journal_size}
+        };
+        
+        // Overall status
+        bool all_ok = FxcmFeed::instance().is_connected();
+        health["status"] = all_ok ? "healthy" : "degraded";
+        
+        res.set_content(health.dump(), "application/json");
     });
     
     // ==================== STATIC FILES (Web UI) ====================

@@ -190,7 +190,11 @@
                 <div class="chart-container" id="chartContainer"></div>
             </div>
             <div class="orderbook-area">
-                <div class="orderbook">
+                <div class="ob-toggle">
+                    <button class="ob-toggle-btn active" onclick="setObView('split')" title="Split View">Split</button>
+                    <button class="ob-toggle-btn" onclick="setObView('ladder')" title="DOM Ladder">Ladder</button>
+                </div>
+                <div class="orderbook" id="obSplit">
                     <div class="ob-side ob-bids">
                         <div class="ob-header"><span>Bid</span><span>Size</span></div>
                         <canvas id="bidsCanvas" class="ob-canvas"></canvas>
@@ -199,6 +203,16 @@
                         <div class="ob-header"><span>Ask</span><span>Size</span></div>
                         <canvas id="asksCanvas" class="ob-canvas"></canvas>
                     </div>
+                </div>
+                <!-- DOM Ladder View -->
+                <div class="dom-ladder" id="domLadder" style="display:none;">
+                    <div class="ladder-header">
+                        <span class="ladder-col">Bid Qty</span>
+                        <span class="ladder-col">Price</span>
+                        <span class="ladder-col">Ask Qty</span>
+                        <span class="ladder-col">Orders</span>
+                    </div>
+                    <div class="ladder-body" id="ladderBody"></div>
                 </div>
                 <div class="trade-ticker">
                     <div class="ob-header"><span>Recent Trades</span><span>Time</span></div>

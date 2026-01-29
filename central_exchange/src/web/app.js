@@ -1242,6 +1242,157 @@ function renderOrderbook() {
         });
 }
 
+// ===== DOM LADDER =====
+let ladderView = 'split'; // 'split' or 'ladder'
+const ladderState = {
+    levels: 15, // Number of price levels to show
+    tickSize: 0, // Auto-calculated based on instrument
+    centerPrice: 0,
+    workingOrders: [] // Orders at each price level
+};
+
+function setObView(view) {
+    ladderView = view;
+    document.querySelectorAll('.ob-toggle-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.textContent.toLowerCase() === view);
+    });
+    document.getElementById('obSplit').style.display = view === 'split' ? 'grid' : 'none';
+    document.getElementById('domLadder').style.display = view === 'ladder' ? 'flex' : 'none';
+    if (view === 'ladder') {
+        renderLadder();
+    }
+}
+
+function calculateTickSize(price) {
+    // Auto-calculate tick size based on price magnitude
+    if (price >= 100000000) return 100000; // BTC, NDX, HSI
+    if (price >= 10000000) return 10000;   // SPX, XAU
+    if (price >= 1000000) return 1000;     // ETH, MN-*
+    if (price >= 100000) return 100;
+    if (price >= 10000) return 10;
+    if (price >= 1000) return 1;
+    return 0.1;
+}
+
+function renderLadder() {
+    if (!state.selected || ladderView !== 'ladder') return;
+
+    const q = state.quotes[state.selected] || {};
+    const mid = q.mid || q.mark || 0;
+    if (!mid) return;
+
+    const tickSize = calculateTickSize(mid);
+    ladderState.tickSize = tickSize;
+
+    // Round mid to nearest tick
+    const centerPrice = Math.round(mid / tickSize) * tickSize;
+    ladderState.centerPrice = centerPrice;
+
+    // Get working orders (limit orders at each price)
+    const orders = state.openOrders || [];
+    const ordersByPrice = {};
+    orders.filter(o => o.symbol === state.selected && o.type === 'limit').forEach(o => {
+        const roundedPrice = Math.round(o.price / tickSize) * tickSize;
+        if (!ordersByPrice[roundedPrice]) ordersByPrice[roundedPrice] = { buys: 0, sells: 0 };
+        if (o.side === 'long') ordersByPrice[roundedPrice].buys += o.qty;
+        else ordersByPrice[roundedPrice].sells += o.qty;
+    });
+
+    // Get orderbook data
+    const bids = obState.targetBids || [];
+    const asks = obState.targetAsks || [];
+    const bidsByPrice = {};
+    const asksByPrice = {};
+    bids.forEach(b => { bidsByPrice[Math.round(b.price / tickSize) * tickSize] = b.qty; });
+    asks.forEach(a => { asksByPrice[Math.round(a.price / tickSize) * tickSize] = a.qty; });
+
+    const maxBidQty = Math.max(...bids.map(b => b.qty), 0.001);
+    const maxAskQty = Math.max(...asks.map(a => a.qty), 0.001);
+
+    // Generate ladder rows (asks above, bids below, centered on mid)
+    const halfLevels = Math.floor(ladderState.levels / 2);
+    let html = '';
+
+    for (let i = halfLevels; i >= -halfLevels; i--) {
+        const price = centerPrice + (i * tickSize);
+        const bidQty = bidsByPrice[price] || 0;
+        const askQty = asksByPrice[price] || 0;
+        const orderInfo = ordersByPrice[price];
+        const hasOrder = !!orderInfo;
+        const atMarket = i === 0;
+
+        const bidBarWidth = bidQty > 0 ? (bidQty / maxBidQty) * 100 : 0;
+        const askBarWidth = askQty > 0 ? (askQty / maxAskQty) * 100 : 0;
+
+        html += '<div class="ladder-row' + (atMarket ? ' at-market' : '') + (hasOrder ? ' has-order' : '') + '" data-price="' + price + '">';
+
+        // Bid qty cell (click to buy at this price)
+        html += '<div class="ladder-cell bid-qty" onclick="ladderBuy(' + price + ')" title="Buy at ' + fmt(price, 0) + '">';
+        if (bidQty > 0) {
+            html += '<div class="ladder-bar bid" style="width:' + bidBarWidth + '%"></div>';
+            html += '<span>' + bidQty.toFixed(2) + '</span>';
+        }
+        html += '</div>';
+
+        // Price cell (click to set limit price)
+        html += '<div class="ladder-cell price" onclick="ladderSetPrice(' + price + ')" title="Set limit price">';
+        html += fmt(price, 0);
+        html += '</div>';
+
+        // Ask qty cell (click to sell at this price)
+        html += '<div class="ladder-cell ask-qty" onclick="ladderSell(' + price + ')" title="Sell at ' + fmt(price, 0) + '">';
+        if (askQty > 0) {
+            html += '<div class="ladder-bar ask" style="width:' + askBarWidth + '%"></div>';
+            html += '<span>' + askQty.toFixed(2) + '</span>';
+        }
+        html += '</div>';
+
+        // Working orders cell
+        html += '<div class="ladder-cell orders">';
+        if (orderInfo) {
+            if (orderInfo.buys > 0) html += '<span style="color:var(--green)">B' + orderInfo.buys.toFixed(1) + '</span> ';
+            if (orderInfo.sells > 0) html += '<span style="color:var(--red)">S' + orderInfo.sells.toFixed(1) + '</span>';
+        }
+        html += '</div>';
+
+        html += '</div>';
+    }
+
+    document.getElementById('ladderBody').innerHTML = html;
+
+    // Scroll to center (at-market row)
+    const ladderBody = document.getElementById('ladderBody');
+    const atMarketRow = ladderBody.querySelector('.at-market');
+    if (atMarketRow) {
+        atMarketRow.scrollIntoView({ block: 'center', behavior: 'auto' });
+    }
+}
+
+function ladderSetPrice(price) {
+    // Switch to Limit order type and set the price
+    // For now, just show feedback
+    showShortcutHint('Price: ' + fmt(price, 0) + ' MNT (Limit orders coming soon)');
+}
+
+function ladderBuy(price) {
+    // Quick buy at this price
+    const qty = parseFloat(document.getElementById('quantity').value) || 1;
+    showShortcutHint('BUY ' + qty + ' @ ' + fmt(price, 0) + ' (Limit orders coming soon)');
+}
+
+function ladderSell(price) {
+    // Quick sell at this price
+    const qty = parseFloat(document.getElementById('quantity').value) || 1;
+    showShortcutHint('SELL ' + qty + ' @ ' + fmt(price, 0) + ' (Limit orders coming soon)');
+}
+
+// Update ladder periodically when visible
+setInterval(() => {
+    if (ladderView === 'ladder') {
+        renderLadder();
+    }
+}, 500);
+
 function setSide(s) {
     state.side = s;
     document.getElementById('buyBtn').classList.toggle('active', s === 'long');
