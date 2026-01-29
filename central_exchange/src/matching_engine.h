@@ -11,6 +11,8 @@
 #include "position_manager.h"
 #include "ledger_writer.h"
 #include "accounting_engine.h"
+#include "risk_engine.h"
+#include "circuit_breaker.h"
 #include <unordered_map>
 #include <memory>
 #include <mutex>
@@ -110,6 +112,37 @@ inline std::vector<Trade> MatchingEngine::submit_order(
         return {};
     }
     
+    // Circuit breaker check
+    auto& circuit = CircuitBreakerManager::instance();
+    auto circuit_state = circuit.check_order(symbol, side, price);
+    if (circuit_state == CircuitState::HALTED) {
+        std::cout << "[MATCH] Order rejected: " << symbol << " is HALTED" << std::endl;
+        return {};
+    }
+    if ((circuit_state == CircuitState::LIMIT_UP && side == Side::BUY) ||
+        (circuit_state == CircuitState::LIMIT_DOWN && side == Side::SELL)) {
+        std::cout << "[MATCH] Order rejected: " << symbol << " at " 
+                  << to_string(circuit_state) << std::endl;
+        return {};
+    }
+    
+    // Get market price for risk check
+    auto bbo = get_bbo(symbol);
+    PriceMicromnt market_price = 0;
+    if (side == Side::BUY && bbo.second) {
+        market_price = *bbo.second;  // Use ask for buy orders
+    } else if (side == Side::SELL && bbo.first) {
+        market_price = *bbo.first;   // Use bid for sell orders
+    }
+    
+    // Pre-trade risk check
+    auto& risk = RiskEngine::instance();
+    auto risk_result = risk.check_order(user_id, symbol, side, price, quantity, market_price);
+    if (risk_result != RiskRejectCode::OK) {
+        std::cout << "[MATCH] Order rejected: " << to_string(risk_result) << std::endl;
+        return {};
+    }
+    
     // For limit orders, check margin before submitting
     auto& pm = PositionManager::instance();
     if (type == OrderType::LIMIT && !pm.check_margin(user_id, symbol, quantity, price)) {
@@ -182,6 +215,7 @@ inline void MatchingEngine::on_trade_internal(const Trade& trade) {
     if (!product) return;
     
     auto& pm = PositionManager::instance();
+    auto& risk = RiskEngine::instance();
     
     // Update positions for both users
     double size = trade.quantity;
@@ -201,6 +235,10 @@ inline void MatchingEngine::on_trade_internal(const Trade& trade) {
     
     pm.withdraw(trade.taker_user, taker_fee);
     pm.withdraw(trade.maker_user, maker_fee);
+    
+    // Update risk engine positions (for daily PnL tracking)
+    risk.update_position(trade.taker_user, trade.symbol, taker_size, 0.0);
+    risk.update_position(trade.maker_user, trade.symbol, maker_size, 0.0);
 
     // Record trade in ledger (double-entry accounting)
     double total_fees = taker_fee + maker_fee;
@@ -252,13 +290,40 @@ inline std::vector<Trade> MatchingEngine::submit_order_internal(
         return {};
     }
     
+    // Circuit breaker check (lock-free read)
+    auto& circuit = CircuitBreakerManager::instance();
+    auto circuit_state = circuit.get_state(symbol);
+    if (circuit_state == CircuitState::HALTED) {
+        return {};
+    }
+    if ((circuit_state == CircuitState::LIMIT_UP && side == Side::BUY) ||
+        (circuit_state == CircuitState::LIMIT_DOWN && side == Side::SELL)) {
+        return {};
+    }
+    
+    // Get market price for risk check
+    auto it = books_.find(symbol);
+    if (it == books_.end()) return {};
+    
+    auto bbo = it->second->bbo();
+    PriceMicromnt market_price = 0;
+    if (side == Side::BUY && bbo.second) {
+        market_price = *bbo.second;
+    } else if (side == Side::SELL && bbo.first) {
+        market_price = *bbo.first;
+    }
+    
+    // Pre-trade risk check
+    auto& risk = RiskEngine::instance();
+    auto risk_result = risk.check_order(user_id, symbol, side, price, quantity, market_price);
+    if (risk_result != RiskRejectCode::OK) {
+        return {};
+    }
+    
     auto& pm = PositionManager::instance();
     if (type == OrderType::LIMIT && !pm.check_margin(user_id, symbol, quantity, price)) {
         return {};
     }
-    
-    auto it = books_.find(symbol);
-    if (it == books_.end()) return {};
     
     auto order = std::make_shared<Order>();
     order->id = generate_order_id();
@@ -270,7 +335,14 @@ inline std::vector<Trade> MatchingEngine::submit_order_internal(
     order->quantity = quantity;
     order->client_id = client_id;
     
-    return it->second->submit(order);
+    auto trades = it->second->submit(order);
+    
+    // Update circuit breaker with trade prices
+    for (const auto& trade : trades) {
+        circuit.on_trade(symbol, trade.price);
+    }
+    
+    return trades;
 }
 
 inline std::optional<Order> MatchingEngine::cancel_order_internal(const std::string& symbol, OrderId id) {
