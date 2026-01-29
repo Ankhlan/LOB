@@ -1386,3 +1386,125 @@ async function refreshHistory() {
 }
 
 init();
+
+// ===== TRADE TICKER =====
+const tickerState = { trades: [], maxTrades: 50 };
+
+function addTrade(trade) {
+    tickerState.trades.unshift(trade);
+    if (tickerState.trades.length > tickerState.maxTrades) {
+        tickerState.trades.pop();
+    }
+    renderTicker();
+}
+
+function renderTicker() {
+    const list = document.getElementById('tickerList');
+    if (!list) return;
+    
+    if (tickerState.trades.length === 0) {
+        list.innerHTML = '<div class="ticker-empty">No recent trades</div>';
+        return;
+    }
+    
+    const html = tickerState.trades.map(t => {
+        const time = new Date(t.timestamp * 1000);
+        const timeStr = time.toLocaleTimeString('en-US', { hour12: false });
+        const sideClass = t.side === 'BUY' ? 'buy' : 'sell';
+        return '<div class="ticker-row ' + sideClass + '">' +
+            '<span class="ticker-price">' + fmt(t.price, 0) + '</span>' +
+            '<span class="ticker-qty">' + fmt(t.quantity, 4) + '</span>' +
+            '<span class="ticker-time">' + timeStr + '</span>' +
+        '</div>';
+    }).join('');
+    list.innerHTML = html;
+}
+
+// Fetch recent trades for selected instrument
+async function refreshTicker() {
+    if (!state.selected) return;
+    try {
+        const res = await fetch('/api/trades?symbol=' + state.selected + '&limit=50');
+        if (!res.ok) return;
+        const trades = await res.json();
+        if (Array.isArray(trades)) {
+            tickerState.trades = trades.map(t => ({
+                price: t.price,
+                quantity: t.quantity,
+                side: t.taker_side || 'BUY',
+                timestamp: t.timestamp || Date.now() / 1000
+            }));
+            renderTicker();
+        }
+    } catch (e) {
+        console.log('Ticker fetch error:', e);
+    }
+}
+
+// ===== ENHANCED KEYBOARD SHORTCUTS =====
+const shortcuts = {
+    'b': function() { setSide('long'); document.getElementById('buyBtn').focus(); showShortcutHint('BUY selected'); },
+    's': function() { setSide('short'); document.getElementById('sellBtn').focus(); showShortcutHint('SELL selected'); },
+    'q': function() { document.getElementById('quantity').focus(); showShortcutHint('Quantity focused'); },
+    'Enter': function() { if (document.activeElement.tagName !== 'INPUT') submitOrder(); },
+    'Escape': function() { document.activeElement.blur(); showShortcutHint('Cancelled'); },
+    'ArrowUp': function() { adjustQuantity(1.1); },
+    'ArrowDown': function() { adjustQuantity(0.9); },
+    '+': function() { adjustQuantity(1.1); },
+    '-': function() { adjustQuantity(0.9); },
+    '?': function() { showKeyboardHelp(); }
+};
+
+function adjustQuantity(multiplier) {
+    const input = document.getElementById('quantity');
+    if (!input) return;
+    const current = parseFloat(input.value) || 1;
+    const newVal = Math.max(0.01, current * multiplier);
+    input.value = newVal.toFixed(4);
+    updateSummary();
+    showShortcutHint(multiplier > 1 ? 'Qty +10%' : 'Qty -10%');
+}
+
+function showShortcutHint(text) {
+    let hint = document.getElementById('shortcutHint');
+    if (!hint) {
+        hint = document.createElement('div');
+        hint.id = 'shortcutHint';
+        hint.className = 'shortcut-hint';
+        document.body.appendChild(hint);
+    }
+    hint.textContent = text;
+    hint.classList.add('visible');
+    clearTimeout(hint._timeout);
+    hint._timeout = setTimeout(function() { hint.classList.remove('visible'); }, 1500);
+}
+
+function showKeyboardHelp() {
+    alert('Keyboard Shortcuts:\n  B = BUY\n  S = SELL\n  Q = Focus quantity\n  Enter = Submit order\n  Esc = Cancel/blur\n  Up/+ = Qty +10%\n  Down/- = Qty -10%\n  ? = This help');
+}
+
+// Enhanced keyboard handler
+document.addEventListener('keydown', function(e) {
+    // Skip if typing in input
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        if (e.key === 'Escape') {
+            e.target.blur();
+            showShortcutHint('Cancelled');
+        }
+        return;
+    }
+    
+    var key = e.key;
+    if (shortcuts[key]) {
+        e.preventDefault();
+        shortcuts[key]();
+    } else if (shortcuts[key.toLowerCase()]) {
+        e.preventDefault();
+        shortcuts[key.toLowerCase()]();
+    }
+});
+
+// Start ticker refresh interval
+setInterval(refreshTicker, 3000);
+
+console.log('Trade ticker and keyboard shortcuts loaded');

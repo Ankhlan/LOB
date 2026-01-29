@@ -525,6 +525,63 @@ inline void HttpServer::setup_routes() {
                         }
                     }
                     
+
+                    // ===== TRADES EVENT (every 1s) =====
+                    if (tick_count % 2 == 0) {
+                        json trades_arr = json::array();
+                        
+                        for (const auto& symbol : {"XAU-MNT-PERP", "BTC-MNT-PERP", "ETH-MNT-PERP"}) {
+                            auto trades = Database::instance().get_recent_trades(symbol, 10);
+                            for (const auto& t : trades) {
+                                trades_arr.push_back({
+                                    {"id", t.id},
+                                    {"symbol", t.symbol},
+                                    {"price", t.price},
+                                    {"quantity", t.quantity},
+                                    {"side", "unknown"},
+                                    {"timestamp", t.timestamp}
+                                });
+                            }
+                        }
+                        
+                        if (!trades_arr.empty()) {
+                            std::string trades_event = "event: trades\ndata: " + trades_arr.dump() + "\n\n";
+                            if (!sink.write(trades_event.data(), trades_event.size())) {
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // ===== DEPTH EVENT (every 500ms) =====
+                    {
+                        json depth_data = json::object();
+                        
+                        for (const auto& symbol : {"XAU-MNT-PERP", "BTC-MNT-PERP"}) {
+                            auto& engine = MatchingEngine::instance();
+                            auto depth = engine.get_depth(symbol, 5);
+                            
+                            json bids = json::array();
+                            json asks = json::array();
+                            
+                            for (const auto& [price, qty] : depth.bids) {
+                                bids.push_back({to_mnt(price), qty});
+                            }
+                            for (const auto& [price, qty] : depth.asks) {
+                                asks.push_back({to_mnt(price), qty});
+                            }
+                            
+                            depth_data[symbol] = {
+                                {"bids", bids},
+                                {"asks", asks}
+                            };
+                        }
+                        
+                        std::string depth_event = "event: depth\ndata: " + depth_data.dump() + "\n\n";
+                        if (!sink.write(depth_event.data(), depth_event.size())) {
+                            break;
+                        }
+                    }
+
                     std::this_thread::sleep_for(std::chrono::milliseconds(500));
                 }
                 return false; // Connection closed

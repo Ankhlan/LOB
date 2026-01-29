@@ -189,14 +189,22 @@
                 </div>
                 <div class="chart-container" id="chartContainer"></div>
             </div>
-            <div class="orderbook">
-                <div class="ob-side ob-bids">
-                    <div class="ob-header"><span>Bid</span><span>Size</span></div>
-                    <canvas id="bidsCanvas" class="ob-canvas"></canvas>
+            <div class="orderbook-area">
+                <div class="orderbook">
+                    <div class="ob-side ob-bids">
+                        <div class="ob-header"><span>Bid</span><span>Size</span></div>
+                        <canvas id="bidsCanvas" class="ob-canvas"></canvas>
+                    </div>
+                    <div class="ob-side ob-asks">
+                        <div class="ob-header"><span>Ask</span><span>Size</span></div>
+                        <canvas id="asksCanvas" class="ob-canvas"></canvas>
+                    </div>
                 </div>
-                <div class="ob-side ob-asks">
-                    <div class="ob-header"><span>Ask</span><span>Size</span></div>
-                    <canvas id="asksCanvas" class="ob-canvas"></canvas>
+                <div class="trade-ticker">
+                    <div class="ob-header"><span>Recent Trades</span><span>Time</span></div>
+                    <div class="ticker-list" id="tickerList">
+                        <div class="ticker-empty">No recent trades</div>
+                    </div>
                 </div>
             </div>
         </section>
