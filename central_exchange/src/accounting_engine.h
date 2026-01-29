@@ -294,9 +294,9 @@ private:
                 
                 // Position entries
                 ss << "    Positions:" << event.buyer << ":" << event.symbol 
-                   << "    " << qty << " " << event.symbol << " @ " << price << " MNT\n";
+                   << "    " << qty << " \"" << event.symbol << "\" @ " << price << " MNT\n";
                 ss << "    Positions:" << event.seller << ":" << event.symbol 
-                   << "    " << -qty << " " << event.symbol << " @ " << price << " MNT\n";
+                   << "    " << -qty << " \"" << event.symbol << "\" @ " << price << " MNT\n";
                 
                 // Fee entries
                 if (fee > 0) {
