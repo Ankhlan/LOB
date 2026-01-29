@@ -20,6 +20,17 @@
 namespace central_exchange {
 
 using OrderId = uint64_t;
+using PriceMicromnt = int64_t;  // 1 MNT = 1,000,000 micromnt
+
+constexpr PriceMicromnt MICROMNT_PER_MNT = 1'000'000;
+
+inline PriceMicromnt to_micromnt(double mnt) {
+    return static_cast<PriceMicromnt>(mnt * MICROMNT_PER_MNT);
+}
+
+inline double to_mnt(PriceMicromnt micromnt) {
+    return static_cast<double>(micromnt) / MICROMNT_PER_MNT;
+}
 using Timestamp = uint64_t;
 
 inline std::atomic<OrderId> g_next_order_id{1};
@@ -59,7 +70,7 @@ struct Order {
     std::string user_id;
     Side side;
     OrderType type;
-    double price;           // MNT
+    PriceMicromnt price;    // Micromnt (1 MNT = 1,000,000)
     double quantity;        // Contracts
     double filled_qty;
     double remaining_qty;
@@ -84,7 +95,7 @@ struct Trade {
     std::string maker_user;
     std::string taker_user;
     Side taker_side;
-    double price;           // MNT
+    PriceMicromnt price;    // Micromnt (1 MNT = 1,000,000)
     double quantity;        // Contracts
     double maker_fee;       // MNT
     double taker_fee;       // MNT
@@ -93,7 +104,7 @@ struct Trade {
 
 // Price level in order book
 struct PriceLevel {
-    double price;
+    PriceMicromnt price;
     double total_quantity;
     std::deque<std::shared_ptr<Order>> orders;
     
@@ -138,12 +149,12 @@ public:
     std::optional<Order> cancel(OrderId id);
     
     // Get best bid/offer
-    std::pair<std::optional<double>, std::optional<double>> bbo() const;
+    std::pair<std::optional<PriceMicromnt>, std::optional<PriceMicromnt>> bbo() const;
     
     // Get depth (price levels)
     struct Depth {
-        std::vector<std::pair<double, double>> bids; // price, qty
-        std::vector<std::pair<double, double>> asks;
+        std::vector<std::pair<PriceMicromnt, double>> bids; // price (micromnt), qty
+        std::vector<std::pair<PriceMicromnt, double>> asks;
     };
     Depth get_depth(int levels = 10) const;
     
@@ -154,7 +165,7 @@ public:
     const std::string& symbol() const { return symbol_; }
     size_t bid_count() const { return bids_.size(); }
     size_t ask_count() const { return asks_.size(); }
-    double last_price() const { return last_price_; }
+    PriceMicromnt last_price() const { return last_price_; }
     double volume_24h() const { return volume_24h_; }
     
 private:
@@ -162,15 +173,15 @@ private:
     double tick_size_;
     
     // Bid side: higher price = better, so reverse order
-    std::map<double, PriceLevel, std::greater<double>> bids_;
+    std::map<PriceMicromnt, PriceLevel, std::greater<PriceMicromnt>> bids_;
     // Ask side: lower price = better, normal order
-    std::map<double, PriceLevel> asks_;
+    std::map<PriceMicromnt, PriceLevel> asks_;
     
     // Order lookup
     std::unordered_map<OrderId, std::shared_ptr<Order>> orders_;
     
     // Stats
-    double last_price_{0};
+    PriceMicromnt last_price_{0};
     double volume_24h_{0};
     uint64_t trade_count_{0};
     
@@ -382,10 +393,10 @@ inline std::optional<Order> OrderBook::cancel(OrderId id) {
     return *order;
 }
 
-inline std::pair<std::optional<double>, std::optional<double>> OrderBook::bbo() const {
+inline std::pair<std::optional<PriceMicromnt>, std::optional<PriceMicromnt>> OrderBook::bbo() const {
     std::lock_guard<std::mutex> lock(mutex_);
     
-    std::optional<double> bid, ask;
+    std::optional<PriceMicromnt> bid, ask;
     if (!bids_.empty()) bid = bids_.begin()->first;
     if (!asks_.empty()) ask = asks_.begin()->first;
     return {bid, ask};

@@ -20,6 +20,7 @@
 #include "bom_feed.h"
 #include "http_server.h"
 #include "database.h"
+#include "accounting_engine.h"
 
 #include <iostream>
 #include <csignal>
@@ -118,6 +119,13 @@ int main(int argc, char* argv[]) {
     } else {
         std::cout << "       Database ready at /tmp/exchange.db\n";
     }
+    
+    // Initialize accounting engine (dual-speed ledger)
+    std::cout << "[INIT] Starting accounting engine...\n";
+    AccountingEngine::instance().start("./data");
+    std::cout << "       Event journal: ./data/events.dat\n";
+    std::cout << "       Ledger journal: ./data/ledger.journal\n";
+    
     print_products();
     
     // Initialize matching engine

@@ -10,6 +10,7 @@
 #include "product_catalog.h"
 #include "position_manager.h"
 #include "ledger_writer.h"
+#include "accounting_engine.h"
 #include <unordered_map>
 #include <memory>
 #include <mutex>
@@ -31,7 +32,7 @@ public:
         const std::string& user_id,
         Side side,
         OrderType type,
-        double price,
+        PriceMicromnt price,  // Micromnt (1 MNT = 1M micromnt)
         double quantity,
         const std::string& client_id = ""
     );
@@ -40,7 +41,7 @@ public:
     
     // Book access
     OrderBook* get_book(const std::string& symbol);
-    std::pair<std::optional<double>, std::optional<double>> get_bbo(const std::string& symbol);
+    std::pair<std::optional<PriceMicromnt>, std::optional<PriceMicromnt>> get_bbo(const std::string& symbol);
     OrderBook::Depth get_depth(const std::string& symbol, int levels = 10);
     
     // Callbacks for trade processing
@@ -85,7 +86,7 @@ inline std::vector<Trade> MatchingEngine::submit_order(
     const std::string& user_id,
     Side side,
     OrderType type,
-    double price,
+    PriceMicromnt price,  // Micromnt (1 MNT = 1M micromnt)
     double quantity,
     const std::string& client_id
 ) {
@@ -154,9 +155,9 @@ inline OrderBook* MatchingEngine::get_book(const std::string& symbol) {
     return it != books_.end() ? it->second.get() : nullptr;
 }
 
-inline std::pair<std::optional<double>, std::optional<double>> MatchingEngine::get_bbo(const std::string& symbol) {
+inline std::pair<std::optional<PriceMicromnt>, std::optional<PriceMicromnt>> MatchingEngine::get_bbo(const std::string& symbol) {
     auto* book = get_book(symbol);
-    return book ? book->bbo() : std::pair<std::optional<double>, std::optional<double>>{std::nullopt, std::nullopt};
+    return book ? book->bbo() : std::pair<std::optional<PriceMicromnt>, std::optional<PriceMicromnt>>{std::nullopt, std::nullopt};
 }
 
 inline OrderBook::Depth MatchingEngine::get_depth(const std::string& symbol, int levels) {
@@ -199,6 +200,16 @@ inline void MatchingEngine::on_trade_internal(const Trade& trade) {
         trade.price,
         total_fees,
         "MNT"  // Base currency
+    );
+
+    // ACCOUNTING ENGINE: Async event sourcing (dual-speed architecture)
+    AccountingEngine::instance().record_trade(
+        trade.taker_side == Side::BUY ? trade.taker_user : trade.maker_user,  // buyer
+        trade.taker_side == Side::BUY ? trade.maker_user : trade.taker_user,  // seller
+        trade.symbol,
+        trade.quantity,
+        trade.price,
+        total_fees
     );
 
     // Forward to external callback
