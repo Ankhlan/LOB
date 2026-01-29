@@ -1147,8 +1147,8 @@ inline void HttpServer::setup_routes() {
             bids.push_back({{"price", mark - spread}, {"quantity", 1.0}});
             asks.push_back({{"price", mark + spread}, {"quantity", 1.0}});
             
-            best_bid = mark - spread;
-            best_ask = mark + spread;
+            best_bid = to_micromnt(mark - spread);
+            best_ask = to_micromnt(mark + spread);
         }
         
         res.set_content(json{
