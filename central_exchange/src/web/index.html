@@ -311,22 +311,13 @@
             <div class="positions-tab" onclick="showTab('history')">History</div>
         </div>
         <div class="positions-content" id="tabPositions">
-            <table class="positions-table">
-                <thead><tr><th>Symbol</th><th>Side</th><th>Size</th><th>Entry</th><th>Mark</th><th>P&L</th><th>Margin</th><th></th></tr></thead>
-                <div id="positionsGrid" class="grid-container"></div>
-            </table>
+            <div id="positionsGrid"></div>
         </div>
         <div class="positions-content" id="tabOrders" style="display:none;">
-            <table class="positions-table">
-                <thead><tr><th>Symbol</th><th>Side</th><th>Type</th><th>Price</th><th>Qty</th><th>Filled</th><th>Status</th><th></th></tr></thead>
-                <div id="ordersGrid" class="grid-container"></div>
-            </table>
+            <div id="ordersGrid"></div>
         </div>
         <div class="positions-content" id="tabHistory" style="display:none;">
-            <table class="positions-table">
-                <thead><tr><th>Time</th><th>Symbol</th><th>Side</th><th>Type</th><th>Price</th><th>Qty</th><th>Status</th></tr></thead>
-                <div id="historyGrid" class="grid-container"></div>
-            </table>
+            <div id="historyGrid"></div>
         </div>
     </div>
     
@@ -365,6 +356,7 @@
     <script src="app.js"></script>
 </body>
 </html>
+
 
 
 

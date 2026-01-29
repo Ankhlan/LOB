@@ -2137,3 +2137,174 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(initDataGrids, 100);
 });
 
+
+// ===== RESIZABLE PANELS =====
+function initResizablePanels() {
+    const leftPanel = document.querySelector('.left-panel');
+    const rightPanel = document.querySelector('.right-panel');
+    const positionsBar = document.querySelector('.positions-bar');
+    
+    // Create resize bars if panels exist
+    if (leftPanel && leftPanel.nextElementSibling) {
+        const leftResizer = document.createElement('div');
+        leftResizer.className = 'resize-bar';
+        leftPanel.after(leftResizer);
+        
+        initHorizontalResize(leftResizer, leftPanel, 'left');
+    }
+    
+    if (rightPanel && rightPanel.previousElementSibling) {
+        const rightResizer = document.createElement('div');
+        rightResizer.className = 'resize-bar';
+        rightPanel.before(rightResizer);
+        
+        initHorizontalResize(rightResizer, rightPanel, 'right');
+    }
+    
+    console.log('[Resize] Panel resizing initialized');
+}
+
+function initHorizontalResize(resizer, panel, side) {
+    let isResizing = false;
+    let startX = 0;
+    let startWidth = 0;
+    
+    resizer.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        startX = e.clientX;
+        startWidth = panel.offsetWidth;
+        resizer.classList.add('active');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        
+        const delta = side === 'left' ? e.clientX - startX : startX - e.clientX;
+        const newWidth = Math.max(150, Math.min(450, startWidth + delta));
+        panel.style.width = newWidth + 'px';
+    });
+    
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            resizer.classList.remove('active');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            
+            // Save panel widths to localStorage
+            localStorage.setItem('panel_' + side + '_width', panel.offsetWidth);
+        }
+    });
+    
+    // Restore saved width
+    const saved = localStorage.getItem('panel_' + side + '_width');
+    if (saved) {
+        panel.style.width = saved + 'px';
+    }
+}
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(initResizablePanels, 200);
+});
+
+// ===== FIX: Use actual panel selectors =====
+function initResizablePanelsFixed() {
+    const watchlist = document.querySelector('aside.watchlist');
+    const orderPanel = document.querySelector('aside:last-of-type'); // Right panel
+    const workspace = document.querySelector('.workspace');
+    
+    if (!workspace) return;
+    
+    // Add resize bar after watchlist
+    if (watchlist) {
+        const leftResizer = document.createElement('div');
+        leftResizer.className = 'resize-bar';
+        leftResizer.style.cssText = 'width:5px;background:transparent;cursor:col-resize;flex-shrink:0;';
+        watchlist.after(leftResizer);
+        
+        let isResizing = false;
+        let startX, startWidth;
+        
+        leftResizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            startX = e.clientX;
+            startWidth = watchlist.offsetWidth;
+            leftResizer.style.background = 'var(--accent)';
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const newWidth = Math.max(150, Math.min(400, startWidth + e.clientX - startX));
+            watchlist.style.width = newWidth + 'px';
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                leftResizer.style.background = 'transparent';
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                localStorage.setItem('watchlist_width', watchlist.offsetWidth);
+            }
+        });
+        
+        // Restore
+        const saved = localStorage.getItem('watchlist_width');
+        if (saved) watchlist.style.width = saved + 'px';
+    }
+    
+    // Add resize bar before order panel
+    if (orderPanel && orderPanel !== watchlist) {
+        const rightResizer = document.createElement('div');
+        rightResizer.className = 'resize-bar';
+        rightResizer.style.cssText = 'width:5px;background:transparent;cursor:col-resize;flex-shrink:0;';
+        orderPanel.before(rightResizer);
+        
+        let isResizing = false;
+        let startX, startWidth;
+        
+        rightResizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            startX = e.clientX;
+            startWidth = orderPanel.offsetWidth;
+            rightResizer.style.background = 'var(--accent)';
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const newWidth = Math.max(200, Math.min(450, startWidth - (e.clientX - startX)));
+            orderPanel.style.width = newWidth + 'px';
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                rightResizer.style.background = 'transparent';
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                localStorage.setItem('order_panel_width', orderPanel.offsetWidth);
+            }
+        });
+        
+        // Restore
+        const saved = localStorage.getItem('order_panel_width');
+        if (saved) orderPanel.style.width = saved + 'px';
+    }
+    
+    console.log('[Resize] Fixed panel resizing initialized');
+}
+
+// Run on load
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(initResizablePanelsFixed, 300);
+});
