@@ -3229,3 +3229,30 @@ setInterval(() => {
 document.addEventListener('DOMContentLoaded', () => {
     fetchBankRates(); // Update toolbar rate on load
 });
+
+// ========================================
+// FUNDING TIMER
+// ========================================
+function updateFundingTimer() {
+    const now = new Date();
+    const nextFunding = new Date(now);
+    // Funding at 0:00, 8:00, 16:00 UTC
+    const currentHour = now.getUTCHours();
+    const nextFundingHour = Math.ceil(currentHour / 8) * 8;
+    nextFunding.setUTCHours(nextFundingHour === 24 ? 0 : nextFundingHour, 0, 0, 0);
+    if (nextFunding <= now) nextFunding.setUTCHours(nextFunding.getUTCHours() + 8);
+    
+    const diff = nextFunding - now;
+    const hours = Math.floor(diff / 3600000);
+    const mins = Math.floor((diff % 3600000) / 60000);
+    const secs = Math.floor((diff % 60000) / 1000);
+    
+    const timerEl = document.getElementById('fundingTimer');
+    if (timerEl) {
+        timerEl.textContent = `${hours}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+    }
+}
+
+// Update funding timer every second
+setInterval(updateFundingTimer, 1000);
+document.addEventListener('DOMContentLoaded', updateFundingTimer);

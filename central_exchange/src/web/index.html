@@ -6,842 +6,501 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <title>CRE.mn | Central Exchange</title>
-    <style>
-        :root {
-            --bg-app: #0d1117;
-            --bg-primary: #161b22;
-            --bg-secondary: #21262d;
-            --bg-tertiary: #30363d;
-            --border: #30363d;
-            --text-primary: #e6edf3;
-            --text-secondary: #8b949e;
-            --text-muted: #6e7681;
-            --accent: #58a6ff;
-            --green: #3fb950;
-            --red: #f85149;
-            --yellow: #d29922;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: Inter, -apple-system, sans-serif; 
-            background: var(--bg-app); 
-            color: var(--text-primary);
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-        .mono { font-family: Consolas, monospace; }
-        
-        /* ===== TOP BAR - Critical Metrics ===== */
-        .top-bar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 8px 16px;
-            background: var(--bg-primary);
-            border-bottom: 1px solid var(--border);
-            min-height: 48px;
-        }
-        .top-left { display: flex; align-items: center; gap: 16px; }
-        .logo { 
-            font-weight: 600; 
-            font-size: 16px;
-            color: var(--accent);
-        }
-        .rate-box {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 6px 12px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            cursor: pointer;
-            position: relative;
-        }
-        .rate-box:hover { border-color: var(--accent); }
-        .rate-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; }
-        .rate-value { font-size: 16px; font-weight: 600; font-family: Consolas, monospace; }
-        .rate-change { font-size: 11px; }
-        .rate-change.up { color: var(--green); }
-        .rate-change.down { color: var(--red); }
-        
-        .metrics { display: flex; gap: 24px; }
-        .metric { text-align: center; }
-        .metric-label { font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-        .metric-value { font-size: 14px; font-weight: 500; font-family: Consolas, monospace; }
-        .metric-value.positive { color: var(--green); }
-        .metric-value.negative { color: var(--red); }
-        
-        .top-right { display: flex; align-items: center; gap: 12px; }
-        .funding-timer {
-            padding: 4px 12px;
-            background: var(--bg-secondary);
-            border-radius: 4px;
-            font-size: 11px;
-        }
-        .funding-timer .label { color: var(--text-muted); }
-        .funding-timer .time { color: var(--yellow); font-family: Consolas, monospace; }
-        
-        .user-btn {
-            padding: 6px 12px;
-            background: var(--accent);
-            border: none;
-            border-radius: 4px;
-            color: white;
-            font-size: 12px;
-            cursor: pointer;
-        }
-        .user-btn:hover { opacity: 0.9; }
-        
-        /* ===== MAIN AREA - 70/30 Split ===== */
-        .main-area {
-            flex: 1;
-            display: flex;
-            overflow: hidden;
-        }
-        
-        /* Left: Chart */
-        .chart-section {
-            flex: 7;
-            display: flex;
-            flex-direction: column;
-            border-right: 1px solid var(--border);
-            min-width: 0;
-        }
-        .chart-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 8px 12px;
-            background: var(--bg-primary);
-            border-bottom: 1px solid var(--border);
-        }
-        .symbol-select {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            color: var(--text-primary);
-            padding: 6px 12px;
-            border-radius: 4px;
-            font-size: 13px;
-            font-weight: 500;
-        }
-        .timeframes { display: flex; gap: 4px; }
-        .tf-btn {
-            padding: 4px 10px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            color: var(--text-secondary);
-            font-size: 11px;
-            cursor: pointer;
-        }
-        .tf-btn:hover, .tf-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
-        
-        .chart-container {
-            flex: 1;
-            background: var(--bg-primary);
-            position: relative;
-        }
-        
-        /* Right: Trade Panel */
-        .trade-section {
-            flex: 3;
-            display: flex;
-            flex-direction: column;
-            background: var(--bg-primary);
-            min-width: 280px;
-            max-width: 360px;
-        }
-        
-        .price-display {
-            padding: 16px;
-            text-align: center;
-            border-bottom: 1px solid var(--border);
-        }
-        .price-main { font-size: 28px; font-weight: 600; font-family: Consolas, monospace; }
-        .price-change { font-size: 12px; margin-top: 4px; }
-        .price-bbo { display: flex; justify-content: center; gap: 24px; margin-top: 8px; font-size: 12px; }
-        .bid { color: var(--green); }
-        .ask { color: var(--red); }
-        
-        .trade-form { padding: 16px; flex: 1; overflow-y: auto; }
-        .side-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
-        .side-btn {
-            padding: 12px;
-            border: none;
-            border-radius: 6px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.15s;
-        }
-        .side-btn.buy { background: rgba(63, 185, 80, 0.2); color: var(--green); border: 1px solid var(--green); }
-        .side-btn.sell { background: rgba(248, 81, 73, 0.2); color: var(--red); border: 1px solid var(--red); }
-        .side-btn.active.buy { background: var(--green); color: white; }
-        .side-btn.active.sell { background: var(--red); color: white; }
-        
-        .form-group { margin-bottom: 12px; }
-        .form-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; }
-        .form-input {
-            width: 100%;
-            padding: 10px 12px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            color: var(--text-primary);
-            font-size: 14px;
-            font-family: Consolas, monospace;
-        }
-        .form-input:focus { border-color: var(--accent); outline: none; }
-        
-        .quick-btns { display: flex; gap: 4px; margin-top: 8px; }
-        .quick-btn {
-            flex: 1;
-            padding: 6px;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            color: var(--text-secondary);
-            font-size: 11px;
-            cursor: pointer;
-        }
-        .quick-btn:hover { background: var(--accent); color: white; }
-        
-        .leverage-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
-        .leverage-slider {
-            flex: 1;
-            -webkit-appearance: none;
-            height: 4px;
-            background: var(--bg-tertiary);
-            border-radius: 2px;
-        }
-        .leverage-slider::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 16px;
-            height: 16px;
-            background: var(--accent);
-            border-radius: 50%;
-            cursor: pointer;
-        }
-        .leverage-value { 
-            min-width: 40px;
-            text-align: right;
-            font-family: Consolas, monospace;
-            font-weight: 600;
-        }
-        
-        .order-summary {
-            background: var(--bg-secondary);
-            border-radius: 6px;
-            padding: 12px;
-            margin-bottom: 12px;
-            font-size: 12px;
-        }
-        .summary-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
-        .summary-label { color: var(--text-muted); }
-        .summary-value { font-family: Consolas, monospace; }
-        
-        .submit-btn {
-            width: 100%;
-            padding: 14px;
-            border: none;
-            border-radius: 6px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.15s;
-        }
-        .submit-btn.buy { background: var(--green); color: white; }
-        .submit-btn.sell { background: var(--red); color: white; }
-        .submit-btn:hover { opacity: 0.9; transform: translateY(-1px); }
-        
-        /* Mini Order Book */
-        .mini-orderbook {
-            border-top: 1px solid var(--border);
-            padding: 12px;
-            background: var(--bg-secondary);
-        }
-        .ob-header { font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; }
-        .ob-row { display: flex; justify-content: space-between; font-size: 11px; font-family: Consolas, monospace; padding: 2px 0; }
-        .ob-row.bid { color: var(--green); }
-        .ob-row.ask { color: var(--red); }
-        
-        /* ===== BOTTOM - Positions (Collapsible) ===== */
-        .positions-section {
-            border-top: 1px solid var(--border);
-            background: var(--bg-primary);
-            transition: height 0.3s ease;
-        }
-        .positions-section.collapsed { height: 36px; }
-        .positions-section.expanded { height: 200px; }
-        
-        .positions-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 8px 16px;
-            cursor: pointer;
-            background: var(--bg-secondary);
-        }
-        .positions-header:hover { background: var(--bg-tertiary); }
-        .positions-title { font-size: 12px; font-weight: 500; }
-        .positions-toggle { color: var(--text-muted); }
-        
-        .positions-table {
-            width: 100%;
-            font-size: 11px;
-            border-collapse: collapse;
-            overflow-y: auto;
-        }
-        .positions-table th {
-            text-align: left;
-            padding: 8px 12px;
-            color: var(--text-muted);
-            font-weight: 500;
-            font-size: 10px;
-            text-transform: uppercase;
-            background: var(--bg-secondary);
-            position: sticky;
-            top: 0;
-        }
-        .positions-table td {
-            padding: 8px 12px;
-            border-bottom: 1px solid var(--border);
-        }
-        .positions-body { max-height: 140px; overflow-y: auto; }
-        
-        /* Bank Rates Dropdown */
-        .bank-dropdown {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            background: var(--bg-primary);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 12px;
-            min-width: 300px;
-            z-index: 100;
-            display: none;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-        }
-        .bank-dropdown.visible { display: block; }
-        .bank-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 12px; }
-        .bank-name { color: var(--text-secondary); }
-        
-        /* Login Modal */
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.8);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-        }
-        .modal-overlay.hidden { display: none; }
-        .login-modal {
-            background: var(--bg-primary);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 32px;
-            width: 340px;
-        }
-        .login-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
-        .login-subtitle { font-size: 13px; color: var(--text-muted); margin-bottom: 24px; }
-        .phone-input { display: flex; gap: 8px; margin-bottom: 16px; }
-        .phone-prefix { 
-            padding: 10px 12px; 
-            background: var(--bg-tertiary); 
-            border-radius: 4px;
-            color: var(--text-muted);
-        }
-        .phone-number {
-            flex: 1;
-            padding: 10px 12px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            color: var(--text-primary);
-            font-size: 16px;
-        }
-        .login-btn {
-            width: 100%;
-            padding: 12px;
-            background: var(--accent);
-            border: none;
-            border-radius: 6px;
-            color: white;
-            font-size: 14px;
-            cursor: pointer;
-        }
-        .login-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .otp-inputs { display: flex; gap: 8px; justify-content: center; margin-bottom: 16px; }
-        .otp-digit {
-            width: 40px;
-            height: 48px;
-            text-align: center;
-            font-size: 20px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            color: var(--text-primary);
-        }
-        .login-step { display: none; }
-        .login-step.active { display: block; }
-    </style>
+    <title>Central Exchange | Professional Trading Platform</title>
+    <!-- Zero external dependencies - using system fonts -->
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="datagrid.css">
+    <link rel="stylesheet" href="datagrid.css">
 </head>
-<body>
-
+<body data-theme="dark">
     <!-- LOGIN MODAL -->
     <div class="modal-overlay hidden" id="loginModal">
         <div class="login-modal">
-            <div class="login-title">CRE.mn</div>
-            <div class="login-subtitle">Login with your phone number</div>
-            <div class="login-step active" id="stepPhone">
-                <div class="phone-input">
-                    <span class="phone-prefix">+976</span>
-                    <input type="tel" class="phone-number" id="phoneInput" placeholder="99001234" maxlength="8">
+            <div class="login-header">
+                <div class="menubar-logo-icon" style="width:32px;height:32px;font-size:12px;">CRE</div>
+                <div>
+                    <div class="login-title" data-i18n="loginTitle">Central Exchange</div>
+                    <div class="login-subtitle" data-i18n="loginSubtitle">Login with your phone number</div>
                 </div>
-                <button class="login-btn" id="requestOtpBtn" onclick="requestOtp()" disabled>Send Code</button>
             </div>
-            <div class="login-step" id="stepOtp">
-                <div class="otp-inputs">
-                    <input type="text" class="otp-digit" maxlength="1">
-                    <input type="text" class="otp-digit" maxlength="1">
-                    <input type="text" class="otp-digit" maxlength="1">
-                    <input type="text" class="otp-digit" maxlength="1">
-                    <input type="text" class="otp-digit" maxlength="1">
-                    <input type="text" class="otp-digit" maxlength="1">
+            <div class="login-body">
+                <!-- Step 1: Phone Input -->
+                <div class="login-step active" id="stepPhone">
+                    <div class="phone-input">
+                        <span class="phone-prefix">+976</span>
+                        <input type="tel" class="phone-number" id="phoneInput" placeholder="99001234" maxlength="8" oninput="validatePhone()">
+                    </div>
+                    <button class="login-btn" id="requestOtpBtn" onclick="requestOtp()" disabled data-i18n="sendCode">Send Code</button>
+                    <div class="login-error" id="phoneError"></div>
+                    <div class="login-info" data-i18n="phoneInfo">We will send a 6-digit code via SMS</div>
                 </div>
-                <button class="login-btn" onclick="verifyOtp()">Verify</button>
+                <!-- Step 2: OTP Input -->
+                <div class="login-step" id="stepOtp">
+                    <div class="otp-inputs">
+                        <input type="text" class="otp-digit" maxlength="1" oninput="otpInput(this, 0)">
+                        <input type="text" class="otp-digit" maxlength="1" oninput="otpInput(this, 1)">
+                        <input type="text" class="otp-digit" maxlength="1" oninput="otpInput(this, 2)">
+                        <input type="text" class="otp-digit" maxlength="1" oninput="otpInput(this, 3)">
+                        <input type="text" class="otp-digit" maxlength="1" oninput="otpInput(this, 4)">
+                        <input type="text" class="otp-digit" maxlength="1" oninput="otpInput(this, 5)">
+                    </div>
+                    <button class="login-btn" id="verifyOtpBtn" onclick="verifyOtp()" disabled data-i18n="verify">Verify</button>
+                    <div class="login-error" id="otpError"></div>
+                    <button class="login-back" onclick="backToPhone()" data-i18n="changeNumber">← Change number</button>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- TOP BAR -->
-    <div class="top-bar">
-        <div class="top-left">
-            <div class="logo">CRE.mn</div>
-            <div class="rate-box" onclick="toggleBankDropdown()">
-                <div>
-                    <div class="rate-label">USD/MNT</div>
-                    <div class="rate-value" id="usdmntRate">3,450</div>
+    <!-- TOP MENU BAR - Desktop App Style -->
+    <div class="menubar">
+        <div class="menubar-logo">
+            <img src="logo.svg" alt="CRE.mn" class="menubar-logo-img" style="height:20px;">
+            <span class="menubar-logo-text" data-i18n="appName">Central Exchange</span>
+        </div>
+        <div class="menu-items">
+            <div class="menu-item has-dropdown" data-i18n="menuFile">File
+                <div class="dropdown">
+                    <div class="dropdown-item" data-i18n="newWorkspace">New Workspace <span class="shortcut">Ctrl+N</span></div>
+                    <div class="dropdown-item" data-i18n="saveLayout">Save Layout <span class="shortcut">Ctrl+S</span></div>
+                    <div class="dropdown-divider"></div>
+                    <div class="dropdown-item" data-i18n="exportTrades">Export Trades</div>
+                    <div class="dropdown-divider"></div>
+                    <div class="dropdown-item" data-i18n="exit">Exit</div>
                 </div>
-                <div class="rate-change up" id="rateChange">+0.12%</div>
-                <!-- Bank Rates Dropdown -->
-                <div class="bank-dropdown" id="bankDropdown">
-                    <div style="font-weight:600; margin-bottom:8px;">Bank Rates</div>
-                    <div id="bankRatesList">Loading...</div>
-                    <div style="margin-top:8px; font-size:10px; color:var(--text-muted);">
-                        BoM Reference: <span id="bomRate">-</span>
+            </div>
+            <div class="menu-item has-dropdown">View
+                <div class="dropdown">
+                    <div class="dropdown-item">Chart <span class="shortcut">F5</span></div>
+                    <div class="dropdown-item">Order Book <span class="shortcut">F6</span></div>
+                    <div class="dropdown-item">Positions <span class="shortcut">F7</span></div>
+                    <div class="dropdown-divider"></div>
+                    <div class="dropdown-item">Full Screen <span class="shortcut">F11</span></div>
+                    <div class="dropdown-divider"></div>
+                    <div class="dropdown-item" onclick="setTheme('dark')">Theme: Dark</div>
+                    <div class="dropdown-item" onclick="setTheme('light')">Theme: Light</div>
+                    <div class="dropdown-item" onclick="setTheme('blue')">Theme: Blue</div>
+                </div>
+            </div>
+            <div class="menu-item has-dropdown">Account
+                <div class="dropdown">
+                    <div class="dropdown-item" onclick="openQpay()">Deposit <span class="shortcut">Ctrl+D</span></div>
+                    <div class="dropdown-item">Withdraw <span class="shortcut">Ctrl+W</span></div>
+                    <div class="dropdown-divider"></div>
+                    <div class="dropdown-item">Transaction History</div>
+                    <div class="dropdown-item">Account Settings</div>
+                </div>
+            </div>
+            <div class="menu-item has-dropdown">Trade
+                <div class="dropdown">
+                    <div class="dropdown-item">New Order <span class="shortcut">F9</span></div>
+                    <div class="dropdown-item">Close All Positions</div>
+                    <div class="dropdown-divider"></div>
+                    <div class="dropdown-item">Risk Settings</div>
+                </div>
+            </div>
+            <div class="menu-item has-dropdown">Window
+                <div class="dropdown">
+                    <div class="dropdown-item">Tile Horizontally</div>
+                    <div class="dropdown-item">Tile Vertically</div>
+                    <div class="dropdown-item">Cascade</div>
+                </div>
+            </div>
+            <div class="menu-item has-dropdown">Help
+                <div class="dropdown">
+                    <div class="dropdown-item">Documentation</div>
+                    <div class="dropdown-item">Keyboard Shortcuts</div>
+                    <div class="dropdown-divider"></div>
+                    <div class="dropdown-item">About Central Exchange</div>
+                </div>
+            </div>
+        </div>
+        <div class="menu-spacer"></div>
+        <div class="menu-right">
+            <div class="lang-toggle">
+                <button class="lang-btn active" id="langEn" onclick="setLang('en')">EN</button>
+                <button class="lang-btn" id="langMn" onclick="setLang('mn')">MN</button>
+            </div>
+            <div class="user-info" id="userInfo" style="display:none;">
+                <span class="user-phone" id="userPhone">+976 ...</span>
+                <button class="logout-btn" onclick="logout()" data-i18n="logout">Logout</button>
+            </div>
+            <button class="toolbar-btn" id="loginBtn" onclick="showLogin()" data-i18n="login">Login</button>
+        </div>
+    </div>
+    
+    <!-- TOOLBAR -->
+    <div class="toolbar">
+        <div class="toolbar-group">
+            <button class="toolbar-btn active">Chart</button>
+            <button class="toolbar-btn">Orders</button>
+            <button class="toolbar-btn">Positions</button>
+        </div>
+        <div class="account-display">
+            <div class="account-item usdmnt-rate">
+                <span class="account-label">USD/MNT</span>
+                <span class="account-value highlight" id="usdmntRate" onclick="toggleBankPanel()" style="cursor:pointer;" title="Click for bank rates">3,450</span> <button class="bank-toggle-btn" onclick="toggleBankPanel()">FX</button>
+            </div>
+            <div class="account-divider"></div>
+            <div class="account-item">
+                <span class="account-label">Equity</span>
+                <span class="account-value positive" id="equity">0.00 MNT</span>
+            </div>
+            <div class="account-item">
+                <span class="account-label">Available</span>
+                <span class="account-value" id="available">0.00 MNT</span>
+            </div>
+            <div class="account-item">
+                <span class="account-label">Margin</span>
+                <span class="account-value" id="margin">0.00 MNT</span>
+            </div>
+            <div class="account-item">
+                <span class="account-label">Unrealized</span>
+                <span class="account-value" id="unrealizedPnl">0.00 MNT</span>
+            </div>
+            <div class="account-item">
+                <span class="account-label">Margin %</span>
+                <span class="account-value" id="marginPct">0%</span>
+            </div>
+            <div class="account-item sparkline-item">
+                <span class="account-label">Daily P&L</span>
+                <canvas id="dailyPnlSparkline" class="sparkline" width="60" height="20"></canvas>
+            </div>
+            <div class="account-divider"></div>
+            <div class="account-item">
+                <span class="account-label">Funding</span>
+                <span class="account-value" id="fundingTimer" style="color:#d29922;">7:59:32</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- MAIN WORKSPACE -->
+    <div class="workspace">
+        <!-- WATCHLIST -->
+        <aside class="watchlist">
+            <div class="panel-header">
+                <span class="panel-title">Instruments</span>
+                <div class="panel-actions">
+                    <button class="panel-btn" title="Add">+</button>
+                    <button class="panel-btn" title="Settings">⚙</button>
+                </div>
+            </div>
+            <div class="search-box">
+                <input type="text" placeholder="Search..." id="searchInput" oninput="filterInstruments()">
+            </div>
+            <div class="instrument-list" id="instrumentList"></div>
+        </aside>
+        
+        <!-- CENTER - Chart & Orderbook -->
+        <section class="center">
+            <div class="chart-area">
+                <div class="chart-tabs">
+                    <div class="chart-tab active"><span id="tabSymbol">XAU-MNT-PERP</span><span class="close">×</span></div>
+                    <div class="chart-layout-toggle">
+                        <button class="layout-btn active" onclick="setChartLayout('single')" title="Single Chart">▢</button>
+                        <button class="layout-btn" onclick="setChartLayout('quad')" title="2x2 Grid">▦</button>
                     </div>
                 </div>
-            </div>
-        </div>
-        
-        <div class="metrics">
-            <div class="metric">
-                <div class="metric-label">Portfolio</div>
-                <div class="metric-value" id="portfolioValue">0 MNT</div>
-            </div>
-            <div class="metric">
-                <div class="metric-label">Unrealized P&L</div>
-                <div class="metric-value positive" id="unrealizedPnl">+0 MNT</div>
-            </div>
-            <div class="metric">
-                <div class="metric-label">Margin</div>
-                <div class="metric-value" id="marginUsed">0%</div>
-            </div>
-        </div>
-        
-        <div class="top-right">
-            <div class="funding-timer">
-                <span class="label">Funding in</span>
-                <span class="time" id="fundingTime">7:59:32</span>
-            </div>
-            <button class="user-btn" id="userBtn" onclick="showLogin()">Login</button>
-        </div>
-    </div>
-
-    <!-- MAIN AREA -->
-    <div class="main-area">
-        <!-- Left: Chart -->
-        <div class="chart-section">
-            <div class="chart-header">
-                <select class="symbol-select" id="symbolSelect" onchange="selectSymbol(this.value)">
-                    <option value="XAU-MNT-PERP">XAU-MNT-PERP</option>
-                </select>
-                <div class="timeframes">
-                    <button class="tf-btn" onclick="setTimeframe('1')">1m</button>
-                    <button class="tf-btn active" onclick="setTimeframe('5')">5m</button>
+                <div class="chart-toolbar">
+                    <button class="tf-btn active" onclick="setTimeframe('1')">1m</button>
+                    <button class="tf-btn" onclick="setTimeframe('5')">5m</button>
                     <button class="tf-btn" onclick="setTimeframe('15')">15m</button>
                     <button class="tf-btn" onclick="setTimeframe('60')">1H</button>
                     <button class="tf-btn" onclick="setTimeframe('240')">4H</button>
                     <button class="tf-btn" onclick="setTimeframe('D')">1D</button>
+                    <span style="width:1px;height:16px;background:var(--border);margin:0 8px;"></span>
+                    <button class="tf-btn active" id="volBtn" onclick="toggleVolume()" title="Volume">VOL</button>
+                    <button class="tf-btn" id="smaBtn" onclick="toggleSMA()" title="SMA 20">SMA</button>
+                    <button class="tf-btn" id="emaBtn" onclick="toggleEMA()" title="EMA 12">EMA</button>
+                    <button class="tf-btn" id="bbBtn" onclick="toggleBB()" title="Bollinger Bands 20">BB</button>
+                    <span style="width:1px;height:16px;background:var(--border);margin:0 8px;"></span>
+                    <button class="tf-btn" id="webglBtn" onclick="toggleWebGL()" title="WebGL Renderer (GPU)">WebGL</button>
+                </div>
+                <div class="chart-info">
+                    <div class="chart-symbol" id="chartSymbol">XAU-MNT-PERP</div>
+                    <div class="chart-price" id="chartPrice">-</div>
+                    <div class="chart-change up" id="chartChange">+0.00%</div>
+                </div>
+                <div class="chart-container" id="chartContainer"></div>
+                <!-- Multi-Chart Grid (hidden by default) -->
+                <div class="chart-grid" id="chartGrid" style="display:none;">
+                    <div class="chart-cell" data-slot="0">
+                        <div class="chart-cell-header">
+                            <select class="chart-symbol-select" onchange="setGridSymbol(0, this.value)"></select>
+                        </div>
+                        <div class="chart-cell-body" id="chartCell0"></div>
+                    </div>
+                    <div class="chart-cell" data-slot="1">
+                        <div class="chart-cell-header">
+                            <select class="chart-symbol-select" onchange="setGridSymbol(1, this.value)"></select>
+                        </div>
+                        <div class="chart-cell-body" id="chartCell1"></div>
+                    </div>
+                    <div class="chart-cell" data-slot="2">
+                        <div class="chart-cell-header">
+                            <select class="chart-symbol-select" onchange="setGridSymbol(2, this.value)"></select>
+                        </div>
+                        <div class="chart-cell-body" id="chartCell2"></div>
+                    </div>
+                    <div class="chart-cell" data-slot="3">
+                        <div class="chart-cell-header">
+                            <select class="chart-symbol-select" onchange="setGridSymbol(3, this.value)"></select>
+                        </div>
+                        <div class="chart-cell-body" id="chartCell3"></div>
+                    </div>
                 </div>
             </div>
-            <div class="chart-container" id="chartContainer"></div>
-        </div>
+            <div class="orderbook-area">
+                <div class="ob-toggle">
+                    <button class="ob-toggle-btn active" onclick="setObView('split')" title="Split View">Split</button>
+                    <button class="ob-toggle-btn" onclick="setObView('ladder')" title="DOM Ladder">Ladder</button>
+                </div>
+                <div class="orderbook" id="obSplit">
+                    <div class="ob-side ob-bids">
+                        <div class="ob-header"><span>Bid</span><span>Size</span></div>
+                        <canvas id="bidsCanvas" class="ob-canvas"></canvas>
+                    </div>
+                    <div class="ob-side ob-asks">
+                        <div class="ob-header"><span>Ask</span><span>Size</span></div>
+                        <canvas id="asksCanvas" class="ob-canvas"></canvas>
+                    </div>
+                    <!-- Order Book Imbalance Indicator -->
+                    <div class="ob-imbalance">
+                        <span class="imbalance-label" style="font-size:9px;color:var(--text-muted);">Imbalance</span>
+                        <div class="imbalance-bar">
+                            <div class="imbalance-bid" id="imbalanceBid" style="width:50%;"></div>
+                            <div class="imbalance-ask" id="imbalanceAsk" style="width:50%;"></div>
+                        </div>
+                        <span class="imbalance-pct" id="imbalancePct">0%</span>
+                    </div>
+                </div>
+                <!-- DOM Ladder View -->
+                <div class="dom-ladder" id="domLadder" style="display:none;">
+                    <div class="ladder-header">
+                        <span class="ladder-col">Bid Qty</span>
+                        <span class="ladder-col">Price</span>
+                        <span class="ladder-col">Ask Qty</span>
+                        <span class="ladder-col">Orders</span>
+                    </div>
+                    <div class="ladder-body" id="ladderBody"></div>
+                </div>
+                <div class="trade-ticker">
+                    <div class="ob-header"><span>Recent Trades</span><span>Time</span></div>
+                    <div class="ticker-list" id="tickerList">
+                        <div class="ticker-empty">No recent trades</div>
+                    </div>
+                </div>
+            </div>
+        </section>
         
-        <!-- Right: Trade Panel -->
-        <div class="trade-section">
-            <div class="price-display">
-                <div class="price-main" id="currentPrice">18,750,000</div>
-                <div class="price-change up" id="priceChange">+1.24%</div>
-                <div class="price-bbo">
-                    <span class="bid">Bid: <span id="bidPrice">18,749,500</span></span>
-                    <span class="ask">Ask: <span id="askPrice">18,750,500</span></span>
-                </div>
+        <!-- TRADE PANEL -->
+        <aside class="trade-panel">
+            <div class="trade-tabs">
+                <div class="trade-tab active">Market</div>
+                <div class="trade-tab">Limit</div>
+                <div class="trade-tab">Stop</div>
             </div>
-            
             <div class="trade-form">
-                <div class="side-buttons">
-                    <button class="side-btn buy active" id="buyBtn" onclick="setSide('buy')">BUY</button>
-                    <button class="side-btn sell" id="sellBtn" onclick="setSide('sell')">SELL</button>
+                <div class="side-btns">
+                    <button class="side-btn buy active" id="buyBtn" onclick="setSide('long')">BUY</button>
+                    <button class="side-btn sell" id="sellBtn" onclick="setSide('short')">SELL</button>
                 </div>
-                
-                <div class="form-group">
-                    <div class="form-label">Quantity</div>
-                    <input type="text" class="form-input" id="qtyInput" value="1" oninput="updateSummary()">
-                    <div class="quick-btns">
-                        <button class="quick-btn" onclick="setQty(0.1)">0.1</button>
-                        <button class="quick-btn" onclick="setQty(0.5)">0.5</button>
-                        <button class="quick-btn" onclick="setQty(1)">1</button>
-                        <button class="quick-btn" onclick="setQty(5)">5</button>
-                        <button class="quick-btn" onclick="setQty(10)">10</button>
+                <div class="form-row">
+                    <label class="form-label">Quantity</label>
+                    <div class="quantity-input-group">
+                        <input type="number" class="form-input" id="quantity" value="1" step="0.01" oninput="updateSummary()">
+                        <div class="quick-qty-btns">
+                            <button class="quick-btn" onclick="setQuantity(0.1)">0.1</button>
+                            <button class="quick-btn" onclick="setQuantity(0.5)">0.5</button>
+                            <button class="quick-btn active" onclick="setQuantity(1)">1</button>
+                            <button class="quick-btn" onclick="setQuantity(5)">5</button>
+                            <button class="quick-btn" onclick="setQuantity(10)">10</button>
+                        </div>
                     </div>
                 </div>
-                
-                <div class="form-group">
-                    <div class="form-label">Leverage</div>
-                    <div class="leverage-row">
-                        <input type="range" class="leverage-slider" id="leverageSlider" min="1" max="100" value="10" oninput="updateLeverage()">
-                        <div class="leverage-value" id="leverageValue">10x</div>
+                <div class="form-row">
+                <div class="form-row">
+                    <label class="form-label">Leverage</label>
+                    <div class="leverage-group">
+                        <div class="leverage-slider-row">
+                            <input type="range" class="leverage-slider" id="leverageSlider" min="1" max="100" value="10" oninput="document.getElementById('leverage').value=this.value; document.getElementById('leverageValue').textContent=this.value+'x'; updateSummary()">
+                            <span class="leverage-value" id="leverageValue">10x</span>
+                            <input type="hidden" id="leverage" value="10">
+                        </div>
+                        <div class="leverage-presets">
+                            <button class="leverage-btn" onclick="setLeverage(1)">1x</button>
+                            <button class="leverage-btn" onclick="setLeverage(5)">5x</button>
+                            <button class="leverage-btn active" onclick="setLeverage(10)">10x</button>
+                            <button class="leverage-btn" onclick="setLeverage(25)">25x</button>
+                            <button class="leverage-btn" onclick="setLeverage(50)">50x</button>
+                            <button class="leverage-btn" onclick="setLeverage(100)">100x</button>
+                        </div>
                     </div>
                 </div>
-                
                 <div class="order-summary">
-                    <div class="summary-row">
-                        <span class="summary-label">Entry Price</span>
-                        <span class="summary-value" id="entryPrice">18,750,000</span>
-                    </div>
-                    <div class="summary-row">
-                        <span class="summary-label">Position Value</span>
-                        <span class="summary-value" id="positionValue">18,750,000 MNT</span>
-                    </div>
-                    <div class="summary-row">
-                        <span class="summary-label">Required Margin</span>
-                        <span class="summary-value" id="requiredMargin">1,875,000 MNT</span>
-                    </div>
-                    <div class="summary-row">
-                        <span class="summary-label">Est. Fee</span>
-                        <span class="summary-value" id="estFee">9,375 MNT</span>
-                    </div>
+                    <div class="summary-row"><span class="summary-label">Entry</span><span class="summary-value" id="entryPrice">-</span></div>
+                    <div class="summary-row"><span class="summary-label">Value</span><span class="summary-value" id="posValue">-</span></div>
+                    <div class="summary-row"><span class="summary-label">Margin</span><span class="summary-value" id="reqMargin">-</span></div>
+                    <div class="summary-row"><span class="summary-label">Fee</span><span class="summary-value" id="estFee">-</span></div>
                 </div>
-                
                 <button class="submit-btn buy" id="submitBtn" onclick="submitOrder()">BUY XAU-MNT-PERP</button>
             </div>
-            
-            <!-- Mini Order Book -->
-            <div class="mini-orderbook">
-                <div class="ob-header">Order Book</div>
-                <div id="miniAsks"></div>
-                <div style="border-top:1px solid var(--border); margin:4px 0;"></div>
-                <div id="miniBids"></div>
+        </aside>
+    </div>
+    
+    <!-- BANK RATES PANEL (Floating Widget) -->
+    <div class="bank-rates-panel" id="bankRatesPanel">
+        <div class="bank-panel-header">
+            <span class="bank-panel-title">FX USD/MNT Bank Rates</span>
+            <button class="bank-panel-close" onclick="toggleBankPanel()">×</button>
+        </div>
+        <div class="bank-panel-body">
+            <div class="bank-mid-rate">
+                <div class="bank-mid-label">Mid Market Rate</div>
+                <div class="bank-mid-value" id="bankMidRate">-</div>
+                <div class="bank-mid-spread" id="bankSpread">Spread: -</div>
+            </div>
+            <div class="bank-best-rates">
+                <div class="bank-best bid">
+                    <div class="bank-best-label">Best Bid (Buy USD)</div>
+                    <div class="bank-best-value" id="bankBestBid">-</div>
+                    <div class="bank-best-bank" id="bankBestBidBank">-</div>
+                </div>
+                <div class="bank-best ask">
+                    <div class="bank-best-label">Best Ask (Sell USD)</div>
+                    <div class="bank-best-value" id="bankBestAsk">-</div>
+                    <div class="bank-best-bank" id="bankBestAskBank">-</div>
+                </div>
+            </div>
+            <div class="bank-table">
+                <div class="bank-table-header">
+                    <span>Bank</span>
+                    <span>Bid</span>
+                    <span>Ask</span>
+                    <span>Spread</span>
+                </div>
+                <div class="bank-table-body" id="bankTableBody">
+                    <div class="bank-loading">Loading bank rates...</div>
+                </div>
+            </div>
+            <div class="bank-reference">
+                <span>BoM Reference: <strong id="bomRate">-</strong></span>
+                <span>Band: <strong id="priceBand">-</strong></span>
             </div>
         </div>
     </div>
 
-    <!-- POSITIONS BAR (Collapsible) -->
-    <div class="positions-section expanded" id="positionsSection">
-        <div class="positions-header" onclick="togglePositions()">
-            <div class="positions-title">Positions <span id="posCount">(0)</span></div>
-            <div class="positions-toggle" id="posToggle">[-]</div>
+    <!-- POSITIONS BAR -->
+    <div class="positions-bar">
+        <div class="positions-tabs">
+            <div class="positions-tab active" onclick="showTab('positions')">Positions <span class="count" id="posCount">0</span></div>
+            <div class="positions-tab" onclick="showTab('orders')">Open Orders <span class="count" id="ordersCount">0</span></div>
+            <div class="positions-tab" onclick="showTab('history')">History</div>
         </div>
-        <div class="positions-body" id="positionsBody">
-            <table class="positions-table">
-                <thead>
-                    <tr>
-                        <th>Symbol</th>
-                        <th>Side</th>
-                        <th>Size</th>
-                        <th>Entry</th>
-                        <th>Mark</th>
-                        <th>P&L</th>
-                        <th>ROE</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody id="positionsTableBody">
-                    <tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:20px;">No open positions</td></tr>
-                </tbody>
-            </table>
+        <div class="positions-content" id="tabPositions">
+            <div id="positionsGrid"></div>
+        </div>
+        <div class="positions-content" id="tabOrders" style="display:none;">
+            <div id="ordersGrid"></div>
+        </div>
+        <div class="positions-content" id="tabHistory" style="display:none;">
+            <div id="historyGrid"></div>
+        </div>
+    </div>
+    
+    <!-- BOTTOM STATUS BAR -->
+    <div class="statusbar">
+        <div class="status-section">
+            <div class="status-dot online"></div>
+            <span class="status-label">Engine:</span>
+            <span class="status-value">Online</span>
+        </div>
+        <div class="status-section">
+            <div class="status-dot online"></div>
+            <span class="status-label">FXCM:</span>
+            <span class="status-value" id="fxcmStatus">Connected</span>
+        </div>
+        <div class="status-section">
+            <span class="status-label">USD/MNT:</span>
+            <span class="status-value" id="rateStatus">3,450</span>
+        </div>
+        <div class="status-section">
+            <span class="status-label">Used:</span>
+            <span class="status-value" id="usedMargin">0.00 MNT</span>
+        </div>
+        <div class="status-section">
+            <span class="status-label">Free:</span>
+            <span class="status-value green" id="freeMargin">0.00 MNT</span>
+        </div>
+        <div class="status-spacer"></div>
+        <div class="status-section" style="border-right:none;">
+            <span class="status-time" id="serverTime">--:--:--</span>
+        </div>
+    </div>
+    
+    <!-- TradingView Lightweight Charts - Professional charting library -->
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+
+    <script src="datagrid.js"></script>
+    <script src="webgl-chart.js"></script>
+    <script src="wasm-loader.js"></script>
+    <script src="app.js"></script>
+
+
+    <!-- ORDER CONFIRMATION OVERLAY -->
+    <div class="order-confirm" id="orderConfirm">
+        <div class="order-confirm-icon" id="orderConfirmIcon">✓</div>
+        <div class="order-confirm-title" id="orderConfirmTitle">Order Filled</div>
+        <div class="order-confirm-details" id="orderConfirmDetails">1 XAU-MNT-PERP @ 18,500,000 MNT</div>
+    </div>
+
+    <!-- KEYBOARD SHORTCUTS MODAL -->
+    <div class="modal-overlay hidden" id="keyboardModal" onclick="if(event.target===this)hideKeyboard()">
+        <div class="keyboard-modal">
+            <div class="keyboard-header">
+                <span class="keyboard-title">⌨️ Keyboard Shortcuts</span>
+                <button class="keyboard-close" onclick="hideKeyboard()">×</button>
+            </div>
+            <div class="keyboard-body">
+                <div class="shortcut-group">
+                    <div class="shortcut-title">Trading</div>
+                    <div class="shortcut-row"><span class="kbd-hint">B</span> <span>Buy (Long)</span></div>
+                    <div class="shortcut-row"><span class="kbd-hint">S</span> <span>Sell (Short)</span></div>
+                    <div class="shortcut-row"><span class="kbd-hint">Enter</span> <span>Submit Order</span></div>
+                    <div class="shortcut-row"><span class="kbd-hint">Esc</span> <span>Cancel / Close</span></div>
+                </div>
+                <div class="shortcut-group">
+                    <div class="shortcut-title">Chart</div>
+                    <div class="shortcut-row"><span class="kbd-hint">1</span> - <span class="kbd-hint">6</span> <span>Timeframes (1m-1D)</span></div>
+                    <div class="shortcut-row"><span class="kbd-hint">+</span> / <span class="kbd-hint">-</span> <span>Zoom In/Out</span></div>
+                    <div class="shortcut-row"><span class="kbd-hint">←</span> / <span class="kbd-hint">→</span> <span>Pan Chart</span></div>
+                </div>
+                <div class="shortcut-group">
+                    <div class="shortcut-title">Navigation</div>
+                    <div class="shortcut-row"><span class="kbd-hint">↑</span> / <span class="kbd-hint">↓</span> <span>Next/Prev Instrument</span></div>
+                    <div class="shortcut-row"><span class="kbd-hint">/</span> <span>Search Instruments</span></div>
+                    <div class="shortcut-row"><span class="kbd-hint">?</span> <span>Show This Help</span></div>
+                </div>
+                <div class="shortcut-group">
+                    <div class="shortcut-title">Account</div>
+                    <div class="shortcut-row"><span class="kbd-hint">Ctrl</span>+<span class="kbd-hint">D</span> <span>Deposit</span></div>
+                    <div class="shortcut-row"><span class="kbd-hint">Ctrl</span>+<span class="kbd-hint">W</span> <span>Withdraw</span></div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- Scripts -->
-    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
-    <script>
-        // State
-        let currentSymbol = 'XAU-MNT-PERP';
-        let currentSide = 'buy';
-        let chart = null;
-        let candleSeries = null;
-        let ws = null;
-        
-        // Initialize
-        document.addEventListener('DOMContentLoaded', init);
-        
-        async function init() {
-            await loadProducts();
-            initChart();
-            connectWebSocket();
-            fetchBankRates();
-            fetchPositions();
-            updateFundingTimer();
-            setInterval(fetchBankRates, 5000);
-            setInterval(fetchPositions, 3000);
-            setInterval(updateFundingTimer, 1000);
-        }
-        
-        // Products
-        async function loadProducts() {
-            try {
-                const res = await fetch('/api/products');
-                const products = await res.json();
-                const select = document.getElementById('symbolSelect');
-                select.innerHTML = products.map(p => 
-                    `<option value="${p.symbol}">${p.symbol}</option>`
-                ).join('');
-            } catch (e) { console.error('Failed to load products:', e); }
-        }
-        
-        // Chart
-        function initChart() {
-            const container = document.getElementById('chartContainer');
-            chart = LightweightCharts.createChart(container, {
-                layout: {
-                    background: { type: 'solid', color: '#161b22' },
-                    textColor: '#8b949e',
-                },
-                grid: {
-                    vertLines: { color: '#21262d' },
-                    horzLines: { color: '#21262d' },
-                },
-                crosshair: { mode: 1 },
-                rightPriceScale: { borderColor: '#30363d' },
-                timeScale: { borderColor: '#30363d', timeVisible: true },
-            });
-            
-            candleSeries = chart.addCandlestickSeries({
-                upColor: '#3fb950',
-                downColor: '#f85149',
-                borderUpColor: '#3fb950',
-                borderDownColor: '#f85149',
-                wickUpColor: '#3fb950',
-                wickDownColor: '#f85149',
-            });
-            
-            loadCandles();
-            new ResizeObserver(() => chart.applyOptions({ width: container.clientWidth, height: container.clientHeight }))
-                .observe(container);
-        }
-        
-        async function loadCandles() {
-            try {
-                const res = await fetch(`/api/candles/${currentSymbol}?timeframe=5&limit=500`);
-                const candles = await res.json();
-                if (candles.length > 0) {
-                    candleSeries.setData(candles.map(c => ({
-                        time: c.time,
-                        open: c.open / 1e6,
-                        high: c.high / 1e6,
-                        low: c.low / 1e6,
-                        close: c.close / 1e6,
-                    })));
-                }
-            } catch (e) { console.error('Failed to load candles:', e); }
-        }
-        
-        function setTimeframe(tf) {
-            document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
-            event.target.classList.add('active');
-            // Reload candles with new timeframe
-        }
-        
-        // WebSocket
-        function connectWebSocket() {
-            const wsUrl = `ws://${location.host}/ws`;
-            ws = new WebSocket(wsUrl);
-            
-            ws.onopen = () => {
-                ws.send(JSON.stringify({ type: 'subscribe', symbols: [currentSymbol] }));
-            };
-            
-            ws.onmessage = (e) => {
-                const data = JSON.parse(e.data);
-                if (data.type === 'quote') {
-                    updatePrice(data);
-                }
-            };
-            
-            ws.onclose = () => setTimeout(connectWebSocket, 3000);
-        }
-        
-        function updatePrice(data) {
-            const price = (data.bid + data.ask) / 2;
-            document.getElementById('currentPrice').textContent = formatNum(price / 1e6);
-            document.getElementById('bidPrice').textContent = formatNum(data.bid / 1e6);
-            document.getElementById('askPrice').textContent = formatNum(data.ask / 1e6);
-            document.getElementById('entryPrice').textContent = formatNum(price / 1e6);
-            updateSummary();
-        }
-        
-        // Bank Rates
-        function toggleBankDropdown() {
-            document.getElementById('bankDropdown').classList.toggle('visible');
-        }
-        
-        async function fetchBankRates() {
-            try {
-                const res = await fetch('/api/fx/rates');
-                const data = await res.json();
-                
-                document.getElementById('usdmntRate').textContent = formatNum(data.mid_rate);
-                document.getElementById('bomRate').textContent = formatNum(data.bom_reference);
-                
-                const list = document.getElementById('bankRatesList');
-                if (data.banks && data.banks.length > 0) {
-                    list.innerHTML = data.banks.map(b => `
-                        <div class="bank-row">
-                            <span class="bank-name">${b.name}</span>
-                            <span><span class="bid">${formatNum(b.bid)}</span> / <span class="ask">${formatNum(b.ask)}</span></span>
-                        </div>
-                    `).join('');
-                } else {
-                    list.innerHTML = '<div style="color:var(--text-muted);">No bank rates</div>';
-                }
-            } catch (e) { console.error('Failed to fetch bank rates:', e); }
-        }
-        
-        // Trading
-        function setSide(side) {
-            currentSide = side;
-            document.getElementById('buyBtn').classList.toggle('active', side === 'buy');
-            document.getElementById('sellBtn').classList.toggle('active', side === 'sell');
-            document.getElementById('submitBtn').className = `submit-btn ${side}`;
-            document.getElementById('submitBtn').textContent = `${side.toUpperCase()} ${currentSymbol}`;
-        }
-        
-        function setQty(val) {
-            document.getElementById('qtyInput').value = val;
-            updateSummary();
-        }
-        
-        function updateLeverage() {
-            const lev = document.getElementById('leverageSlider').value;
-            document.getElementById('leverageValue').textContent = lev + 'x';
-            updateSummary();
-        }
-        
-        function updateSummary() {
-            const qty = parseFloat(document.getElementById('qtyInput').value) || 0;
-            const lev = parseFloat(document.getElementById('leverageSlider').value) || 10;
-            const price = 18750000; // TODO: get from current price
-            
-            const value = qty * price;
-            const margin = value / lev;
-            const fee = value * 0.0005;
-            
-            document.getElementById('positionValue').textContent = formatNum(value) + ' MNT';
-            document.getElementById('requiredMargin').textContent = formatNum(margin) + ' MNT';
-            document.getElementById('estFee').textContent = formatNum(fee) + ' MNT';
-        }
-        
-        async function submitOrder() {
-            // TODO: Submit order via API
-            alert('Order submitted!');
-        }
-        
-        // Positions
-        function togglePositions() {
-            const section = document.getElementById('positionsSection');
-            const toggle = document.getElementById('posToggle');
-            if (section.classList.contains('expanded')) {
-                section.classList.remove('expanded');
-                section.classList.add('collapsed');
-                toggle.textContent = '[+]';
-            } else {
-                section.classList.remove('collapsed');
-                section.classList.add('expanded');
-                toggle.textContent = '[-]';
-            }
-        }
-        
-        async function fetchPositions() {
-            // TODO: Fetch positions from API
-        }
-        
-        // Funding Timer
-        function updateFundingTimer() {
-            const now = new Date();
-            const nextFunding = new Date(now);
-            nextFunding.setHours(Math.ceil(now.getHours() / 8) * 8, 0, 0, 0);
-            if (nextFunding <= now) nextFunding.setHours(nextFunding.getHours() + 8);
-            
-            const diff = nextFunding - now;
-            const hours = Math.floor(diff / 3600000);
-            const mins = Math.floor((diff % 3600000) / 60000);
-            const secs = Math.floor((diff % 60000) / 1000);
-            
-            document.getElementById('fundingTime').textContent = 
-                `${hours}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
-        }
-        
-        // Login
-        function showLogin() {
-            document.getElementById('loginModal').classList.remove('hidden');
-        }
-        
-        function requestOtp() {
-            document.getElementById('stepPhone').classList.remove('active');
-            document.getElementById('stepOtp').classList.add('active');
-        }
-        
-        function verifyOtp() {
-            document.getElementById('loginModal').classList.add('hidden');
-            document.getElementById('userBtn').textContent = '+976 9900...';
-        }
-        
-        // Utils
-        function formatNum(n) {
-            if (!n || isNaN(n)) return '-';
-            return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n);
-        }
-        
-        function selectSymbol(symbol) {
-            currentSymbol = symbol;
-            document.getElementById('submitBtn').textContent = `${currentSide.toUpperCase()} ${symbol}`;
-            loadCandles();
-            if (ws && ws.readyState === 1) {
-                ws.send(JSON.stringify({ type: 'subscribe', symbols: [symbol] }));
-            }
-        }
-        
-        // Phone validation
-        document.getElementById('phoneInput').addEventListener('input', function() {
-            document.getElementById('requestOtpBtn').disabled = this.value.length !== 8;
-        });
-        
-        // Click outside to close dropdowns
-        document.addEventListener('click', function(e) {
-            if (!e.target.closest('.rate-box')) {
-                document.getElementById('bankDropdown').classList.remove('visible');
-            }
-        });
-    </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
