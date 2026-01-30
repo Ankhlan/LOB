@@ -22,6 +22,7 @@
 #include "circuit_breaker.h"
 #include "kyc_service.h"
 #include "safe_ledger.h"
+#include "usdmnt_market.h"
 
 #include <httplib.h>
 #include <array>
@@ -1024,6 +1025,23 @@ inline void HttpServer::setup_routes() {
                 if (!v_price.valid) {
                     res.status = 400;
                     res.set_content(json{{"error", v_price.error}}.dump(), "application/json");
+                    return;
+                }
+            }
+
+            // USD-MNT MARKET VALIDATION: Enforce price band for USD-MNT orders
+            if (symbol == "USD-MNT-PERP" && type_str != "MARKET") {
+                auto reject = UsdMntMarket::instance().validate_order(price, quantity);
+                if (reject != OrderRejectReason::NONE) {
+                    auto [lower, upper] = UsdMntMarket::instance().get_price_limits();
+                    res.status = 400;
+                    res.set_content(json{
+                        {"error", "Order rejected by USD-MNT market controller"},
+                        {"reason", to_string(reject)},
+                        {"price", price},
+                        {"price_band", {{"lower", lower}, {"upper", upper}}},
+                        {"bom_rate", UsdMntMarket::instance().get_bom_rate()}
+                    }.dump(), "application/json");
                     return;
                 }
             }
@@ -2451,6 +2469,97 @@ inline void HttpServer::setup_routes() {
         
         res.set_content(json{
             {"status", "market_resumed"}
+        }.dump(), "application/json");
+    });
+    
+    // ==================== USD-MNT CORE MARKET ADMIN ====================
+    
+    // Get USD-MNT market metrics
+    server_->Get("/api/admin/usdmnt/metrics", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
+        
+        auto metrics = UsdMntMarket::instance().get_metrics();
+        auto [lower, upper] = UsdMntMarket::instance().get_price_limits();
+        auto& config = UsdMntMarket::instance().config();
+        
+        res.set_content(json{
+            {"current_bid", metrics.current_bid},
+            {"current_ask", metrics.current_ask},
+            {"spread", metrics.spread},
+            {"spread_pct", metrics.spread_pct},
+            {"bid_depth_usd", metrics.bid_depth_usd},
+            {"ask_depth_usd", metrics.ask_depth_usd},
+            {"bom_rate", metrics.bom_rate},
+            {"deviation_from_bom_pct", metrics.deviation_from_bom_pct},
+            {"price_band", {
+                {"lower", lower},
+                {"upper", upper},
+                {"max_deviation_pct", config.max_deviation_pct}
+            }},
+            {"health", {
+                {"is_within_limits", metrics.is_within_limits},
+                {"spread_ok", metrics.spread_ok},
+                {"depth_ok", metrics.depth_ok}
+            }},
+            {"last_update_ms", metrics.last_update_ms}
+        }.dump(), "application/json");
+    });
+    
+    // Set emergency USD-MNT rate (admin override)
+    server_->Post("/api/admin/usdmnt/emergency-rate", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
+        
+        try {
+            auto body = json::parse(req.body);
+            double rate = body.value("rate", 0.0);
+            std::string reason = body.value("reason", "Admin override");
+            
+            if (rate < 1000.0 || rate > 10000.0) {
+                res.status = 400;
+                res.set_content(json{
+                    {"error", "Rate must be between 1000 and 10000 MNT/USD"},
+                    {"provided", rate}
+                }.dump(), "application/json");
+                return;
+            }
+            
+            // Log the emergency action
+            std::cout << "[EMERGENCY] USD-MNT rate set to " << rate 
+                      << " by admin. Reason: " << reason << "\n";
+            
+            UsdMntMarket::instance().set_emergency_rate(rate);
+            
+            auto [lower, upper] = UsdMntMarket::instance().get_price_limits();
+            
+            res.set_content(json{
+                {"status", "emergency_rate_set"},
+                {"new_rate", rate},
+                {"new_band", {{"lower", lower}, {"upper", upper}}},
+                {"reason", reason}
+            }.dump(), "application/json");
+            
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+    
+    // Get USD-MNT config
+    server_->Get("/api/admin/usdmnt/config", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
+        
+        auto& config = UsdMntMarket::instance().config();
+        
+        res.set_content(json{
+            {"max_deviation_pct", config.max_deviation_pct},
+            {"circuit_breaker_pct", config.circuit_breaker_pct},
+            {"hard_halt_pct", config.hard_halt_pct},
+            {"max_spread_pct", config.max_spread_pct},
+            {"target_spread_pct", config.target_spread_pct},
+            {"min_bid_depth_usd", config.min_bid_depth_usd},
+            {"min_ask_depth_usd", config.min_ask_depth_usd},
+            {"quote_refresh_ms", config.quote_refresh_ms},
+            {"auto_mm_enabled", config.auto_mm_enabled}
         }.dump(), "application/json");
     });
     
