@@ -770,6 +770,83 @@ inline void HttpServer::setup_routes() {
             });
     });
     
+    // ==================== RAW LEVELS SSE STREAM (for WASM) ====================
+    // Optimized binary-like format for orderbook levels
+    // Compact JSON: [[price,qty], [price,qty], ...]
+    server_->Get("/api/stream/levels", [this](const httplib::Request& req, httplib::Response& res) {
+        res.set_header("Content-Type", "text/event-stream");
+        res.set_header("Cache-Control", "no-cache");
+        res.set_header("Connection", "keep-alive");
+        res.set_header("X-Accel-Buffering", "no");
+        
+        // Get symbols to stream (comma-separated) or all
+        std::string symbols_param = req.get_param_value("symbols");
+        std::vector<std::string> symbols;
+        
+        if (!symbols_param.empty()) {
+            // Parse comma-separated symbols
+            std::stringstream ss(symbols_param);
+            std::string item;
+            while (std::getline(ss, item, ',')) {
+                symbols.push_back(item);
+            }
+        } else {
+            // Default to main products
+            symbols = {"XAU-MNT-PERP", "BTC-MNT-PERP", "ETH-MNT-PERP", "SPX-MNT-PERP", "USD-MNT-FX"};
+        }
+        
+        int depth = 10;  // Levels per side
+        if (req.has_param("depth")) {
+            depth = std::stoi(req.get_param_value("depth"));
+            if (depth < 1) depth = 1;
+            if (depth > 50) depth = 50;
+        }
+        
+        res.set_chunked_content_provider("text/event-stream",
+            [this, symbols, depth](size_t offset, httplib::DataSink& sink) {
+                (void)offset;
+                
+                while (true) {
+                    auto& engine = MatchingEngine::instance();
+                    
+                    // Compact format: {symbol: {b:[[p,q],...], a:[[p,q],...], t:timestamp}}
+                    json levels_data = json::object();
+                    uint64_t ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::system_clock::now().time_since_epoch()).count();
+                    
+                    for (const auto& symbol : symbols) {
+                        auto book_depth = engine.get_depth(symbol, depth);
+                        
+                        // Compact arrays: [[price, qty], ...]
+                        json bids = json::array();
+                        json asks = json::array();
+                        
+                        for (const auto& [price, qty] : book_depth.bids) {
+                            bids.push_back({to_mnt(price), qty});
+                        }
+                        for (const auto& [price, qty] : book_depth.asks) {
+                            asks.push_back({to_mnt(price), qty});
+                        }
+                        
+                        levels_data[symbol] = {
+                            {"b", bids},  // Short key names for bandwidth
+                            {"a", asks},
+                            {"t", ts}
+                        };
+                    }
+                    
+                    // SSE format with compact JSON
+                    std::string event = "event: levels\ndata: " + levels_data.dump() + "\n\n";
+                    if (!sink.write(event.data(), event.size())) {
+                        break;
+                    }
+                    
+                    // Higher frequency for raw data (100ms)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                }
+                return false;
+            });
+    });
 
     // ==================== HEALTH CHECK ====================
     
