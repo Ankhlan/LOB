@@ -63,7 +63,7 @@ if(OpenSSL_FOUND)
 endif()
 
 # ForexConnect SDK
-option(FXCM_ENABLED "Enable FXCM ForexConnect integration" OFF)
+option(FXCM_ENABLED "Enable FXCM ForexConnect integration" ON)
 if(FXCM_ENABLED)
     if(WIN32)
         set(FXCM_SDK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/fxcm")
