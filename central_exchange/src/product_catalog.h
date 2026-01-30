@@ -25,7 +25,10 @@
 namespace central_exchange {
 
 // USD/MNT exchange rate (updated from FXCM)
-inline double USD_MNT_RATE = 3450.0;
+// Global USD/MNT exchange rate (updated by BomFeed from Bank of Mongolia)
+// Source: https://www.mongolbank.mn/en/currency-rates
+// Last manual update: 2026-01-29
+inline double USD_MNT_RATE = 3564.35;
 
 enum class ProductCategory {
     FXCM_COMMODITY,

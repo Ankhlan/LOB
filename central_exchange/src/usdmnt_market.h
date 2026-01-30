@@ -280,9 +280,11 @@ private:
     UsdMntConfig config_;
     bool initialized_ = false;
     
-    double bom_reference_rate_ = 3450.0;
-    double lower_limit_ = 3277.5;   // -5% from 3450
-    double upper_limit_ = 3622.5;   // +5% from 3450
+    // BoM Official Rate (2026-01-29): 3564.35 MNT/USD
+    // Source: https://www.mongolbank.mn/en/currency-rates
+    double bom_reference_rate_ = 3564.35;
+    double lower_limit_ = 3386.13;   // -5% from 3564.35
+    double upper_limit_ = 3742.57;   // +5% from 3564.35
     
     std::function<void(const std::string&)> alert_callback_;
 };

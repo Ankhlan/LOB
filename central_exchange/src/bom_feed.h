@@ -131,8 +131,10 @@ public:
     
 private:
     BomFeed() {
+        // BoM Official Rate (2026-01-29): 3564.35 MNT/USD
+        // Source: https://www.mongolbank.mn/en/currency-rates
         current_rate_ = BomRate{
-            .rate = 3450.0,
+            .rate = 3564.35,
             .timestamp = 0,
             .source = "Default",
             .is_valid = true

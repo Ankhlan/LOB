@@ -149,6 +149,21 @@ public:
     // Get all active timeframes: 60s (1m), 300s (5m), 900s (15m), 3600s (1H), 14400s (4H), 86400s (1D)
     static constexpr std::array<int, 6> TIMEFRAMES = {60, 300, 900, 3600, 14400, 86400};
     
+
+    // Purge all candles for a symbol (admin use - clears corrupted data)
+    void purge(const std::string& symbol) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        data_.erase(symbol);
+        seeded_.erase(symbol);
+    }
+
+    // Purge all candle data (nuclear option)
+    void purge_all() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        data_.clear();
+        seeded_.clear();
+    }
+
 private:
     CandleStore() = default;
     std::mutex mutex_;
@@ -2472,6 +2487,32 @@ inline void HttpServer::setup_routes() {
         }.dump(), "application/json");
     });
     
+
+    // Admin - purge candle data (clears corrupted historical candles)
+    server_->Post("/api/admin/candles/purge", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
+
+        std::string symbol = "";
+        if (req.has_param("symbol")) {
+            symbol = req.get_param_value("symbol");
+        }
+
+        if (symbol.empty()) {
+            CandleStore::instance().purge_all();
+            res.set_content(json{
+                {"status", "purged_all"},
+                {"message", "All candle data purged - will reseed on next request"}
+            }.dump(), "application/json");
+        } else {
+            CandleStore::instance().purge(symbol);
+            res.set_content(json{
+                {"status", "purged"},
+                {"symbol", symbol},
+                {"message", "Candle data purged for " + symbol + " - will reseed on next request"}
+            }.dump(), "application/json");
+        }
+    });
+
     // ==================== USD-MNT CORE MARKET ADMIN ====================
     
     // Get USD-MNT market metrics
