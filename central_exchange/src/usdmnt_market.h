@@ -138,8 +138,14 @@ public:
         cb_config.halt_duration_seconds = config.level2_halt_seconds;  // 15 min halt
         CircuitBreakerManager::instance().configure("USD-MNT-PERP", cb_config);
         
-        // Set initial reference price from BoM
-        update_bom_reference();
+        // Set initial reference price from BoM (use unlocked version - we already hold mutex)
+        auto bom = BomFeed::instance().get_rate();
+        if (bom.is_valid) {
+            update_bom_reference_unlocked(bom.rate);
+        } else {
+            // Use default rate
+            update_bom_reference_unlocked(USD_MNT_RATE);
+        }
         
         // Initialize commercial bank rate feed (for actual clearing)
         BankFeed::instance().initialize_simulated(bom_reference_rate_);
@@ -181,20 +187,26 @@ public:
     }
     
     // Update BoM reference price (call hourly or on BoM update)
+    // NOTE: Caller must NOT hold mutex_ (or use _unlocked version)
     void update_bom_reference() {
         auto bom = BomFeed::instance().get_rate();
         if (bom.is_valid) {
             std::lock_guard<std::mutex> lock(mutex_);
-            bom_reference_rate_ = bom.rate;
-            
-            // Update price limits (Level 2 = max order band)
-            lower_limit_ = bom_reference_rate_ * (1.0 - config_.level2_pct);
-            upper_limit_ = bom_reference_rate_ * (1.0 + config_.level2_pct);
-            
-            // Update circuit breaker reference
-            auto& cb = CircuitBreakerManager::instance();
-            cb.set_reference_price("USD-MNT-PERP", static_cast<PriceMicromnt>(bom_reference_rate_ * 1'000'000));
+            update_bom_reference_unlocked(bom.rate);
         }
+    }
+    
+    // Internal version that doesn't acquire lock (caller must hold mutex_)
+    void update_bom_reference_unlocked(double rate) {
+        bom_reference_rate_ = rate;
+        
+        // Update price limits (Level 2 = max order band)
+        lower_limit_ = bom_reference_rate_ * (1.0 - config_.level2_pct);
+        upper_limit_ = bom_reference_rate_ * (1.0 + config_.level2_pct);
+        
+        // Update circuit breaker reference
+        auto& cb = CircuitBreakerManager::instance();
+        cb.set_reference_price("USD-MNT-PERP", static_cast<PriceMicromnt>(bom_reference_rate_ * 1'000'000));
     }
     
     // Get current market quality metrics
