@@ -2471,3 +2471,166 @@ window.toast = toast;
 window.showToast = showToast;
 
 console.log('[Toast] Notification system ready');
+
+// ===== CONTEXT MENU SYSTEM =====
+let activeContextMenu = null;
+
+function createContextMenu(items, x, y) {
+    hideContextMenu();
+    
+    const menu = document.createElement('div');
+    menu.className = 'context-menu visible';
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    
+    items.forEach(item => {
+        if (item.divider) {
+            const divider = document.createElement('div');
+            divider.className = 'context-menu-divider';
+            menu.appendChild(divider);
+        } else {
+            const menuItem = document.createElement('div');
+            menuItem.className = 'context-menu-item' + (item.danger ? ' danger' : '');
+            menuItem.innerHTML = `
+                <span class="context-menu-icon">${item.icon || ''}</span>
+                <span>${item.label}</span>
+                ${item.shortcut ? `<span class="context-menu-shortcut">${item.shortcut}</span>` : ''}
+            `;
+            menuItem.addEventListener('click', () => {
+                hideContextMenu();
+                if (item.action) item.action();
+            });
+            menu.appendChild(menuItem);
+        }
+    });
+    
+    document.body.appendChild(menu);
+    activeContextMenu = menu;
+    
+    // Adjust position if off-screen
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) {
+        menu.style.left = (window.innerWidth - rect.width - 10) + 'px';
+    }
+    if (rect.bottom > window.innerHeight) {
+        menu.style.top = (window.innerHeight - rect.height - 10) + 'px';
+    }
+}
+
+function hideContextMenu() {
+    if (activeContextMenu) {
+        activeContextMenu.remove();
+        activeContextMenu = null;
+    }
+}
+
+// Hide on click elsewhere
+document.addEventListener('click', hideContextMenu);
+document.addEventListener('contextmenu', (e) => {
+    // Allow default context menu on inputs
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+});
+
+// Position context menu
+function showPositionContextMenu(e, position) {
+    e.preventDefault();
+    createContextMenu([
+        { icon: '📊', label: 'View Details', action: () => console.log('Details:', position) },
+        { icon: '📉', label: 'Add Stop Loss', action: () => console.log('Add SL') },
+        { icon: '📈', label: 'Add Take Profit', action: () => console.log('Add TP') },
+        { divider: true },
+        { icon: '⬆️', label: 'Increase Size', action: () => console.log('Increase') },
+        { icon: '⬇️', label: 'Reduce Size', action: () => console.log('Reduce') },
+        { divider: true },
+        { icon: '❌', label: 'Close Position', shortcut: 'X', action: () => closePosition(position.symbol), danger: true }
+    ], e.clientX, e.clientY);
+}
+
+// Order context menu
+function showOrderContextMenu(e, order) {
+    e.preventDefault();
+    createContextMenu([
+        { icon: '✏️', label: 'Modify Order', action: () => console.log('Modify:', order) },
+        { icon: '📋', label: 'Duplicate', action: () => console.log('Duplicate') },
+        { divider: true },
+        { icon: '❌', label: 'Cancel Order', shortcut: 'Del', action: () => cancelOrder(order.id), danger: true }
+    ], e.clientX, e.clientY);
+}
+
+// Instrument context menu
+function showInstrumentContextMenu(e, instrument) {
+    e.preventDefault();
+    createContextMenu([
+        { icon: '📈', label: 'Open Chart', action: () => selectInstrument(instrument) },
+        { icon: '🔔', label: 'Set Alert', action: () => console.log('Alert:', instrument) },
+        { icon: '⭐', label: 'Add to Favorites', action: () => console.log('Favorite:', instrument) },
+        { divider: true },
+        { icon: '🛒', label: 'Quick Buy', shortcut: 'B', action: () => { selectInstrument(instrument); setSide('long'); } },
+        { icon: '🛍️', label: 'Quick Sell', shortcut: 'S', action: () => { selectInstrument(instrument); setSide('short'); } }
+    ], e.clientX, e.clientY);
+}
+
+console.log('[Context Menu] Right-click menus ready');
+
+// ===== TRADING SOUNDS =====
+const SOUND_ENABLED = true;
+
+// Generate simple beep sounds using Web Audio API
+function playSound(type) {
+    if (!SOUND_ENABLED) return;
+    
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        
+        switch(type) {
+            case 'fill':
+                // Success ding
+                oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
+                oscillator.frequency.setValueAtTime(1000, audioCtx.currentTime + 0.1);
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                oscillator.start(audioCtx.currentTime);
+                oscillator.stop(audioCtx.currentTime + 0.3);
+                break;
+            case 'error':
+                // Error buzz
+                oscillator.type = 'sawtooth';
+                oscillator.frequency.setValueAtTime(200, audioCtx.currentTime);
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                oscillator.start(audioCtx.currentTime);
+                oscillator.stop(audioCtx.currentTime + 0.2);
+                break;
+            case 'alert':
+                // Alert chime
+                oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
+                oscillator.frequency.setValueAtTime(800, audioCtx.currentTime + 0.1);
+                oscillator.frequency.setValueAtTime(600, audioCtx.currentTime + 0.2);
+                gainNode.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+                oscillator.start(audioCtx.currentTime);
+                oscillator.stop(audioCtx.currentTime + 0.4);
+                break;
+            case 'click':
+                // Subtle click
+                oscillator.frequency.setValueAtTime(1200, audioCtx.currentTime);
+                gainNode.gain.setValueAtTime(0.02, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+                oscillator.start(audioCtx.currentTime);
+                oscillator.stop(audioCtx.currentTime + 0.05);
+                break;
+        }
+    } catch(e) {
+        // Audio API not available
+    }
+}
+
+// Make globally available
+window.playSound = playSound;
+
+console.log('[Sounds] Trading sounds enabled');
