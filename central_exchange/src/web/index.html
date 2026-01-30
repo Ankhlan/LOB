@@ -139,7 +139,7 @@
         <div class="account-display">
             <div class="account-item usdmnt-rate">
                 <span class="account-label">USD/MNT</span>
-                <span class="account-value highlight" id="usdmntRate">3,450</span>
+                <span class="account-value highlight" id="usdmntRate" onclick="toggleBankPanel()" style="cursor:pointer;" title="Click for bank rates">3,450</span> <button class="bank-toggle-btn" onclick="toggleBankPanel()">🏦</button>
             </div>
             <div class="account-divider"></div>
             <div class="account-item">
@@ -343,6 +343,48 @@
         </aside>
     </div>
     
+    <!-- BANK RATES PANEL (Floating Widget) -->
+    <div class="bank-rates-panel" id="bankRatesPanel">
+        <div class="bank-panel-header">
+            <span class="bank-panel-title">🏦 USD/MNT Bank Rates</span>
+            <button class="bank-panel-close" onclick="toggleBankPanel()">×</button>
+        </div>
+        <div class="bank-panel-body">
+            <div class="bank-mid-rate">
+                <div class="bank-mid-label">Mid Market Rate</div>
+                <div class="bank-mid-value" id="bankMidRate">-</div>
+                <div class="bank-mid-spread" id="bankSpread">Spread: -</div>
+            </div>
+            <div class="bank-best-rates">
+                <div class="bank-best bid">
+                    <div class="bank-best-label">Best Bid (Buy USD)</div>
+                    <div class="bank-best-value" id="bankBestBid">-</div>
+                    <div class="bank-best-bank" id="bankBestBidBank">-</div>
+                </div>
+                <div class="bank-best ask">
+                    <div class="bank-best-label">Best Ask (Sell USD)</div>
+                    <div class="bank-best-value" id="bankBestAsk">-</div>
+                    <div class="bank-best-bank" id="bankBestAskBank">-</div>
+                </div>
+            </div>
+            <div class="bank-table">
+                <div class="bank-table-header">
+                    <span>Bank</span>
+                    <span>Bid</span>
+                    <span>Ask</span>
+                    <span>Spread</span>
+                </div>
+                <div class="bank-table-body" id="bankTableBody">
+                    <div class="bank-loading">Loading bank rates...</div>
+                </div>
+            </div>
+            <div class="bank-reference">
+                <span>BoM Reference: <strong id="bomRate">-</strong></span>
+                <span>Band: <strong id="priceBand">-</strong></span>
+            </div>
+        </div>
+    </div>
+
     <!-- POSITIONS BAR -->
     <div class="positions-bar">
         <div class="positions-tabs">
@@ -445,6 +487,8 @@
 
 </body>
 </html>
+
+
 
 
 

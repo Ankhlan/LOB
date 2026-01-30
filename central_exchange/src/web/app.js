@@ -3130,3 +3130,102 @@ function updateAccountWithAnimation(newEquity, oldEquity) {
     }, 800);
 }
 
+
+// ========================================
+// BANK RATES PANEL
+// ========================================
+let bankRatesPanelVisible = false;
+
+function toggleBankPanel() {
+    const panel = document.getElementById('bankRatesPanel');
+    bankRatesPanelVisible = !bankRatesPanelVisible;
+    panel.classList.toggle('visible', bankRatesPanelVisible);
+    if (bankRatesPanelVisible) {
+        fetchBankRates();
+    }
+}
+
+async function fetchBankRates() {
+    try {
+        const res = await fetch('/api/fx/rates');
+        const data = await res.json();
+        updateBankRatesPanel(data);
+    } catch (e) {
+        console.error('Failed to fetch bank rates:', e);
+    }
+}
+
+function updateBankRatesPanel(data) {
+    // Mid rate
+    const midEl = document.getElementById('bankMidRate');
+    if (midEl) midEl.textContent = formatMNT(data.mid_rate || 0);
+    
+    // Spread
+    const spreadEl = document.getElementById('bankSpread');
+    if (spreadEl) {
+        const spreadPct = data.spread_pct ? data.spread_pct.toFixed(3) : '0.000';
+        spreadEl.textContent = `Spread: ${formatMNT(data.spread_mnt || 0)} (${spreadPct}%)`;
+    }
+    
+    // Best bid
+    const bidEl = document.getElementById('bankBestBid');
+    const bidBankEl = document.getElementById('bankBestBidBank');
+    if (bidEl) bidEl.textContent = formatMNT(data.best_bid || 0);
+    if (bidBankEl) bidBankEl.textContent = data.best_bid_bank || '-';
+    
+    // Best ask
+    const askEl = document.getElementById('bankBestAsk');
+    const askBankEl = document.getElementById('bankBestAskBank');
+    if (askEl) askEl.textContent = formatMNT(data.best_ask || 0);
+    if (askBankEl) askBankEl.textContent = data.best_ask_bank || '-';
+    
+    // BoM reference
+    const bomEl = document.getElementById('bomRate');
+    if (bomEl) bomEl.textContent = formatMNT(data.bom_reference || 0);
+    
+    // Price band
+    const bandEl = document.getElementById('priceBand');
+    if (bandEl && data.price_band) {
+        bandEl.textContent = `${formatMNT(data.price_band.lower)} - ${formatMNT(data.price_band.upper)}`;
+    }
+    
+    // Bank table
+    const tableBody = document.getElementById('bankTableBody');
+    if (tableBody && data.banks) {
+        if (data.banks.length === 0) {
+            tableBody.innerHTML = '<div class="bank-loading">No bank rates available</div>';
+        } else {
+            tableBody.innerHTML = data.banks.map(b => `
+                <div class="bank-table-row">
+                    <span class="bank-name">${b.name}</span>
+                    <span class="bid">${formatMNT(b.bid)}</span>
+                    <span class="ask">${formatMNT(b.ask)}</span>
+                    <span>${b.spread.toFixed(0)}</span>
+                </div>
+            `).join('');
+        }
+    }
+    
+    // Update toolbar USD/MNT display
+    const toolbarRate = document.getElementById('usdmntRate');
+    if (toolbarRate && data.mid_rate) {
+        toolbarRate.textContent = formatMNT(data.mid_rate);
+    }
+}
+
+function formatMNT(val) {
+    if (!val || isNaN(val)) return '-';
+    return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(val);
+}
+
+// Auto-refresh bank rates every 5 seconds when panel is open
+setInterval(() => {
+    if (bankRatesPanelVisible) {
+        fetchBankRates();
+    }
+}, 5000);
+
+// Initial fetch on page load
+document.addEventListener('DOMContentLoaded', () => {
+    fetchBankRates(); // Update toolbar rate on load
+});

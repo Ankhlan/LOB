@@ -910,6 +910,41 @@ inline void HttpServer::setup_routes() {
         res.set_content(product_to_json(*product).dump(), "application/json");
     });
     
+    // ==================== PUBLIC FX RATES ====================
+    // Public bank rates for transparency (USD-MNT market)
+    server_->Get("/api/fx/rates", [](const httplib::Request&, httplib::Response& res) {
+        auto& market = UsdMntMarket::instance();
+        auto best = market.get_bank_rates();
+        auto [lower, upper] = market.get_price_limits();
+        
+        json response = {
+            {"mid_rate", best.mid_market},
+            {"best_bid", best.best_bid},
+            {"best_bid_bank", best.best_bid_bank},
+            {"best_ask", best.best_ask},
+            {"best_ask_bank", best.best_ask_bank},
+            {"spread_mnt", best.effective_spread},
+            {"spread_pct", best.mid_market > 0 ? (best.effective_spread / best.mid_market) * 100.0 : 0.0},
+            {"bom_reference", market.get_bom_rate()},
+            {"price_band", {{"lower", lower}, {"upper", upper}}},
+            {"num_banks", best.num_banks},
+            {"timestamp", best.timestamp_ms},
+            {"banks", json::array()}
+        };
+        
+        for (const auto& q : best.all_quotes) {
+            response["banks"].push_back({
+                {"id", q.bank_id},
+                {"name", q.bank_name},
+                {"bid", q.bid},
+                {"ask", q.ask},
+                {"spread", q.spread}
+            });
+        }
+        
+        res.set_content(response.dump(), "application/json");
+    });
+
     // ==================== QUOTES ====================
     
     server_->Get("/api/quotes", [this](const httplib::Request&, httplib::Response& res) {
@@ -2862,3 +2897,4 @@ inline json HttpServer::trade_to_json(const Trade& t) {
 }
 
 } // namespace central_exchange
+
