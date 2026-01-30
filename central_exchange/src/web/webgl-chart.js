@@ -58,6 +58,19 @@ class WebGLChart {
     }
 
     setData(data) {
+        // Sanitize data - filter corrupted candles with absurd prices or ranges
+        const MAX_SANE_PRICE = 1e10;
+        const MAX_RANGE_RATIO = 1.5;  // No single bar can span 50%+
+        if (data && data.length > 0) {
+            data = data.filter(d =>
+                d.high < MAX_SANE_PRICE &&
+                d.low > 0 &&
+                d.open < MAX_SANE_PRICE &&
+                d.close < MAX_SANE_PRICE &&
+                d.high / d.low <= MAX_RANGE_RATIO
+            );
+        }
+
         this.data = data || [];
         this.updateScales();
         this.render();

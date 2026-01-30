@@ -877,6 +877,56 @@ function toggleBB() {
     if (state.chart) state.chart.setIndicator('bb', enabled ? 20 : 0);
 }
 
+// ===== WEBGL CHART TOGGLE =====
+let useWebGL = false;
+let webglChart = null;
+
+function toggleWebGL() {
+    const btn = document.getElementById('webglBtn');
+    useWebGL = !useWebGL;
+    btn.classList.toggle('active', useWebGL);
+
+    // Reinitialize chart with selected renderer
+    if (useWebGL && typeof WebGLChart !== 'undefined') {
+        initWebGLChart();
+    } else {
+        initChart();
+    }
+    updateChartData();
+}
+
+function initWebGLChart() {
+    const container = document.getElementById('chartContainer');
+    if (!container) return;
+
+    // Remove existing chart
+    if (state.chart && state.chart.remove) {
+        state.chart.remove();
+    }
+    if (webglChart) {
+        container.innerHTML = '';
+    }
+
+    const t = themes[state.theme];
+
+    // Create WebGL chart
+    webglChart = new WebGLChart(container, {
+        bgColor: t.bg,
+        upColor: [0.596, 0.765, 0.478, 1], // #98c379
+        downColor: [0.878, 0.424, 0.459, 1], // #e06c75
+        textColor: t.text,
+        gridColor: t.grid
+    });
+
+    // Update candleSeries to point to WebGL chart
+    state.chart = webglChart;
+    state.candleSeries = {
+        setData: (data) => webglChart.setData(data)
+    };
+
+    console.log('WebGL chart initialized (GPU-accelerated)');
+}
+
 // ===== MULTI-CHART LAYOUT =====
 let chartLayout = 'single'; // 'single' or 'quad'
 const gridCharts = [null, null, null, null];
