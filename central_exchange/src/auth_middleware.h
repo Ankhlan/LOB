@@ -169,4 +169,68 @@ inline void send_forbidden(httplib::Response& res, const std::string& message = 
     res.set_content(json{{"error", message}}.dump(), "application/json");
 }
 
+
+/**
+ * Admin Authentication Result
+ */
+struct AdminAuthResult {
+    bool success = false;
+    std::string admin_id;
+    std::string error;
+    int error_code = 0;
+};
+
+/**
+ * Check Admin API Key authentication
+ * Uses X-Admin-Key header with constant-time comparison
+ */
+inline AdminAuthResult authenticate_admin(const httplib::Request& req) {
+    AdminAuthResult result;
+    
+    std::string api_key = req.get_header_value("X-Admin-Key");
+    const char* expected_env = std::getenv("ADMIN_API_KEY");
+    
+    if (!expected_env || std::string(expected_env).empty()) {
+        result.error = "Admin authentication not configured";
+        result.error_code = 500;
+        return result;
+    }
+    
+    std::string expected(expected_env);
+    
+    // Constant-time comparison to prevent timing attacks
+    if (api_key.length() != expected.length()) {
+        result.error = "Invalid admin credentials";
+        result.error_code = 401;
+        return result;
+    }
+    
+    volatile int diff = 0;
+    for (size_t i = 0; i < api_key.length(); ++i) {
+        diff |= api_key[i] ^ expected[i];
+    }
+    
+    if (diff != 0) {
+        result.error = "Invalid admin credentials";
+        result.error_code = 401;
+        return result;
+    }
+    
+    result.success = true;
+    result.admin_id = "admin";
+    return result;
+}
+
+/**
+ * Require admin auth - returns early if not authenticated
+ * Use as: if (auto admin = require_admin(req, res); !admin.success) return;
+ */
+inline AdminAuthResult require_admin(const httplib::Request& req, httplib::Response& res) {
+    auto admin = authenticate_admin(req);
+    if (!admin.success) {
+        res.status = admin.error_code;
+        res.set_content(json{{"error", admin.error}}.dump(), "application/json");
+    }
+    return admin;
+}
 } // namespace central_exchange

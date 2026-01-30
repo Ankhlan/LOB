@@ -400,7 +400,7 @@ inline void HttpServer::setup_routes() {
     
     // Admin: Get pending KYC reviews
     server_->Get("/api/admin/kyc/pending", [](const httplib::Request& req, httplib::Response& res) {
-        (void)req;  // Admin endpoints open for now (add auth middleware later)
+        auto admin = require_admin(req, res); if (!admin.success) return;
         
         auto pending = KYCService::instance().get_pending_kyc();
         json response = json::array();
@@ -423,7 +423,7 @@ inline void HttpServer::setup_routes() {
     
     // Admin: Approve KYC
     server_->Post("/api/admin/kyc/approve", [](const httplib::Request& req, httplib::Response& res) {
-        // Admin endpoints open for now (add auth middleware later)
+        auto admin = require_admin(req, res); if (!admin.success) return;
         
         try {
             auto body = json::parse(req.body);
@@ -449,7 +449,7 @@ inline void HttpServer::setup_routes() {
     
     // Admin: Reject KYC
     server_->Post("/api/admin/kyc/reject", [](const httplib::Request& req, httplib::Response& res) {
-        // Admin endpoints open for now (add auth middleware later)
+        auto admin = require_admin(req, res); if (!admin.success) return;
         
         try {
             auto body = json::parse(req.body);
@@ -2271,7 +2271,8 @@ inline void HttpServer::setup_routes() {
     // ==================== ADMIN DASHBOARD ENDPOINTS ====================
     
     // Admin: List pending withdrawals
-    server_->Get("/api/admin/withdrawals/pending", [](const httplib::Request&, httplib::Response& res) {
+    server_->Get("/api/admin/withdrawals/pending", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
         auto& qpay = QPayHandler::instance();
         auto all_txns = qpay.get_all_transactions();
         
@@ -2293,6 +2294,7 @@ inline void HttpServer::setup_routes() {
     
     // Admin: Approve withdrawal
     server_->Post("/api/admin/withdraw/approve/:id", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
         std::string txn_id = req.path_params.at("id");
         
         auto& qpay = QPayHandler::instance();
@@ -2315,6 +2317,7 @@ inline void HttpServer::setup_routes() {
     
     // Admin: Reject withdrawal
     server_->Post("/api/admin/withdraw/reject/:id", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
         std::string txn_id = req.path_params.at("id");
         
         auto& qpay = QPayHandler::instance();
@@ -2336,7 +2339,8 @@ inline void HttpServer::setup_routes() {
     });
     
     // Admin stats - order count, trade volume, active users
-    server_->Get("/api/admin/stats", [](const httplib::Request&, httplib::Response& res) {
+    server_->Get("/api/admin/stats", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
         auto& engine = MatchingEngine::instance();
         auto& catalog = ProductCatalog::instance();
         
@@ -2350,7 +2354,8 @@ inline void HttpServer::setup_routes() {
     });
     
     // Admin - list all circuit breaker states
-    server_->Get("/api/admin/users", [](const httplib::Request&, httplib::Response& res) {
+    server_->Get("/api/admin/users", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
         // This endpoint would need to iterate all accounts - simplified version
         res.set_content(json{
             {"message", "Use /api/account?user_id=<id> for individual users"},
@@ -2360,6 +2365,7 @@ inline void HttpServer::setup_routes() {
     
     // Admin - halt trading on symbol
     server_->Post("/api/admin/halt/:symbol", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
         std::string symbol = req.path_params.at("symbol");
         int duration = 300;  // Default 5 minutes
         
@@ -2379,6 +2385,7 @@ inline void HttpServer::setup_routes() {
     
     // Admin - resume trading on symbol
     server_->Post("/api/admin/resume/:symbol", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
         std::string symbol = req.path_params.at("symbol");
         
         // No direct resume method in current implementation - set reference price to trigger resume
@@ -2397,7 +2404,8 @@ inline void HttpServer::setup_routes() {
     });
     
     // Admin - all circuit breaker states
-    server_->Get("/api/admin/circuit-breakers", [](const httplib::Request&, httplib::Response& res) {
+    server_->Get("/api/admin/circuit-breakers", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
         auto& circuit = CircuitBreakerManager::instance();
         auto& catalog = ProductCatalog::instance();
         
@@ -2429,6 +2437,7 @@ inline void HttpServer::setup_routes() {
     
     // Admin - halt entire market
     server_->Post("/api/admin/halt-market", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
         int duration = 300;
         if (req.has_param("duration")) {
             duration = std::stoi(req.get_param_value("duration"));
@@ -2444,7 +2453,8 @@ inline void HttpServer::setup_routes() {
     });
     
     // Admin - resume market
-    server_->Post("/api/admin/resume-market", [](const httplib::Request&, httplib::Response& res) {
+    server_->Post("/api/admin/resume-market", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
         auto& circuit = CircuitBreakerManager::instance();
         circuit.resume_market();
         
