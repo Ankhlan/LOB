@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-01-30T03:19:10.976225",
+  "banks": [
+    {
+      "bank_id": "TDB",
+      "bank_name": "Trade and Development Bank",
+      "bid": 3557.0,
+      "ask": 3565.0,
+      "cash_bid": 3557.0,
+      "cash_ask": 3582.0,
+      "timestamp": "2026-01-30T03:19:13.849175",
+      "source": "https://www.tdbm.mn/en/exchange-rates"
+    }
+  ],
+  "best_bid": 3557.0,
+  "best_ask": 3565.0,
+  "spread": 8.0,
+  "mid": 3561.0
+}
