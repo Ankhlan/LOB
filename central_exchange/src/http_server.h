@@ -549,26 +549,30 @@ inline void HttpServer::setup_routes() {
     
     // ==================== SSE STREAMING ====================
     // Real-time price updates via Server-Sent Events
+    // SECURITY: JWT auth preferred, DEV_MODE allows demo fallback
     server_->Get("/api/stream", [this](const httplib::Request& req, httplib::Response& res) {
         res.set_header("Content-Type", "text/event-stream");
         res.set_header("Cache-Control", "no-cache");
         res.set_header("Connection", "keep-alive");
         res.set_header("X-Accel-Buffering", "no"); // Disable nginx buffering
         
-        // Get user_id for position updates (optional)
-        std::string user_id = req.get_param_value("user_id");
+        // Authenticate user for personalized position updates
+        auto auth = authenticate(req);
+        std::string user_id;
         
-        // Try JWT auth for user_id
-        std::string auth_header = req.get_header_value("Authorization");
-        if (!auth_header.empty()) {
-            std::string token = Auth::instance().extract_token(auth_header);
-            auto payload = Auth::instance().verify_token(token);
-            if (payload) {
-                user_id = payload->user_id;
-            }
+        if (auth.success) {
+            user_id = auth.user_id;
         }
-        
-        if (user_id.empty()) user_id = "demo";  // Fallback for testing
+#ifdef DEV_MODE
+        else {
+            user_id = "demo";  // Fallback for testing in dev mode
+        }
+#else
+        else {
+            send_unauthorized(res, auth.error);
+            return;
+        }
+#endif
         
         res.set_chunked_content_provider("text/event-stream",
             [this, user_id](size_t offset, httplib::DataSink& sink) {
@@ -1174,23 +1178,29 @@ inline void HttpServer::setup_routes() {
     
     // GET /api/positions - Get all user positions with real-time P&L
     server_->Get("/api/positions", [this](const httplib::Request& req, httplib::Response& res) {
+        // Use authenticate() for consistent JWT-based auth
+        auto auth = authenticate(req);
         std::string user_id;
         
-        // Try JWT auth first
-        std::string auth_header = req.get_header_value("Authorization");
-        if (!auth_header.empty()) {
-            std::string token = Auth::instance().extract_token(auth_header);
-            auto payload = Auth::instance().verify_token(token);
-            if (payload) {
-                user_id = payload->user_id;
+        if (auth.success) {
+            user_id = auth.user_id;
+        } else {
+            // Dev mode fallback only for "demo" user
+            #ifdef DEV_MODE
+            std::string param_user = req.get_param_value("user_id");
+            if (param_user == "demo" || param_user.empty()) {
+                user_id = "demo";
+            } else {
+                res.status = auth.error_code;
+                res.set_content(json{{"error", auth.error}}.dump(), "application/json");
+                return;
             }
+            #else
+            res.status = auth.error_code;
+            res.set_content(json{{"error", auth.error}}.dump(), "application/json");
+            return;
+            #endif
         }
-        
-        // Fallback to query param (for demo/legacy)
-        if (user_id.empty()) {
-            user_id = req.get_param_value("user_id");
-        }
-        if (user_id.empty()) user_id = "demo";
         
         auto positions = PositionManager::instance().get_all_positions(user_id);
         
@@ -1438,25 +1448,25 @@ inline void HttpServer::setup_routes() {
     // ==================== ACCOUNT ====================
     
     // GET /api/account - Primary account endpoint with full trading info
-    // Supports both JWT auth (preferred) and user_id param (legacy)
+    // SECURITY: JWT authentication required (DEV_MODE allows demo fallback)
     server_->Get("/api/account", [](const httplib::Request& req, httplib::Response& res) {
+        auto auth = authenticate(req);
         std::string user_id;
         
-        // Try JWT auth first
-        std::string auth_header = req.get_header_value("Authorization");
-        if (!auth_header.empty()) {
-            std::string token = Auth::instance().extract_token(auth_header);
-            auto payload = Auth::instance().verify_token(token);
-            if (payload) {
-                user_id = payload->user_id;
-            }
+        if (auth.success) {
+            user_id = auth.user_id;
         }
-        
-        // Fallback to query param (for demo/legacy)
-        if (user_id.empty()) {
-            user_id = req.get_param_value("user_id");
+#ifdef DEV_MODE
+        else {
+            // Allow "demo" fallback only in development
+            user_id = "demo";
         }
-        if (user_id.empty()) user_id = "demo";
+#else
+        else {
+            send_unauthorized(res, auth.error);
+            return;
+        }
+#endif
         
         auto& pm = PositionManager::instance();
         
@@ -1493,9 +1503,24 @@ inline void HttpServer::setup_routes() {
     });
     
     // Legacy /api/balance endpoint (redirects to /api/account format)
+    // SECURITY: JWT authentication required (DEV_MODE allows demo fallback)
     server_->Get("/api/balance", [](const httplib::Request& req, httplib::Response& res) {
-        std::string user_id = req.get_param_value("user_id");
-        if (user_id.empty()) user_id = "demo";
+        auto auth = authenticate(req);
+        std::string user_id;
+        
+        if (auth.success) {
+            user_id = auth.user_id;
+        }
+#ifdef DEV_MODE
+        else {
+            user_id = "demo";
+        }
+#else
+        else {
+            send_unauthorized(res, auth.error);
+            return;
+        }
+#endif
         
         auto& pm = PositionManager::instance();
         
@@ -1754,9 +1779,24 @@ inline void HttpServer::setup_routes() {
     
     // ==================== ORDER HISTORY (Persistent) ====================
     
+    // SECURITY: JWT authentication required (DEV_MODE allows demo fallback)
     server_->Get("/api/orders/history", [](const httplib::Request& req, httplib::Response& res) {
-        std::string user_id = req.get_param_value("user_id");
-        if (user_id.empty()) user_id = "demo";
+        auto auth = authenticate(req);
+        std::string user_id;
+        
+        if (auth.success) {
+            user_id = auth.user_id;
+        }
+#ifdef DEV_MODE
+        else {
+            user_id = "demo";
+        }
+#else
+        else {
+            send_unauthorized(res, auth.error);
+            return;
+        }
+#endif
         
         auto orders = Database::instance().get_user_orders(user_id, 100);
         
