@@ -259,6 +259,15 @@
                         <div class="ob-header"><span>Ask</span><span>Size</span></div>
                         <canvas id="asksCanvas" class="ob-canvas"></canvas>
                     </div>
+                    <!-- Order Book Imbalance Indicator -->
+                    <div class="ob-imbalance">
+                        <span class="imbalance-label" style="font-size:9px;color:var(--text-muted);">Imbalance</span>
+                        <div class="imbalance-bar">
+                            <div class="imbalance-bid" id="imbalanceBid" style="width:50%;"></div>
+                            <div class="imbalance-ask" id="imbalanceAsk" style="width:50%;"></div>
+                        </div>
+                        <span class="imbalance-pct" id="imbalancePct">0%</span>
+                    </div>
                 </div>
                 <!-- DOM Ladder View -->
                 <div class="dom-ladder" id="domLadder" style="display:none;">
@@ -293,11 +302,35 @@
                 </div>
                 <div class="form-row">
                     <label class="form-label">Quantity</label>
-                    <input type="number" class="form-input" id="quantity" value="1" step="0.01" oninput="updateSummary()">
+                    <div class="quantity-input-group">
+                        <input type="number" class="form-input" id="quantity" value="1" step="0.01" oninput="updateSummary()">
+                        <div class="quick-qty-btns">
+                            <button class="quick-btn" onclick="setQuantity(0.1)">0.1</button>
+                            <button class="quick-btn" onclick="setQuantity(0.5)">0.5</button>
+                            <button class="quick-btn active" onclick="setQuantity(1)">1</button>
+                            <button class="quick-btn" onclick="setQuantity(5)">5</button>
+                            <button class="quick-btn" onclick="setQuantity(10)">10</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="form-row">
+                <div class="form-row">
                     <label class="form-label">Leverage</label>
-                    <input type="number" class="form-input" id="leverage" value="10" step="1" oninput="updateSummary()">
+                    <div class="leverage-group">
+                        <div class="leverage-slider-row">
+                            <input type="range" class="leverage-slider" id="leverageSlider" min="1" max="100" value="10" oninput="document.getElementById('leverage').value=this.value; document.getElementById('leverageValue').textContent=this.value+'x'; updateSummary()">
+                            <span class="leverage-value" id="leverageValue">10x</span>
+                            <input type="hidden" id="leverage" value="10">
+                        </div>
+                        <div class="leverage-presets">
+                            <button class="leverage-btn" onclick="setLeverage(1)">1x</button>
+                            <button class="leverage-btn" onclick="setLeverage(5)">5x</button>
+                            <button class="leverage-btn active" onclick="setLeverage(10)">10x</button>
+                            <button class="leverage-btn" onclick="setLeverage(25)">25x</button>
+                            <button class="leverage-btn" onclick="setLeverage(50)">50x</button>
+                            <button class="leverage-btn" onclick="setLeverage(100)">100x</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="order-summary">
                     <div class="summary-row"><span class="summary-label">Entry</span><span class="summary-value" id="entryPrice">-</span></div>
@@ -365,6 +398,51 @@
     <script src="webgl-chart.js"></script>
     <script src="wasm-loader.js"></script>
     <script src="app.js"></script>
+
+
+    <!-- ORDER CONFIRMATION OVERLAY -->
+    <div class="order-confirm" id="orderConfirm">
+        <div class="order-confirm-icon" id="orderConfirmIcon">✓</div>
+        <div class="order-confirm-title" id="orderConfirmTitle">Order Filled</div>
+        <div class="order-confirm-details" id="orderConfirmDetails">1 XAU-MNT-PERP @ 18,500,000 MNT</div>
+    </div>
+
+    <!-- KEYBOARD SHORTCUTS MODAL -->
+    <div class="modal-overlay hidden" id="keyboardModal" onclick="if(event.target===this)hideKeyboard()">
+        <div class="keyboard-modal">
+            <div class="keyboard-header">
+                <span class="keyboard-title">⌨️ Keyboard Shortcuts</span>
+                <button class="keyboard-close" onclick="hideKeyboard()">×</button>
+            </div>
+            <div class="keyboard-body">
+                <div class="shortcut-group">
+                    <div class="shortcut-title">Trading</div>
+                    <div class="shortcut-row"><span class="kbd-hint">B</span> <span>Buy (Long)</span></div>
+                    <div class="shortcut-row"><span class="kbd-hint">S</span> <span>Sell (Short)</span></div>
+                    <div class="shortcut-row"><span class="kbd-hint">Enter</span> <span>Submit Order</span></div>
+                    <div class="shortcut-row"><span class="kbd-hint">Esc</span> <span>Cancel / Close</span></div>
+                </div>
+                <div class="shortcut-group">
+                    <div class="shortcut-title">Chart</div>
+                    <div class="shortcut-row"><span class="kbd-hint">1</span> - <span class="kbd-hint">6</span> <span>Timeframes (1m-1D)</span></div>
+                    <div class="shortcut-row"><span class="kbd-hint">+</span> / <span class="kbd-hint">-</span> <span>Zoom In/Out</span></div>
+                    <div class="shortcut-row"><span class="kbd-hint">←</span> / <span class="kbd-hint">→</span> <span>Pan Chart</span></div>
+                </div>
+                <div class="shortcut-group">
+                    <div class="shortcut-title">Navigation</div>
+                    <div class="shortcut-row"><span class="kbd-hint">↑</span> / <span class="kbd-hint">↓</span> <span>Next/Prev Instrument</span></div>
+                    <div class="shortcut-row"><span class="kbd-hint">/</span> <span>Search Instruments</span></div>
+                    <div class="shortcut-row"><span class="kbd-hint">?</span> <span>Show This Help</span></div>
+                </div>
+                <div class="shortcut-group">
+                    <div class="shortcut-title">Account</div>
+                    <div class="shortcut-row"><span class="kbd-hint">Ctrl</span>+<span class="kbd-hint">D</span> <span>Deposit</span></div>
+                    <div class="shortcut-row"><span class="kbd-hint">Ctrl</span>+<span class="kbd-hint">W</span> <span>Withdraw</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>
 

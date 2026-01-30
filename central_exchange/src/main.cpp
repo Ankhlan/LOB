@@ -82,11 +82,17 @@ void print_products() {
 int main(int argc, char* argv[]) {
     print_banner();
     
-    // Parse arguments
+    // Parse arguments (fall back to environment variables)
     int port = 8080;
-    std::string fxcm_user = "";
-    std::string fxcm_pass = "";
-    std::string fxcm_connection = "Demo";
+    
+    // FXCM credentials from env vars or command line
+    const char* env_user = std::getenv("FXCM_USER");
+    const char* env_pass = std::getenv("FXCM_PASS");
+    const char* env_conn = std::getenv("FXCM_CONNECTION");
+    
+    std::string fxcm_user = env_user ? env_user : "";
+    std::string fxcm_pass = env_pass ? env_pass : "";
+    std::string fxcm_connection = env_conn ? env_conn : "Demo";
     
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -101,8 +107,8 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--help") {
             std::cout << "Usage: central_exchange [options]\n"
                       << "  --port <port>        HTTP server port (default: 8080)\n"
-                      << "  --fxcm-user <user>   FXCM username\n"
-                      << "  --fxcm-pass <pass>   FXCM password\n"
+                      << "  --fxcm-user <user>   FXCM username (or FXCM_USER env)\n"
+                      << "  --fxcm-pass <pass>   FXCM password (or FXCM_PASS env)\n"
                       << "  --fxcm-live          Use live FXCM connection (default: Demo)\n"
                       << "  --help               Show this help\n";
             return 0;

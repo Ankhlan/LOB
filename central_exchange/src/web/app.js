@@ -2872,3 +2872,261 @@ function playSound(type) {
 window.playSound = playSound;
 
 console.log('[Sounds] Trading sounds enabled');
+
+// ===== QUICK QUANTITY CONTROL =====
+function setQuantity(val) {
+    document.getElementById('quantity').value = val;
+    // Update active button
+    document.querySelectorAll('.quick-qty-btns .quick-btn').forEach(btn => {
+        btn.classList.toggle('active', parseFloat(btn.textContent) === val);
+    });
+    updateSummary();
+}
+
+// ===== LEVERAGE PRESETS =====
+function setLeverage(val) {
+    document.getElementById('leverage').value = val;
+    const slider = document.getElementById('leverageSlider');
+    if (slider) slider.value = val;
+    const display = document.getElementById('leverageValue');
+    if (display) display.textContent = val + 'x';
+    // Update active button
+    document.querySelectorAll('.leverage-presets .leverage-btn').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.textContent) === val);
+    });
+    updateSummary();
+}
+
+// ===== PRICE FLASH ANIMATION =====
+function flashPrice(element, direction) {
+    if (!element) return;
+    element.classList.remove('price-flash-up', 'price-flash-down');
+    // Force reflow
+    void element.offsetWidth;
+    element.classList.add(direction === 'up' ? 'price-flash-up' : 'price-flash-down');
+}
+
+// ===== ENHANCED INSTRUMENT PRICE FLASH =====
+function flashInstrumentPrice(symbol, direction) {
+    const row = document.querySelector(`.instrument-row[data-symbol="${symbol}"]`);
+    if (!row) return;
+    const priceEl = row.querySelector('.instrument-price');
+    if (!priceEl) return;
+    priceEl.classList.remove('flash-green', 'flash-red');
+    void priceEl.offsetWidth;
+    priceEl.classList.add(direction === 'up' ? 'flash-green' : 'flash-red');
+    setTimeout(() => priceEl.classList.remove('flash-green', 'flash-red'), 300);
+}
+
+
+// ===== KEYBOARD SHORTCUTS =====
+function showKeyboard() {
+    document.getElementById('keyboardModal').classList.remove('hidden');
+}
+
+function hideKeyboard() {
+    document.getElementById('keyboardModal').classList.add('hidden');
+}
+
+// Global keyboard handler
+document.addEventListener('keydown', function(e) {
+    // Don't trigger if typing in input
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    
+    switch(e.key) {
+        case '?':
+            e.preventDefault();
+            showKeyboard();
+            break;
+        case 'Escape':
+            hideKeyboard();
+            document.getElementById('loginModal').classList.add('hidden');
+            break;
+        case 'b':
+        case 'B':
+            setSide('long');
+            break;
+        case 's':
+        case 'S':
+            if (!e.ctrlKey) setSide('short');
+            break;
+        case '1':
+            setTimeframe('1');
+            break;
+        case '2':
+            setTimeframe('5');
+            break;
+        case '3':
+            setTimeframe('15');
+            break;
+        case '4':
+            setTimeframe('60');
+            break;
+        case '5':
+            setTimeframe('240');
+            break;
+        case '6':
+            setTimeframe('D');
+            break;
+        case '/':
+            e.preventDefault();
+            document.getElementById('searchInput').focus();
+            break;
+        case 'ArrowUp':
+            selectPrevInstrument();
+            break;
+        case 'ArrowDown':
+            selectNextInstrument();
+            break;
+        case 'Enter':
+            if (document.getElementById('submitBtn') && !document.getElementById('submitBtn').disabled) {
+                submitOrder();
+            }
+            break;
+    }
+});
+
+// Navigate instruments
+function selectPrevInstrument() {
+    const rows = Array.from(document.querySelectorAll('.instrument-row'));
+    const currentIdx = rows.findIndex(r => r.classList.contains('selected'));
+    if (currentIdx > 0) {
+        const prevSymbol = rows[currentIdx - 1].dataset.symbol;
+        selectInstrument(prevSymbol);
+    }
+}
+
+function selectNextInstrument() {
+    const rows = Array.from(document.querySelectorAll('.instrument-row'));
+    const currentIdx = rows.findIndex(r => r.classList.contains('selected'));
+    if (currentIdx < rows.length - 1) {
+        const nextSymbol = rows[currentIdx + 1].dataset.symbol;
+        selectInstrument(nextSymbol);
+    }
+}
+
+
+// ===== ORDER CONFIRMATION ANIMATION =====
+function showOrderConfirmation(side, symbol, qty, price) {
+    const overlay = document.getElementById('orderConfirm');
+    const icon = document.getElementById('orderConfirmIcon');
+    const title = document.getElementById('orderConfirmTitle');
+    const details = document.getElementById('orderConfirmDetails');
+    
+    icon.textContent = side === 'long' ? '📈' : '📉';
+    title.textContent = side === 'long' ? 'BUY Order Filled' : 'SELL Order Filled';
+    details.textContent = `${qty} ${symbol} @ ${fmt(price, 0)} MNT`;
+    
+    overlay.classList.toggle('sell', side === 'short');
+    overlay.classList.add('show');
+    
+    // Hide after 2 seconds
+    setTimeout(() => {
+        overlay.classList.remove('show');
+    }, 2000);
+}
+
+// ===== ENHANCED SUBMIT ORDER WITH CONFIRMATION =====
+const originalSubmitOrder = window.submitOrder;
+window.submitOrder = async function() {
+    const symbol = state.selected;
+    const qty = parseFloat(document.getElementById('quantity').value);
+    const side = state.side;
+    const q = state.quotes[symbol] || {};
+    const price = side === 'long' ? (q.ask || q.mid || 0) : (q.bid || q.mid || 0);
+    
+    // Call original submit
+    if (typeof originalSubmitOrder === 'function') {
+        await originalSubmitOrder();
+    } else {
+        // Fallback order submission
+        if (!symbol) return alert('Select an instrument');
+        if (!qty || qty <= 0) return alert('Enter a valid quantity');
+        
+        const btn = document.getElementById('submitBtn');
+        const origText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Submitting...';
+        
+        try {
+            const orderType = side === 'long' ? 'market_buy' : 'market_sell';
+            const res = await fetch('/api/order', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + localStorage.getItem('token')
+                },
+                body: JSON.stringify({ symbol, quantity: qty, type: orderType })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Order failed');
+            
+            showOrderConfirmation(side, symbol, qty, price);
+            showToast('success', 'Order Filled', `${side === 'long' ? 'Bought' : 'Sold'} ${qty} ${symbol}`);
+        } catch (err) {
+            showToast('error', 'Order Failed', err.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = origText;
+        }
+    }
+    
+    // Show confirmation animation
+    showOrderConfirmation(side, symbol, qty, price);
+};
+
+
+// ===== ORDER BOOK IMBALANCE CALCULATION =====
+function updateOrderBookImbalance(bids, asks) {
+    const bidVol = bids.reduce((sum, b) => sum + (b.size || b.quantity || 0), 0);
+    const askVol = asks.reduce((sum, a) => sum + (a.size || a.quantity || 0), 0);
+    const total = bidVol + askVol;
+    
+    if (total === 0) return;
+    
+    const bidPct = (bidVol / total) * 100;
+    const askPct = (askVol / total) * 100;
+    const imbalance = bidPct - 50; // Positive = bullish, negative = bearish
+    
+    const bidBar = document.getElementById('imbalanceBid');
+    const askBar = document.getElementById('imbalanceAsk');
+    const pctEl = document.getElementById('imbalancePct');
+    
+    if (bidBar) bidBar.style.width = bidPct + '%';
+    if (askBar) askBar.style.width = askPct + '%';
+    
+    if (pctEl) {
+        const sign = imbalance > 0 ? '+' : '';
+        pctEl.textContent = sign + imbalance.toFixed(0) + '%';
+        pctEl.className = 'imbalance-pct ' + (imbalance > 5 ? 'bullish' : imbalance < -5 ? 'bearish' : '');
+    }
+}
+
+// ===== ENHANCED PRICE DISPLAY WITH SPREAD =====
+function formatPriceWithSpread(bid, ask) {
+    if (!bid || !ask) return { bid: '-', ask: '-', spread: '-' };
+    const spread = ask - bid;
+    const spreadPct = (spread / ask) * 100;
+    return {
+        bid: fmt(bid, 0),
+        ask: fmt(ask, 0),
+        spread: spreadPct.toFixed(3) + '%'
+    };
+}
+
+// ===== ACCOUNT SUMMARY ANIMATION =====
+function updateAccountWithAnimation(newEquity, oldEquity) {
+    const el = document.getElementById('equity');
+    if (!el) return;
+    
+    if (newEquity > oldEquity) {
+        el.classList.add('price-flash-up');
+    } else if (newEquity < oldEquity) {
+        el.classList.add('price-flash-down');
+    }
+    
+    setTimeout(() => {
+        el.classList.remove('price-flash-up', 'price-flash-down');
+    }, 800);
+}
+
