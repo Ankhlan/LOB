@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-01-30T03:19:10.976225",
+  "timestamp": "2026-01-30T07:45:23.736170+00:00",
   "banks": [
     {
       "bank_id": "TDB",
@@ -8,8 +8,18 @@
       "ask": 3565.0,
       "cash_bid": 3557.0,
       "cash_ask": 3582.0,
-      "timestamp": "2026-01-30T03:19:13.849175",
+      "timestamp": "2026-01-30T07:45:26.245479+00:00",
       "source": "https://www.tdbm.mn/en/exchange-rates"
+    },
+    {
+      "bank_id": "GOLOMT",
+      "bank_name": "Golomt Bank",
+      "bid": 3556,
+      "ask": 3566,
+      "cash_bid": 3556,
+      "cash_ask": 3583,
+      "timestamp": "2026-01-30T07:45:27.611584+00:00",
+      "source": "https://www.golomtbank.com/api/exchange/?date=20260130"
     }
   ],
   "best_bid": 3557.0,
