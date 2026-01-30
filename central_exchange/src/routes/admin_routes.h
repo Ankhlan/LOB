@@ -12,6 +12,7 @@
 #include "../hedging_engine.h"
 #include "../product_catalog.h"
 #include "../qpay_handler.h"
+#include "../safe_ledger.h"
 
 #include <memory>
 #include <cstdio>
@@ -231,7 +232,7 @@ private:
     }
     
     void register_ledger_routes(httplib::Server& server) {
-        // Get user account balance from ledger
+        // Get user account balance from ledger (using SafeLedger)
         server.Get("/api/account/balance", [](const httplib::Request& req, httplib::Response& res) {
             auto auth = authenticate(req);
             if (!auth.success) {
@@ -244,16 +245,7 @@ private:
             }
             
             std::string user_id = auth.success ? auth.user_id : "demo";
-            std::string cmd = "ledger -f " + get_ledger_path() + " bal Assets:Users:" + user_id + " -X MNT 2>&1";
-            
-            std::array<char, 256> buffer;
-            std::string result;
-            std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
-            if (pipe) {
-                while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
-                    result += buffer.data();
-                }
-            }
+            std::string result = SafeLedger::instance().get_user_balance(user_id);
             
             send_success(res, {
                 {"user_id", user_id},
@@ -261,21 +253,12 @@ private:
             });
         });
         
-        // Get account history from ledger
+        // Get account history from ledger (using SafeLedger)
         server.Get("/api/account/history", [](const httplib::Request& req, httplib::Response& res) {
             auto auth = authenticate(req);
             std::string user_id = auth.success ? auth.user_id : "demo";
             
-            std::string cmd = "ledger -f " + get_ledger_path() + " reg Assets:Users:" + user_id + " -X MNT 2>&1";
-            
-            std::array<char, 256> buffer;
-            std::string result;
-            std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
-            if (pipe) {
-                while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
-                    result += buffer.data();
-                }
-            }
+            std::string result = SafeLedger::instance().get_user_history(user_id);
             
             send_success(res, {
                 {"user_id", user_id},
@@ -283,7 +266,7 @@ private:
             });
         });
         
-        // Admin: Balance sheet
+        // Admin: Balance sheet (using SafeLedger)
         server.Get("/api/admin/balance-sheet", [](const httplib::Request& req, httplib::Response& res) {
             std::string auth_header = req.get_header_value("Authorization");
             if (auth_header.empty()) {
@@ -291,16 +274,7 @@ private:
                 return;
             }
             
-            std::string cmd = "ledger -f " + get_ledger_path() + " bal Assets Liabilities -X MNT 2>&1";
-            
-            std::array<char, 256> buffer;
-            std::string result;
-            std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
-            if (pipe) {
-                while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
-                    result += buffer.data();
-                }
-            }
+            std::string result = SafeLedger::instance().get_balance_sheet();
             
             send_success(res, {
                 {"report", "balance-sheet"},
@@ -308,7 +282,7 @@ private:
             });
         });
         
-        // Admin: Income statement
+        // Admin: Income statement (using SafeLedger)
         server.Get("/api/admin/income-statement", [](const httplib::Request& req, httplib::Response& res) {
             std::string auth_header = req.get_header_value("Authorization");
             if (auth_header.empty()) {
@@ -316,16 +290,7 @@ private:
                 return;
             }
             
-            std::string cmd = "ledger -f " + get_ledger_path() + " bal Revenue Expenses -X MNT 2>&1";
-            
-            std::array<char, 256> buffer;
-            std::string result;
-            std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
-            if (pipe) {
-                while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
-                    result += buffer.data();
-                }
-            }
+            std::string result = SafeLedger::instance().get_income_statement();
             
             send_success(res, {
                 {"report", "income-statement"},
