@@ -37,6 +37,7 @@
 #include <map>
 #include <set>
 #include <sstream>
+#include <algorithm>
 
 namespace central_exchange {
 
@@ -68,6 +69,12 @@ public:
     
     // Update with new tick price
     void update(const std::string& symbol, double price, int timeframe_seconds = 60) {
+        // SANITY CHECK: Reject obviously corrupted prices (> 1 trillion MNT = $300M at 3500 rate)
+        // No legitimate price on this exchange should be > 1e12
+        if (price <= 0 || price > 1e12 || std::isnan(price) || std::isinf(price)) {
+            return;  // Silently reject corrupted tick
+        }
+
         std::lock_guard<std::mutex> lock(mutex_);
         auto now = std::chrono::system_clock::now();
         int64_t ts = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
@@ -95,9 +102,14 @@ public:
     
     // Seed historical candles (only if not already seeded)
     void seed_history(const std::string& symbol, int timeframe_seconds, double mark_price, int count = 100) {
+        // SANITY CHECK: Don't seed with corrupted mark price
+        if (mark_price <= 0 || mark_price > 1e12 || std::isnan(mark_price) || std::isinf(mark_price)) {
+            return;  // Don't seed with corrupted price
+        }
+
         std::lock_guard<std::mutex> lock(mutex_);
         auto& candles = data_[symbol][timeframe_seconds];
-        
+
         // Only seed if fewer than 50 candles
         if (candles.size() >= 50) return;
         
@@ -122,11 +134,22 @@ public:
             historical.push_back({t, o, h, l, c, 10.0 + ((seed + t) % 50)});
         }
         
-        // Append any existing real candles
+        // Append any existing real candles (filter corrupted)
         for (const auto& c : candles) {
-            historical.push_back(c);
+            // Sanity check: reject candles with prices > 1 trillion MNT
+            if (c.open > 0 && c.open < 1e12 &&
+                c.high > 0 && c.high < 1e12 &&
+                c.low > 0 && c.low < 1e12 &&
+                c.close > 0 && c.close < 1e12) {
+                historical.push_back(c);
+            }
         }
         candles = std::move(historical);
+
+        // CRITICAL: Sort by time to ensure monotonic timestamps for TradingView
+        std::sort(candles.begin(), candles.end(),
+            [](const Candle& a, const Candle& b) { return a.time < b.time; });
+
         seeded_[symbol][timeframe_seconds] = true;
     }
     
@@ -136,14 +159,24 @@ public:
         return seeded_[symbol][timeframe_seconds];
     }
     
-    // Get candles for symbol and timeframe
+    // Get candles for symbol and timeframe (filtered for sanity)
     std::vector<Candle> get(const std::string& symbol, int timeframe_seconds, int limit = 100) {
         std::lock_guard<std::mutex> lock(mutex_);
         auto& candles = data_[symbol][timeframe_seconds];
         if (candles.empty()) return {};
-        
-        size_t start = candles.size() > (size_t)limit ? candles.size() - limit : 0;
-        return std::vector<Candle>(candles.begin() + start, candles.end());
+
+        // Filter out corrupted candles (prices > 1 trillion or insane ranges)
+        std::vector<Candle> clean;
+        clean.reserve(candles.size());
+        for (const auto& c : candles) {
+            // Skip corrupted: price > 1e12, or high/low ratio > 2x (100% range)
+            if (c.high > 1e12 || c.low <= 0 || c.open > 1e12 || c.close > 1e12) continue;
+            if (c.low > 0 && c.high / c.low > 2.0) continue;  // Reject >100% range bars
+            clean.push_back(c);
+        }
+
+        size_t start = clean.size() > (size_t)limit ? clean.size() - limit : 0;
+        return std::vector<Candle>(clean.begin() + start, clean.end());
     }
     
     // Get all active timeframes: 60s (1m), 300s (5m), 900s (15m), 3600s (1H), 14400s (4H), 86400s (1D)
