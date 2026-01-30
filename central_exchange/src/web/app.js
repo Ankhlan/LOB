@@ -760,32 +760,86 @@ function setTheme(theme) {
     }
 }
 
-// Initialize Canvas chart with MNT prices (Zero Dependencies)
+// Initialize chart using TradingView Lightweight Charts (Professional)
 function initChart() {
     const container = document.getElementById('chartContainer');
     if (!container) { console.warn('Chart container not found'); return; }
 
+    // Remove existing chart
     if (state.chart) {
         state.chart.remove();
     }
+    container.innerHTML = '';
 
     const t = themes[state.theme];
-    
-    state.chart = new ChartCanvas(container, {
-        bgColor: t.bg,
-        textColor: t.text,
-        gridColor: t.grid,
-        accentColor: t.accent,
-        upColor: t.up,
-        downColor: t.down
-    });
-    
-    // ChartCanvas handles its own data via setData()
-    state.candleSeries = {
-        setData: (data) => state.chart.setData(data)
-    };
-    
-    console.log('Canvas chart initialized');
+
+    // Use TradingView Lightweight Charts if available
+    if (typeof LightweightCharts !== 'undefined') {
+        state.chart = LightweightCharts.createChart(container, {
+            width: container.clientWidth,
+            height: container.clientHeight,
+            layout: {
+                background: { type: 'solid', color: t.bg },
+                textColor: t.text,
+            },
+            grid: {
+                vertLines: { color: t.grid },
+                horzLines: { color: t.grid },
+            },
+            crosshair: {
+                mode: LightweightCharts.CrosshairMode.Normal,
+            },
+            rightPriceScale: {
+                borderColor: t.grid,
+                scaleMargins: { top: 0.1, bottom: 0.1 },
+            },
+            timeScale: {
+                borderColor: t.grid,
+                timeVisible: true,
+                secondsVisible: false,
+            },
+        });
+
+        state.candleSeries = state.chart.addCandlestickSeries({
+            upColor: t.up,
+            downColor: t.down,
+            borderUpColor: t.up,
+            borderDownColor: t.down,
+            wickUpColor: t.up,
+            wickDownColor: t.down,
+        });
+
+        // Volume series
+        state.volumeSeries = state.chart.addHistogramSeries({
+            color: '#26a69a',
+            priceFormat: { type: 'volume' },
+            priceScaleId: '',
+            scaleMargins: { top: 0.8, bottom: 0 },
+        });
+
+        // Handle resize
+        const resizeObserver = new ResizeObserver(entries => {
+            if (entries.length > 0) {
+                const { width, height } = entries[0].contentRect;
+                state.chart.applyOptions({ width, height });
+            }
+        });
+        resizeObserver.observe(container);
+
+        console.log('TradingView Lightweight Charts initialized');
+    } else {
+        // Fallback to custom ChartCanvas
+        state.chart = new ChartCanvas(container, {
+            bgColor: t.bg,
+            textColor: t.text,
+            gridColor: t.grid,
+            accentColor: t.accent,
+            upColor: t.up,
+            downColor: t.down
+        });
+        state.candleSeries = { setData: (data) => state.chart.setData(data) };
+        console.log('Fallback Canvas chart initialized');
+    }
 }
 
 // QPay deposit integration
@@ -808,13 +862,34 @@ async function updateChartData() {
     // Fetch real candle data from API
     try {
         const tf = state.timeframe || '15';
-        const response = await fetch(`/api/candles/${state.selected}?timeframe=${tf}&limit=100`);
+        const response = await fetch(`/api/candles/${state.selected}?timeframe=${tf}&limit=200`);
         if (!response.ok) return;
-        
+
         const data = await response.json();
         if (data.candles && data.candles.length > 0) {
-            state.priceHistory[state.selected] = data.candles;
-            state.candleSeries.setData(data.candles);
+            // Sanitize data - filter corrupted candles
+            const MAX_PRICE = 1e10;
+            const MAX_RANGE = 1.5;
+            let candles = data.candles.filter(d =>
+                d.high < MAX_PRICE && d.low > 0 && d.open < MAX_PRICE && d.close < MAX_PRICE &&
+                d.high / d.low <= MAX_RANGE
+            );
+
+            // Sort by time (required by TradingView)
+            candles.sort((a, b) => a.time - b.time);
+
+            state.priceHistory[state.selected] = candles;
+            state.candleSeries.setData(candles);
+
+            // Update volume if available
+            if (state.volumeSeries && candles.length > 0) {
+                const volumeData = candles.map(c => ({
+                    time: c.time,
+                    value: c.volume || 0,
+                    color: c.close >= c.open ? '#26a69a' : '#ef5350'
+                }));
+                state.volumeSeries.setData(volumeData);
+            }
         }
     } catch (e) {
         console.log('Chart fetch error:', e);
@@ -824,11 +899,11 @@ async function updateChartData() {
             const history = state.priceHistory[state.selected];
             if (history.length > 0) {
                 const mid = q.mid || q.mark_price || 100000;
-                const last = history[history.length - 1];
+                const last = { ...history[history.length - 1] };
                 last.close = mid;
                 last.high = Math.max(last.high, mid);
                 last.low = Math.min(last.low, mid);
-                state.candleSeries.setData(history);
+                state.candleSeries.update(last);
             }
         }
     }
@@ -854,27 +929,106 @@ function toggleVolume() {
 }
 
 // Toggle SMA indicator (20 period)
+// Calculate SMA
+function calcSMA(data, period) {
+    const result = [];
+    for (let i = period - 1; i < data.length; i++) {
+        let sum = 0;
+        for (let j = 0; j < period; j++) sum += data[i - j].close;
+        result.push({ time: data[i].time, value: sum / period });
+    }
+    return result;
+}
+
+// Calculate EMA
+function calcEMA(data, period) {
+    const result = [];
+    const k = 2 / (period + 1);
+    let ema = data[0].close;
+    for (let i = 0; i < data.length; i++) {
+        ema = data[i].close * k + ema * (1 - k);
+        if (i >= period - 1) result.push({ time: data[i].time, value: ema });
+    }
+    return result;
+}
+
+// Calculate Bollinger Bands
+function calcBB(data, period, stdDev = 2) {
+    const upper = [], lower = [], middle = [];
+    for (let i = period - 1; i < data.length; i++) {
+        let sum = 0, sumSq = 0;
+        for (let j = 0; j < period; j++) {
+            sum += data[i - j].close;
+            sumSq += data[i - j].close * data[i - j].close;
+        }
+        const avg = sum / period;
+        const std = Math.sqrt(sumSq / period - avg * avg);
+        middle.push({ time: data[i].time, value: avg });
+        upper.push({ time: data[i].time, value: avg + stdDev * std });
+        lower.push({ time: data[i].time, value: avg - stdDev * std });
+    }
+    return { upper, lower, middle };
+}
+
 function toggleSMA() {
     const btn = document.getElementById('smaBtn');
     const enabled = !btn.classList.contains('active');
     btn.classList.toggle('active', enabled);
-    if (state.chart) state.chart.setIndicator('sma', enabled ? 20 : 0);
+
+    if (!state.chart || typeof LightweightCharts === 'undefined') return;
+
+    if (enabled) {
+        const data = state.priceHistory[state.selected] || [];
+        if (data.length < 20) return;
+        state.smaSeries = state.chart.addLineSeries({ color: '#2962FF', lineWidth: 2 });
+        state.smaSeries.setData(calcSMA(data, 20));
+    } else if (state.smaSeries) {
+        state.chart.removeSeries(state.smaSeries);
+        state.smaSeries = null;
+    }
 }
 
-// Toggle EMA indicator (12 period)
 function toggleEMA() {
     const btn = document.getElementById('emaBtn');
     const enabled = !btn.classList.contains('active');
     btn.classList.toggle('active', enabled);
-    if (state.chart) state.chart.setIndicator('ema', enabled ? 12 : 0);
+
+    if (!state.chart || typeof LightweightCharts === 'undefined') return;
+
+    if (enabled) {
+        const data = state.priceHistory[state.selected] || [];
+        if (data.length < 12) return;
+        state.emaSeries = state.chart.addLineSeries({ color: '#FF6D00', lineWidth: 2 });
+        state.emaSeries.setData(calcEMA(data, 12));
+    } else if (state.emaSeries) {
+        state.chart.removeSeries(state.emaSeries);
+        state.emaSeries = null;
+    }
 }
 
-// Toggle Bollinger Bands indicator (20 period)
 function toggleBB() {
     const btn = document.getElementById('bbBtn');
     const enabled = !btn.classList.contains('active');
     btn.classList.toggle('active', enabled);
-    if (state.chart) state.chart.setIndicator('bb', enabled ? 20 : 0);
+
+    if (!state.chart || typeof LightweightCharts === 'undefined') return;
+
+    if (enabled) {
+        const data = state.priceHistory[state.selected] || [];
+        if (data.length < 20) return;
+        const bb = calcBB(data, 20);
+        state.bbUpperSeries = state.chart.addLineSeries({ color: '#9C27B0', lineWidth: 1 });
+        state.bbLowerSeries = state.chart.addLineSeries({ color: '#9C27B0', lineWidth: 1 });
+        state.bbMiddleSeries = state.chart.addLineSeries({ color: '#9C27B0', lineWidth: 1, lineStyle: 2 });
+        state.bbUpperSeries.setData(bb.upper);
+        state.bbLowerSeries.setData(bb.lower);
+        state.bbMiddleSeries.setData(bb.middle);
+    } else {
+        if (state.bbUpperSeries) state.chart.removeSeries(state.bbUpperSeries);
+        if (state.bbLowerSeries) state.chart.removeSeries(state.bbLowerSeries);
+        if (state.bbMiddleSeries) state.chart.removeSeries(state.bbMiddleSeries);
+        state.bbUpperSeries = state.bbLowerSeries = state.bbMiddleSeries = null;
+    }
 }
 
 // ===== WEBGL CHART TOGGLE =====

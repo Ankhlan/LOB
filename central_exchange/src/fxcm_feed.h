@@ -647,9 +647,9 @@ inline void FxcmFeed::update_mark_prices() {
         auto it = prices_.find(product.fxcm_symbol);
         if (it == prices_.end() || it->second.timestamp == 0) return;
         
-        // Convert FXCM price to MNT
+        // Convert FXCM price to MNT using proper formula
         double mid = (it->second.bid + it->second.ask) / 2.0;
-        double mnt_price = mid * product.usd_multiplier * USD_MNT_RATE;
+        double mnt_price = product.fxcm_to_mnt(mid);
         
         // Update mark price
         ProductCatalog::instance().update_mark_price(product.symbol, mnt_price);

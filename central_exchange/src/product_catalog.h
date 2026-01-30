@@ -51,8 +51,9 @@ struct Product {
     
     // FXCM Integration
     std::string fxcm_symbol;      // e.g., "XAU/USD" - empty for MN_PERPETUAL
-    double usd_multiplier;        // Convert FXCM price to USD notional
+    double usd_multiplier;        // For commodities: contract size in USD. For FX: always 1.0
     HedgeMode hedge_mode;
+    bool is_inverted;             // True for USD/XXX pairs (USD/CNH, USD/RUB) where we need to divide
     
     // Trading Parameters
     double contract_size;         // Units per contract
@@ -69,7 +70,17 @@ struct Product {
     
     bool is_active;
     
-    // Helpers
+    // Helpers - Calculate MNT price from FXCM price
+    double fxcm_to_mnt(double fxcm_price) const {
+        if (is_inverted) {
+            // USD/XXX pair: XXX-MNT = USD/MNT / USD/XXX
+            return USD_MNT_RATE / fxcm_price;
+        } else {
+            // XXX/USD pair: XXX-MNT = XXX/USD × USD/MNT × multiplier
+            return fxcm_price * usd_multiplier * USD_MNT_RATE;
+        }
+    }
+    
     double to_mnt(double usd_price) const {
         return usd_price * usd_multiplier * USD_MNT_RATE;
     }
@@ -127,6 +138,7 @@ inline void ProductCatalog::initialize() {
         .fxcm_symbol = "XAU/USD",
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
+        .is_inverted = false,
         .contract_size = 1.0,       // 1 oz per contract
         .tick_size = 100.0,         // 100 MNT tick
         .min_order_size = 0.01,
@@ -147,6 +159,7 @@ inline void ProductCatalog::initialize() {
         .fxcm_symbol = "XAG/USD",
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
+        .is_inverted = false,
         .contract_size = 100.0,     // 100 oz per contract
         .tick_size = 10.0,
         .min_order_size = 0.1,
@@ -167,6 +180,7 @@ inline void ProductCatalog::initialize() {
         .fxcm_symbol = "USOil",
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
+        .is_inverted = false,
         .contract_size = 100.0,     // 100 barrels
         .tick_size = 50.0,
         .min_order_size = 0.1,
@@ -187,6 +201,7 @@ inline void ProductCatalog::initialize() {
         .fxcm_symbol = "Copper",
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
+        .is_inverted = false,
         .contract_size = 1000.0,    // 1000 lbs
         .tick_size = 10.0,
         .min_order_size = 0.1,
@@ -207,6 +222,7 @@ inline void ProductCatalog::initialize() {
         .fxcm_symbol = "NatGas",
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
+        .is_inverted = false,
         .contract_size = 10000.0,   // 10,000 MMBtu
         .tick_size = 1.0,
         .min_order_size = 0.1,
@@ -227,7 +243,8 @@ inline void ProductCatalog::initialize() {
         .category = ProductCategory::FX_PERP,  // FX perpetual category
         .fxcm_symbol = "",  // Internal pricing - WE are the source
         .usd_multiplier = 1.0,
-        .hedge_mode = HedgeMode::NONE,  // Can't hedge - we ARE the USD/MNT source
+        .hedge_mode = HedgeMode::NONE,
+        .is_inverted = false,  // Can't hedge - we ARE the USD/MNT source
         .contract_size = 1000.0,  // $1000 USD notional per contract
         .tick_size = 1.0,         // 1 MNT minimum increment
         .min_order_size = 0.1,
@@ -246,8 +263,9 @@ inline void ProductCatalog::initialize() {
         .description = "Euro vs Mongolian Tugrik",
         .category = ProductCategory::FXCM_FX_LOCAL,
         .fxcm_symbol = "EUR/USD",
-        .usd_multiplier = 1.08,   // EUR/USD rate
+        .usd_multiplier = 1.0,    // FX pairs: multiplier is 1.0, FXCM price IS the rate
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
+        .is_inverted = false,
         .contract_size = 1000.0,  // €1000 notional
         .tick_size = 1.0,
         .min_order_size = 0.1,
@@ -255,7 +273,7 @@ inline void ProductCatalog::initialize() {
         .margin_rate = 0.02,
         .maker_fee = 0.0001,
         .taker_fee = 0.0003,
-        .mark_price_mnt = 3726.0,  // 3450 * 1.08
+        .mark_price_mnt = 3726.0,  // EUR/USD × USD/MNT ≈ 1.08 × 3450
         .funding_rate = 0.0001,
         .is_active = true
     });
@@ -266,8 +284,9 @@ inline void ProductCatalog::initialize() {
         .description = "Chinese Yuan vs Mongolian Tugrik",
         .category = ProductCategory::FXCM_FX_LOCAL,
         .fxcm_symbol = "USD/CNH",
-        .usd_multiplier = 0.138,  // ~1/7.25
+        .usd_multiplier = 1.0,    // Not used for inverted pairs
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
+        .is_inverted = true,      // USD/CNH is inverted: CNY-MNT = USD-MNT / USD-CNH
         .contract_size = 10000.0, // ¥10000 notional
         .tick_size = 0.1,
         .min_order_size = 1.0,
@@ -286,8 +305,9 @@ inline void ProductCatalog::initialize() {
         .description = "Russian Ruble vs Mongolian Tugrik",
         .category = ProductCategory::FXCM_FX_LOCAL,
         .fxcm_symbol = "USD/RUB",
-        .usd_multiplier = 0.011,  // ~1/90
+        .usd_multiplier = 1.0,    // Not used for inverted pairs
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
+        .is_inverted = true,      // USD/RUB is inverted: RUB-MNT = USD-MNT / USD-RUB
         .contract_size = 100000.0, // ₽100000 notional
         .tick_size = 0.01,
         .min_order_size = 1.0,
@@ -309,6 +329,7 @@ inline void ProductCatalog::initialize() {
         .fxcm_symbol = "SPX500",
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
+        .is_inverted = false,
         .contract_size = 1.0,     // 1 index point = $1
         .tick_size = 100.0,
         .min_order_size = 0.1,
@@ -329,6 +350,7 @@ inline void ProductCatalog::initialize() {
         .fxcm_symbol = "NAS100",
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
+        .is_inverted = false,
         .contract_size = 1.0,
         .tick_size = 100.0,
         .min_order_size = 0.1,
@@ -349,6 +371,7 @@ inline void ProductCatalog::initialize() {
         .fxcm_symbol = "HKG33",
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
+        .is_inverted = false,
         .contract_size = 1.0,
         .tick_size = 50.0,
         .min_order_size = 0.1,
@@ -370,6 +393,7 @@ inline void ProductCatalog::initialize() {
         .fxcm_symbol = "BTC/USD",
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
+        .is_inverted = false,
         .contract_size = 0.001,   // 0.001 BTC per contract
         .tick_size = 1000.0,
         .min_order_size = 0.001,
@@ -390,6 +414,7 @@ inline void ProductCatalog::initialize() {
         .fxcm_symbol = "ETH/USD",
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
+        .is_inverted = false,
         .contract_size = 0.01,    // 0.01 ETH per contract
         .tick_size = 100.0,
         .min_order_size = 0.01,
@@ -414,6 +439,7 @@ inline void ProductCatalog::initialize() {
         .fxcm_symbol = "",  // No FXCM backing
         .usd_multiplier = 0.0,
         .hedge_mode = HedgeMode::NONE,
+        .is_inverted = false,
         .contract_size = 1.0,     // 1 index unit
         .tick_size = 100.0,
         .min_order_size = 1.0,
@@ -434,6 +460,7 @@ inline void ProductCatalog::initialize() {
         .fxcm_symbol = "",
         .usd_multiplier = 0.0,
         .hedge_mode = HedgeMode::NONE,
+        .is_inverted = false,
         .contract_size = 1.0,
         .tick_size = 1000.0,
         .min_order_size = 0.1,
@@ -454,6 +481,7 @@ inline void ProductCatalog::initialize() {
         .fxcm_symbol = "",
         .usd_multiplier = 0.0,
         .hedge_mode = HedgeMode::NONE,
+        .is_inverted = false,
         .contract_size = 1.0,     // 1 kg
         .tick_size = 100.0,
         .min_order_size = 10.0,
@@ -474,6 +502,7 @@ inline void ProductCatalog::initialize() {
         .fxcm_symbol = "",
         .usd_multiplier = 0.0,
         .hedge_mode = HedgeMode::NONE,
+        .is_inverted = false,
         .contract_size = 1.0,     // 1 tonne
         .tick_size = 100.0,
         .min_order_size = 100.0,
@@ -494,6 +523,7 @@ inline void ProductCatalog::initialize() {
         .fxcm_symbol = "",  // Could optionally hedge with FXCM Copper
         .usd_multiplier = 0.0,
         .hedge_mode = HedgeMode::NONE,
+        .is_inverted = false,
         .contract_size = 1.0,     // 1 tonne
         .tick_size = 100.0,
         .min_order_size = 10.0,
