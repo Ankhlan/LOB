@@ -116,7 +116,40 @@ public:
         // Set initial reference price from BoM
         update_bom_reference();
         
+        // Register for BoM rate updates - USD-MNT is PRIMARY market
+        BomFeed::instance().on_rate_update([this](const BomRate& rate) {
+            on_bom_rate_change(rate);
+        });
+        
         initialized_ = true;
+    }
+    
+    // Called when BoM rate changes - propagate to all dependent systems
+    void on_bom_rate_change(const BomRate& rate) {
+        if (!rate.is_valid) return;
+        
+        std::lock_guard<std::mutex> lock(mutex_);
+        bom_reference_rate_ = rate.rate;
+        
+        // Update price limits
+        lower_limit_ = bom_reference_rate_ * (1.0 - config_.max_deviation_pct);
+        upper_limit_ = bom_reference_rate_ * (1.0 + config_.max_deviation_pct);
+        
+        // Update circuit breaker reference
+        auto& cb = CircuitBreakerManager::instance();
+        cb.set_reference_price("USD-MNT-PERP", static_cast<PriceMicromnt>(bom_reference_rate_ * 1'000'000));
+        
+        // Update global rate - ALL *-MNT pairs depend on this
+        USD_MNT_RATE = rate.rate;
+        
+        // Update USD-MNT-PERP mark price
+        ProductCatalog::instance().update_mark_price("USD-MNT-PERP", rate.rate);
+        
+        // Alert callback if registered
+        if (alert_callback_) {
+            alert_callback_("[USDMNT] BoM rate updated: " + std::to_string(rate.rate) + 
+                          " (band: " + std::to_string(lower_limit_) + "-" + std::to_string(upper_limit_) + ")");
+        }
     }
     
     // Update BoM reference price (call hourly or on BoM update)

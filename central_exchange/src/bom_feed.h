@@ -16,6 +16,8 @@
 #include <atomic>
 #include <chrono>
 #include <mutex>
+#include <functional>
+#include <vector>
 
 namespace central_exchange {
 
@@ -25,6 +27,9 @@ struct BomRate {
     std::string source;
     bool is_valid;
 };
+
+// Callback type for rate updates
+using BomRateCallback = std::function<void(const BomRate&)>;
 
 class BomFeed {
 public:
@@ -113,6 +118,15 @@ public:
         
         // Update product mark price
         ProductCatalog::instance().update_mark_price("USD-MNT-PERP", rate);
+        
+        // Notify subscribers
+        notify_subscribers();
+    }
+    
+    // Register callback for rate updates
+    void on_rate_update(BomRateCallback callback) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        rate_callbacks_.push_back(std::move(callback));
     }
     
 private:
@@ -125,10 +139,20 @@ private:
         };
     }
     
+    void notify_subscribers() {
+        // Called with mutex already held
+        for (const auto& cb : rate_callbacks_) {
+            if (cb) {
+                cb(current_rate_);
+            }
+        }
+    }
+    
     mutable std::mutex mutex_;
     std::atomic<bool> running_{false};
     std::thread update_thread_;
     BomRate current_rate_;
+    std::vector<BomRateCallback> rate_callbacks_;
 };
 
 } // namespace central_exchange
