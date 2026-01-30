@@ -767,78 +767,54 @@ function initChart() {
 
     // Remove existing chart
     if (state.chart) {
-        state.chart.remove();
+        if (state.chart.destroy) state.chart.destroy();
+        else if (state.chart.remove) state.chart.remove();
     }
     container.innerHTML = '';
 
     const t = themes[state.theme];
 
-    // Use TradingView Lightweight Charts if available
+    // Use CREChart (bespoke engine) as primary renderer
+    if (typeof CREChart !== 'undefined') {
+        state.chart = new CREChart(container, {
+            bgColor: t.bg,
+            textColor: t.text,
+            gridColor: t.grid,
+            upColor: t.up,
+            downColor: t.down,
+            showVolume: true
+        });
+        state.candleSeries = {
+            setData: (data) => state.chart.setData(data),
+            update: (candle) => state.chart.updateCandle(candle)
+        };
+        state.volumeSeries = null;
+        console.log('CREChart (bespoke engine) initialized');
+        return;
+    }
+
+    // Fallback to TradingView Lightweight Charts
     if (typeof LightweightCharts !== 'undefined') {
         state.chart = LightweightCharts.createChart(container, {
             width: container.clientWidth,
             height: container.clientHeight,
-            layout: {
-                background: { type: 'solid', color: t.bg },
-                textColor: t.text,
-            },
-            grid: {
-                vertLines: { color: t.grid },
-                horzLines: { color: t.grid },
-            },
-            crosshair: {
-                mode: LightweightCharts.CrosshairMode.Normal,
-            },
-            rightPriceScale: {
-                borderColor: t.grid,
-                scaleMargins: { top: 0.1, bottom: 0.1 },
-            },
-            timeScale: {
-                borderColor: t.grid,
-                timeVisible: true,
-                secondsVisible: false,
-            },
+            layout: { background: { type: 'solid', color: t.bg }, textColor: t.text },
+            grid: { vertLines: { color: t.grid }, horzLines: { color: t.grid } },
+            crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+            rightPriceScale: { borderColor: t.grid, scaleMargins: { top: 0.1, bottom: 0.1 } },
+            timeScale: { borderColor: t.grid, timeVisible: true, secondsVisible: false },
         });
-
         state.candleSeries = state.chart.addCandlestickSeries({
-            upColor: t.up,
-            downColor: t.down,
-            borderUpColor: t.up,
-            borderDownColor: t.down,
-            wickUpColor: t.up,
-            wickDownColor: t.down,
+            upColor: t.up, downColor: t.down, borderUpColor: t.up, borderDownColor: t.down,
+            wickUpColor: t.up, wickDownColor: t.down,
         });
-
-        // Volume series
         state.volumeSeries = state.chart.addHistogramSeries({
-            color: '#26a69a',
-            priceFormat: { type: 'volume' },
-            priceScaleId: '',
+            color: '#26a69a', priceFormat: { type: 'volume' }, priceScaleId: '',
             scaleMargins: { top: 0.8, bottom: 0 },
         });
-
-        // Handle resize
-        const resizeObserver = new ResizeObserver(entries => {
-            if (entries.length > 0) {
-                const { width, height } = entries[0].contentRect;
-                state.chart.applyOptions({ width, height });
-            }
-        });
-        resizeObserver.observe(container);
-
         console.log('TradingView Lightweight Charts initialized');
     } else {
-        // Fallback to custom ChartCanvas
-        state.chart = new ChartCanvas(container, {
-            bgColor: t.bg,
-            textColor: t.text,
-            gridColor: t.grid,
-            accentColor: t.accent,
-            upColor: t.up,
-            downColor: t.down
-        });
-        state.candleSeries = { setData: (data) => state.chart.setData(data) };
-        console.log('Fallback Canvas chart initialized');
+        console.warn('No charting library available');
     }
 }
 
@@ -1145,15 +1121,21 @@ async function loadGridChartData(slot) {
     try {
         const response = await fetch('/api/candles/' + symbol + '?timeframe=' + state.timeframe + '&limit=100');
         const data = await response.json();
-        if (data && data.length > 0) {
-            const candles = data.map(c => ({
-                time: c.time || c.timestamp,
-                open: c.open,
-                high: c.high,
-                low: c.low,
-                close: c.close,
-                volume: c.volume || 0
-            }));
+        // FIX: API returns {symbol, timeframe, candles: [...]} - extract candles array
+        if (data && data.candles && data.candles.length > 0) {
+            // Sanitize and sort candles
+            const MAX_PRICE = 1e10, MAX_RANGE = 1.5;
+            let candles = data.candles
+                .filter(c => c.high < MAX_PRICE && c.low > 0 && c.high / c.low <= MAX_RANGE)
+                .map(c => ({
+                    time: c.time || c.timestamp,
+                    open: c.open,
+                    high: c.high,
+                    low: c.low,
+                    close: c.close,
+                    volume: c.volume || 0
+                }))
+                .sort((a, b) => a.time - b.time);
             gridCharts[slot].setData(candles);
         }
     } catch (e) {
@@ -1282,15 +1264,19 @@ function startQuoteStream() {
                 const history = state.priceHistory[q.symbol];
                 if (history.length > 0) {
                     const mid = q.mid || q.mark_price;
-                    if (mid) {
-                        const last = history[history.length - 1];
+                    // SANITY CHECK: Reject corrupted prices (>1 trillion MNT is clearly wrong)
+                    if (mid && mid > 0 && mid < 1e12 && isFinite(mid)) {
+                        // IMPORTANT: Create shallow copy to avoid mutating source array
+                        const lastCandle = {...history[history.length - 1]};
                         // Update the current candle's close/high/low
-                        last.close = mid;
-                        last.high = Math.max(last.high, mid);
-                        last.low = Math.min(last.low, mid);
+                        lastCandle.close = mid;
+                        lastCandle.high = Math.max(lastCandle.high, mid);
+                        lastCandle.low = Math.min(lastCandle.low, mid);
+                        // Update source array with new values
+                        history[history.length - 1] = lastCandle;
                         // TradingView's update() for real-time candle update
                         if (state.candleSeries.update) {
-                            state.candleSeries.update(last);
+                            state.candleSeries.update(lastCandle);
                         }
                     }
                 }
