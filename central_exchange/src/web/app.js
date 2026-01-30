@@ -2308,3 +2308,166 @@ function initResizablePanelsFixed() {
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(initResizablePanelsFixed, 300);
 });
+
+// ===== KEYBOARD SHORTCUTS =====
+const HOTKEYS = {
+    'b': { action: () => { setSide('long'); focusQuantity(); }, desc: 'Quick BUY' },
+    's': { action: () => { setSide('short'); focusQuantity(); }, desc: 'Quick SELL' },
+    'Enter': { action: () => submitOrder(), desc: 'Submit Order' },
+    'Escape': { action: () => clearOrderForm(), desc: 'Clear Order' },
+    'q': { action: () => focusQuantity(), desc: 'Focus Quantity' },
+    'p': { action: () => focusPrice(), desc: 'Focus Price' },
+    '?': { action: () => toggleHotkeyOverlay(), desc: 'Show Hotkeys' },
+    '1': { action: () => setTimeframe('1'), desc: '1min chart' },
+    '5': { action: () => setTimeframe('5'), desc: '5min chart' },
+    'h': { action: () => setTimeframe('60'), desc: '1hour chart' },
+    'd': { action: () => setTimeframe('D'), desc: 'Daily chart' }
+};
+
+// Focus helpers
+function focusQuantity() {
+    const qty = document.getElementById('quantity');
+    if (qty) { qty.focus(); qty.select(); }
+}
+
+function focusPrice() {
+    const price = document.getElementById('price');
+    if (price) { price.focus(); price.select(); }
+}
+
+function clearOrderForm() {
+    const qty = document.getElementById('quantity');
+    const price = document.getElementById('price');
+    if (qty) qty.value = '';
+    if (price) price.value = '';
+}
+
+// Hotkey overlay
+function createHotkeyOverlay() {
+    if (document.getElementById('hotkeyOverlay')) return;
+    
+    const overlay = document.createElement('div');
+    overlay.id = 'hotkeyOverlay';
+    overlay.className = 'hotkey-overlay';
+    overlay.innerHTML = `
+        <h3>⌨️ Keyboard Shortcuts</h3>
+        ${Object.entries(HOTKEYS).map(([key, {desc}]) => `
+            <div class="hotkey-row">
+                <span>${desc}</span>
+                <span class="hotkey-key">${key === ' ' ? 'Space' : key}</span>
+            </div>
+        `).join('')}
+        <div style="margin-top:16px;text-align:center;color:var(--text-muted);font-size:11px;">
+            Press <span class="hotkey-key">?</span> or <span class="hotkey-key">Esc</span> to close
+        </div>
+    `;
+    document.body.appendChild(overlay);
+}
+
+function toggleHotkeyOverlay() {
+    createHotkeyOverlay();
+    const overlay = document.getElementById('hotkeyOverlay');
+    overlay.classList.toggle('visible');
+}
+
+// Global keydown handler
+document.addEventListener('keydown', (e) => {
+    // Ignore if typing in input
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        if (e.key === 'Escape') {
+            e.target.blur();
+            const overlay = document.getElementById('hotkeyOverlay');
+            if (overlay) overlay.classList.remove('visible');
+        }
+        return;
+    }
+    
+    // Close overlay on Escape
+    if (e.key === 'Escape') {
+        const overlay = document.getElementById('hotkeyOverlay');
+        if (overlay && overlay.classList.contains('visible')) {
+            overlay.classList.remove('visible');
+            return;
+        }
+    }
+    
+    // Execute hotkey
+    const hotkey = HOTKEYS[e.key];
+    if (hotkey) {
+        e.preventDefault();
+        hotkey.action();
+    }
+});
+
+console.log('[Hotkeys] Keyboard shortcuts initialized. Press ? for help.');
+
+// ===== TOAST NOTIFICATION SYSTEM =====
+function showToast(message, type = 'info', title = null, duration = 4000) {
+    // Create container if needed
+    let container = document.querySelector('.toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+    
+    // Icon map
+    const icons = {
+        success: '✓',
+        error: '✕',
+        warning: '⚠',
+        info: 'ℹ'
+    };
+    
+    // Default titles
+    const defaultTitles = {
+        success: 'Success',
+        error: 'Error',
+        warning: 'Warning',
+        info: 'Info'
+    };
+    
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `
+        <span class="toast-icon">${icons[type] || icons.info}</span>
+        <div class="toast-content">
+            <div class="toast-title">${title || defaultTitles[type]}</div>
+            <div class="toast-message">${message}</div>
+        </div>
+        <button class="toast-close">×</button>
+    `;
+    
+    // Close button handler
+    toast.querySelector('.toast-close').addEventListener('click', () => {
+        dismissToast(toast);
+    });
+    
+    container.appendChild(toast);
+    
+    // Auto dismiss
+    if (duration > 0) {
+        setTimeout(() => dismissToast(toast), duration);
+    }
+    
+    return toast;
+}
+
+function dismissToast(toast) {
+    toast.classList.add('hiding');
+    setTimeout(() => toast.remove(), 300);
+}
+
+// Convenience methods
+const toast = {
+    success: (msg, title) => showToast(msg, 'success', title),
+    error: (msg, title) => showToast(msg, 'error', title),
+    warning: (msg, title) => showToast(msg, 'warning', title),
+    info: (msg, title) => showToast(msg, 'info', title)
+};
+
+// Make globally available
+window.toast = toast;
+window.showToast = showToast;
+
+console.log('[Toast] Notification system ready');
