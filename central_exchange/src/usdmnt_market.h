@@ -6,9 +6,19 @@
  * The USD-MNT market is the CORE clearing market for all *-MNT pairs.
  * All other currency pairs (EUR-MNT, CNY-MNT, etc.) decompose through USD-MNT.
  * 
+ * IMPORTANT DISTINCTION:
+ * - BoM rate: Reference only (circuit breakers, sanity checks)
+ * - Bank rates: Actual clearing prices (real bid/ask from commercial banks)
+ * 
+ * Hedging flow:
+ * 1. Users trade USD-MNT perpetuals on our exchange
+ * 2. Net exposure accumulates as users go net long/short
+ * 3. We hedge at commercial bank rates (Khan, Golomt, TDB, etc.)
+ * 4. Spread difference is exchange revenue
+ * 
  * This controller ensures:
- * 1. Quotes stay within BoM fixing ± tolerance
- * 2. Circuit breakers halt trading on extreme moves
+ * 1. Orders stay within BoM fixing ± tolerance (circuit breakers)
+ * 2. Actual clearing uses commercial bank bid/ask
  * 3. Spread limits prevent market manipulation
  * 4. Minimum depth requirements for market quality
  */
@@ -17,6 +27,7 @@
 
 #include "product_catalog.h"
 #include "bom_feed.h"
+#include "bank_feed.h"
 #include "matching_engine.h"
 #include "circuit_breaker.h"
 #include <atomic>
@@ -129,6 +140,9 @@ public:
         
         // Set initial reference price from BoM
         update_bom_reference();
+        
+        // Initialize commercial bank rate feed (for actual clearing)
+        BankFeed::instance().initialize_simulated(bom_reference_rate_);
         
         // Register for BoM rate updates - USD-MNT is PRIMARY market
         BomFeed::instance().on_rate_update([this](const BomRate& rate) {
@@ -261,6 +275,25 @@ public:
     double get_bom_rate() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return bom_reference_rate_;
+    }
+    
+    // ==================== COMMERCIAL BANK RATES ====================
+    // These are the rates we can ACTUALLY clear at
+    
+    // Get best aggregated bank rate
+    BestBankRate get_bank_rates() const {
+        return BankFeed::instance().get_best();
+    }
+    
+    // Get effective bid/ask for clearing (from commercial banks)
+    std::pair<double, double> get_clearing_prices() const {
+        auto rates = BankFeed::instance().get_best();
+        return {rates.best_bid, rates.best_ask};
+    }
+    
+    // Calculate hedge cost for net exposure
+    BankFeed::HedgeCost calculate_hedge_cost(double net_usd_exposure) const {
+        return BankFeed::instance().calculate_hedge_cost(net_usd_exposure);
     }
     
     // Set callback for market alerts

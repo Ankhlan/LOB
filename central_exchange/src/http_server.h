@@ -2616,6 +2616,58 @@ inline void HttpServer::setup_routes() {
         }.dump(), "application/json");
     });
     
+    // Get commercial bank rates (ACTUAL clearing prices)
+    server_->Get("/api/admin/usdmnt/bank-rates", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
+        
+        auto best = UsdMntMarket::instance().get_bank_rates();
+        
+        json quotes = json::array();
+        for (const auto& q : best.all_quotes) {
+            quotes.push_back({
+                {"bank_id", q.bank_id},
+                {"bank_name", q.bank_name},
+                {"bid", q.bid},
+                {"ask", q.ask},
+                {"spread", q.spread}
+            });
+        }
+        
+        res.set_content(json{
+            {"best_bid", best.best_bid},
+            {"best_bid_bank", best.best_bid_bank},
+            {"best_ask", best.best_ask},
+            {"best_ask_bank", best.best_ask_bank},
+            {"effective_spread", best.effective_spread},
+            {"mid_market", best.mid_market},
+            {"num_banks", best.num_banks},
+            {"is_valid", best.is_valid},
+            {"all_quotes", quotes},
+            {"note", "These are ACTUAL clearing prices from commercial banks, not BoM reference"}
+        }.dump(), "application/json");
+    });
+    
+    // Calculate hedge cost for a given exposure
+    server_->Get("/api/admin/usdmnt/hedge-cost", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
+        
+        double usd_amount = 0.0;
+        if (req.has_param("usd")) {
+            usd_amount = std::stod(req.get_param_value("usd"));
+        }
+        
+        auto cost = UsdMntMarket::instance().calculate_hedge_cost(usd_amount);
+        
+        res.set_content(json{
+            {"usd_amount", cost.usd_amount},
+            {"mnt_cost", cost.mnt_cost},
+            {"executing_bank", cost.executing_bank},
+            {"execution_rate", cost.execution_rate},
+            {"is_buy_usd", cost.is_buy_usd},
+            {"direction", cost.is_buy_usd ? "Buy USD from bank" : "Sell USD to bank"}
+        }.dump(), "application/json");
+    });
+    
     // ==================== PROMETHEUS METRICS ====================
     
     server_->Get("/metrics", [](const httplib::Request&, httplib::Response& res) {
