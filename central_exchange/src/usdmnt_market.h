@@ -50,12 +50,25 @@ inline const char* to_string(OrderRejectReason reason) {
 
 /**
  * USD/MNT Market Configuration
+ * 
+ * Circuit breaker levels follow NYSE/CME industry standards:
+ * - Level 1 (3%): 5 minute halt, trading resumes
+ * - Level 2 (5%): 15 minute halt, trading resumes  
+ * - Level 3 (10%): Trading closed for the session
+ * 
+ * These are tighter than NYSE (7/13/20%) appropriate for
+ * a smaller, less liquid emerging market.
  */
 struct UsdMntConfig {
-    // Price limits relative to BoM fixing
-    double max_deviation_pct = 0.05;     // Max 5% deviation from BoM rate
-    double circuit_breaker_pct = 0.03;   // 3% move triggers soft halt
-    double hard_halt_pct = 0.10;         // 10% move triggers hard halt
+    // Price limits relative to BoM fixing (tiered circuit breakers)
+    double level1_pct = 0.03;            // Level 1: 3% move → 5 min halt
+    double level2_pct = 0.05;            // Level 2: 5% move → 15 min halt (max order band)
+    double level3_pct = 0.10;            // Level 3: 10% move → session closed
+    
+    // Halt durations (seconds)
+    int level1_halt_seconds = 300;       // 5 minutes
+    int level2_halt_seconds = 900;       // 15 minutes
+    // Level 3 = session closed
     
     // Spread requirements
     double max_spread_pct = 0.005;       // Max 0.5% spread allowed
@@ -105,12 +118,13 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         config_ = config;
         
-        // Configure circuit breaker for USD-MNT
+        // Configure tiered circuit breakers for USD-MNT (NYSE-style)
+        // Level 2 (5%) is used as the primary circuit breaker
         CircuitBreakerConfig cb_config;
-        cb_config.price_limit_pct = config.circuit_breaker_pct;
-        cb_config.halt_threshold_pct = config.hard_halt_pct;
-        cb_config.time_window_seconds = 300;  // 5 minute window
-        cb_config.halt_duration_seconds = 300;  // 5 minute halt
+        cb_config.price_limit_pct = config.level2_pct;       // 5% triggers halt
+        cb_config.halt_threshold_pct = config.level3_pct;    // 10% closes session
+        cb_config.time_window_seconds = 300;                 // 5 minute window
+        cb_config.halt_duration_seconds = config.level2_halt_seconds;  // 15 min halt
         CircuitBreakerManager::instance().configure("USD-MNT-PERP", cb_config);
         
         // Set initial reference price from BoM
@@ -131,9 +145,9 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         bom_reference_rate_ = rate.rate;
         
-        // Update price limits
-        lower_limit_ = bom_reference_rate_ * (1.0 - config_.max_deviation_pct);
-        upper_limit_ = bom_reference_rate_ * (1.0 + config_.max_deviation_pct);
+        // Update price limits (Level 2 = max order band)
+        lower_limit_ = bom_reference_rate_ * (1.0 - config_.level2_pct);
+        upper_limit_ = bom_reference_rate_ * (1.0 + config_.level2_pct);
         
         // Update circuit breaker reference
         auto& cb = CircuitBreakerManager::instance();
@@ -159,9 +173,9 @@ public:
             std::lock_guard<std::mutex> lock(mutex_);
             bom_reference_rate_ = bom.rate;
             
-            // Update price limits
-            lower_limit_ = bom_reference_rate_ * (1.0 - config_.max_deviation_pct);
-            upper_limit_ = bom_reference_rate_ * (1.0 + config_.max_deviation_pct);
+            // Update price limits (Level 2 = max order band)
+            lower_limit_ = bom_reference_rate_ * (1.0 - config_.level2_pct);
+            upper_limit_ = bom_reference_rate_ * (1.0 + config_.level2_pct);
             
             // Update circuit breaker reference
             auto& cb = CircuitBreakerManager::instance();
@@ -258,8 +272,8 @@ public:
     void set_emergency_rate(double rate) {
         std::lock_guard<std::mutex> lock(mutex_);
         bom_reference_rate_ = rate;
-        lower_limit_ = rate * (1.0 - config_.max_deviation_pct);
-        upper_limit_ = rate * (1.0 + config_.max_deviation_pct);
+        lower_limit_ = rate * (1.0 - config_.level2_pct);
+        upper_limit_ = rate * (1.0 + config_.level2_pct);
         
         // Update global rate
         USD_MNT_RATE = rate;

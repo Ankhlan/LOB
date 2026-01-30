@@ -2535,7 +2535,9 @@ inline void HttpServer::setup_routes() {
             {"price_band", {
                 {"lower", lower},
                 {"upper", upper},
-                {"max_deviation_pct", config.max_deviation_pct}
+                {"level1_pct", config.level1_pct},
+                {"level2_pct", config.level2_pct},
+                {"level3_pct", config.level3_pct}
             }},
             {"health", {
                 {"is_within_limits", metrics.is_within_limits},
@@ -2592,15 +2594,25 @@ inline void HttpServer::setup_routes() {
         auto& config = UsdMntMarket::instance().config();
         
         res.set_content(json{
-            {"max_deviation_pct", config.max_deviation_pct},
-            {"circuit_breaker_pct", config.circuit_breaker_pct},
-            {"hard_halt_pct", config.hard_halt_pct},
-            {"max_spread_pct", config.max_spread_pct},
-            {"target_spread_pct", config.target_spread_pct},
-            {"min_bid_depth_usd", config.min_bid_depth_usd},
-            {"min_ask_depth_usd", config.min_ask_depth_usd},
-            {"quote_refresh_ms", config.quote_refresh_ms},
-            {"auto_mm_enabled", config.auto_mm_enabled}
+            {"circuit_breakers", {
+                {"level1_pct", config.level1_pct},
+                {"level2_pct", config.level2_pct},
+                {"level3_pct", config.level3_pct},
+                {"level1_halt_seconds", config.level1_halt_seconds},
+                {"level2_halt_seconds", config.level2_halt_seconds}
+            }},
+            {"spread", {
+                {"max_spread_pct", config.max_spread_pct},
+                {"target_spread_pct", config.target_spread_pct}
+            }},
+            {"depth", {
+                {"min_bid_depth_usd", config.min_bid_depth_usd},
+                {"min_ask_depth_usd", config.min_ask_depth_usd}
+            }},
+            {"market_making", {
+                {"quote_refresh_ms", config.quote_refresh_ms},
+                {"auto_mm_enabled", config.auto_mm_enabled}
+            }}
         }.dump(), "application/json");
     });
     
