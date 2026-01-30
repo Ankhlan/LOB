@@ -122,15 +122,18 @@ public:
         std::vector<Candle> historical;
         for (int i = count; i >= 1; i--) {
             int64_t t = ((ts - i * timeframe_seconds) / timeframe_seconds) * timeframe_seconds;
-            // Deterministic noise based on time and seed
-            double noise1 = ((seed + t) % 1000 - 500) / 500000.0;
-            double noise2 = ((seed + t + 1) % 1000 - 500) / 500000.0;
-            double drift = (i * 0.0001);  // Slight upward trend
+            // Deterministic but varied noise - use different seeds for different OHLC components
+            double open_noise = ((seed + t * 3) % 1000 - 500) / 100000.0;  // ±0.5% range
+            double body_dir = (((seed + t * 7) % 10) > 5) ? 1.0 : -1.0;   // Random up/down
+            double body_size = ((seed + t * 11) % 500 + 100) / 100000.0;   // 0.1% to 0.6% body
+            double wick_up = ((seed + t * 13) % 300) / 100000.0;           // 0 to 0.3% upper wick
+            double wick_down = ((seed + t * 17) % 300) / 100000.0;         // 0 to 0.3% lower wick
+            double drift = (i * 0.00005);  // Slight trend
             double base = mark_price * (1.0 - drift);
-            double o = base * (1.0 + noise1);
-            double c = base * (1.0 + noise2);
-            double h = std::max(o, c) * (1.0 + (((seed + t) % 100) / 100000.0));
-            double l = std::min(o, c) * (1.0 - (((seed + t + 2) % 100) / 100000.0));
+            double o = base * (1.0 + open_noise);
+            double c = o * (1.0 + body_dir * body_size);  // Close based on open with body size
+            double h = std::max(o, c) * (1.0 + wick_up);
+            double l = std::min(o, c) * (1.0 - wick_down);
             historical.push_back({t, o, h, l, c, 10.0 + ((seed + t) % 50)});
         }
         
