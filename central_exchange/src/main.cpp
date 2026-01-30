@@ -18,6 +18,7 @@
 #include "position_manager.h"
 #include "fxcm_feed.h"
 #include "bom_feed.h"
+#include "usdmnt_market.h"
 #include "http_server.h"
 #include "database.h"
 #include "accounting_engine.h"
@@ -160,6 +161,12 @@ int main(int argc, char* argv[]) {
     std::cout << "[INIT] Starting Bank of Mongolia USD/MNT rate feed...\n";
     BomFeed::instance().start();
     std::cout << "       Current USD/MNT rate: " << USD_MNT_RATE << " MNT\n";
+    
+    // Initialize USD-MNT core market controller
+    std::cout << "[INIT] Initializing USD-MNT core market controller...\n";
+    UsdMntMarket::instance().initialize();
+    auto [lower, upper] = UsdMntMarket::instance().get_price_limits();
+    std::cout << "       USD-MNT price band: " << lower << " - " << upper << " MNT\n";
     
     // Setup signal handlers
     std::signal(SIGINT, signal_handler);

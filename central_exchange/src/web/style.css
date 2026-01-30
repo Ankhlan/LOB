@@ -114,6 +114,10 @@ body { font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto
 .account-value { color: var(--text-primary); font-weight: 500; }
 .account-value.positive { color: var(--green); }
 .account-value.negative { color: var(--red); }
+.account-value.highlight { color: #61afef; font-size: 14px; font-weight: 600; }
+.account-divider { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+.usdmnt-rate { background: linear-gradient(135deg, #2c313a 0%, #21252b 100%); border-color: #61afef; }
+.usdmnt-rate .account-label { color: #61afef; font-weight: 500; }
 .sparkline-item { padding: 2px 6px; }
 .sparkline { display: block; }
 /* ===== MAIN WORKSPACE ===== */

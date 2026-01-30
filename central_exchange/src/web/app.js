@@ -1267,6 +1267,34 @@ function startQuoteStream() {
                 q._flashUntil = Date.now() + 500;
             }
             state.quotes[q.symbol] = q;
+
+            // Update USD-MNT rate display (core market)
+            if (q.symbol === 'USD-MNT-PERP') {
+                const rate = q.mid || q.mark_price || 0;
+                const el1 = document.getElementById('usdmntRate');
+                const el2 = document.getElementById('rateStatus');
+                if (el1) el1.textContent = fmt(rate, 0);
+                if (el2) el2.textContent = fmt(rate, 0);
+            }
+
+            // Real-time update to current candle (last candle moves with live price)
+            if (q.symbol === state.selected && state.candleSeries && state.priceHistory[q.symbol]) {
+                const history = state.priceHistory[q.symbol];
+                if (history.length > 0) {
+                    const mid = q.mid || q.mark_price;
+                    if (mid) {
+                        const last = history[history.length - 1];
+                        // Update the current candle's close/high/low
+                        last.close = mid;
+                        last.high = Math.max(last.high, mid);
+                        last.low = Math.min(last.low, mid);
+                        // TradingView's update() for real-time candle update
+                        if (state.candleSeries.update) {
+                            state.candleSeries.update(last);
+                        }
+                    }
+                }
+            }
         });
         scheduleRender('quotes');
     });
@@ -1509,6 +1537,12 @@ async function refresh() {
         document.getElementById('equity').textContent = fmt(account.equity || 0) + ' MNT';
         document.getElementById('available').textContent = fmt(account.available || 0) + ' MNT';
         document.getElementById('margin').textContent = fmt(account.margin_used || 0) + ' MNT';
+
+        // Update USD-MNT rate (core market rate)
+        const usdmnt = state.quotes['USD-MNT-PERP'] || {};
+        const usdmntRate = usdmnt.mid || usdmnt.mark_price || 3450;
+        document.getElementById('usdmntRate').textContent = fmt(usdmntRate, 0);
+        document.getElementById('rateStatus').textContent = fmt(usdmntRate, 0);
 
         // Update status bar
         document.getElementById('usedMargin').textContent = fmt(account.margin_used || 0) + ' MNT';
