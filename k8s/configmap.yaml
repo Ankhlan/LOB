@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cre-config
+data:
+  LOG_LEVEL: "info"
+  PORT: "8080"

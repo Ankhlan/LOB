@@ -1,181 +1,111 @@
-# CRE - Central Risk Exchange (Централ Эрсдлийн Бирж)
+# CRE Matching Engine
 
-> Futures. Settled in Cash. | Фючерс. Биет бус тооцоо.
+> C++ Core for Central Risk Exchange
 
-Mongolia's first regulated cash-settled futures exchange.
+## Overview
 
----
+High-performance matching engine with sub-millisecond execution. Header-only C++17 design for easy deployment.
 
-## Architecture
+## Components
 
-`
-┌─────────────────────────────────────────────────────────────┐
-│                         CRE.mn                              │
-├─────────────────────────────────────────────────────────────┤
-│  Web UI (Embedded HTML)                                     │
-│  - Trading interface                                        │
-│  - Account management                                       │
-│  - Real-time prices (SSE)                                   │
-├─────────────────────────────────────────────────────────────┤
-│  REST API (cpp-httplib)                                     │
-│  - /api/auth/* (Phone OTP + JWT)                            │
-│  - /api/orders/* (Submit, cancel, query)                    │
-│  - /api/positions/* (Open positions, PnL)                   │
-│  - /api/account/* (Balance, history)                        │
-│  - /api/stream (SSE real-time quotes)                       │
-├─────────────────────────────────────────────────────────────┤
-│  Core Engine (C++17)                                        │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
-│  │  Matching    │  │  Position    │  │   Hedging    │       │
-│  │   Engine     │  │   Manager    │  │   Engine     │       │
-│  │  (LOB)       │  │  (Margin)    │  │   (FXCM)     │       │
-│  └──────────────┘  └──────────────┘  └──────────────┘       │
-├─────────────────────────────────────────────────────────────┤
-│  Accounting Engine (Ledger CLI)                             │
-│  - Double-entry bookkeeping                                 │
-│  - Multi-currency support (MNT, USD, EUR, CNY)              │
-│  - Mongolian accounting standards compliant                 │
-│  - Regulatory reporting (FRC)                               │
-├─────────────────────────────────────────────────────────────┤
-│  Persistence                                                │
-│  ┌──────────────┐  ┌──────────────┐                         │
-│  │   SQLite     │  │   Ledger     │                         │
-│  │  (orders,    │  │   Files      │                         │
-│  │   trades)    │  │  (accounting)│                         │
-│  └──────────────┘  └──────────────┘                         │
-├─────────────────────────────────────────────────────────────┤
-│  External Integrations                                      │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
-│  │    FXCM      │  │   Bank of    │  │    QPay      │       │
-│  │  (Hedging +  │  │   Mongolia   │  │  (Deposits/  │       │
-│  │   Prices)    │  │  (USD/MNT)   │  │  Withdrawals)│       │
-│  └──────────────┘  └──────────────┘  └──────────────┘       │
-└─────────────────────────────────────────────────────────────┘
-`
+| Module | Purpose |
+|--------|---------|
+| `matching_engine.h` | Order management and trade matching |
+| `order_book.h` | Price-time priority limit order book |
+| `position_manager.h` | Margin, PnL, and exposure tracking |
+| `product_catalog.h` | Product definitions and FXCM mapping |
+| `hedge_engine.h` | Auto-hedge net exposure to FXCM |
+| `fxcm_feed.h` | Real-time price feed from FXCM |
+| `fxcm_history.h` | FXCM historical candle data |
+| `bom_feed.h` | Bank of Mongolia USD/MNT rate |
+| `database.h` | SQLite persistence layer |
+| `auth.h` | JWT + Phone OTP authentication |
+| `http_server.h` | REST API and SSE streaming |
 
----
+## API Endpoints
 
-## Products
+```
+GET  /api/products         - List all products
+GET  /api/book/:symbol     - Order book depth
+GET  /api/stream           - SSE real-time quotes
+GET  /api/stream/levels    - SSE orderbook L2 updates
+GET  /api/history          - OHLCV candle history
 
-| Symbol | Name | Base | Margin | Leverage |
-|--------|------|------|--------|----------|
-| XAU | Gold | USD/oz | 10% | 10x |
-| XAG | Silver | USD/oz | 10% | 10x |
-| OIL | Crude Oil | USD/bbl | 10% | 10x |
-| USD-MNT-PERP | Dollar/Tugrik | MNT | 5% | 20x |
-| BTC | Bitcoin | USD | 20% | 5x |
-| ETH | Ethereum | USD | 20% | 5x |
+POST /api/auth/request-otp - Request SMS OTP
+POST /api/auth/verify-otp  - Verify OTP, get JWT
 
-Full catalog: 19 instruments including Mongolia perpetuals.
+POST /api/orders           - Place order
+GET  /api/orders/history   - User order history
+DEL  /api/orders/:id       - Cancel order
 
----
+GET  /api/positions        - User positions
+GET  /api/risk/exposure    - Net exposure by symbol
+GET  /api/risk/hedges      - Hedge history
 
-## Accounting Engine
+GET  /api/rate             - Current USD/MNT rate
+```
 
-CRE uses [Ledger CLI](https://ledger-cli.org/) for double-entry accounting.
+## Build
 
-### Features
-- Multi-currency: MNT, USD, EUR, CNY, XAU, XAG, BTC, ETH
-- Reporting currency: MNT (for Mongolian regulators)
-- Real-time price database for currency conversion
-- Mongolian accounting standards (IFRS-based)
-- Segregated customer funds
-
-### Account Structure
-`
-Assets:Exchange:Bank:MNT          ; Exchange operating funds
-Assets:Customer:{phone}:Margin    ; Customer margin locked
-Liabilities:Customer:{phone}:Balance  ; Customer available balance
-Revenue:Trading:Fees              ; Exchange fee income
-Expenses:Hedging:FXCM             ; Hedging costs
-`
-
-### Reports (MNT denominated)
-- Balance Sheet (Баланс)
-- Income Statement (Орлогын тайлан)
-- Customer Account Statements
-- Daily Reconciliation
-
----
-
-## Authentication
-
-Phone-based OTP authentication (no email, no password).
-
-1. User enters phone number
-2. SMS OTP sent (6 digits, 5-min expiry)
-3. User verifies OTP
-4. JWT issued (24h expiry)
-
----
-
-## Technology Stack
-
-| Component | Technology |
-|-----------|------------|
-| Backend | C++17, header-only |
-| HTTP | cpp-httplib |
-| Database | SQLite |
-| Accounting | Ledger CLI |
-| Hedging | FXCM ForexConnect |
-| Streaming | Server-Sent Events |
-| Deployment | Railway (Docker) |
-
----
-
-## Regulatory Compliance
-
-- Financial Regulatory Commission (FRC) oversight
-- IFRS-based accounting (adopted 2016)
-- Customer fund segregation
-- Anti-money laundering (AML) controls
-- Daily transaction reporting
-
----
-
-## Brand
-
-| | |
-|-|-|
-| **Name** | Central Risk Exchange (Централ Эрсдлийн Бирж) |
-| **Brand** | CRE |
-| **Domain** | cre.mn |
-| **Tagline** | Futures. Settled in Cash. |
-| **Mongolian** | Фючерс. Биет бус тооцоо. |
-
-See [Brand Book](docs/BRANDBOOK.md) for full guidelines.
-
----
-
-## Development
-
-### Build
-`ash
+```bash
 mkdir build && cd build
-cmake ..
-make
-./cre_server
-`
+cmake -DFXCM_ENABLED=ON ..
+make -j$(nproc)
+```
 
-### Run
-`ash
-docker build -t cre .
-docker run -p 8080:8080 cre
-`
+## Running the Server
 
-### Test
-`ash
-curl http://localhost:8080/api/health
+### From WSL (Linux/Windows)
+
+```bash
+cd /mnt/c/workshop/repo/LOB/central_exchange/build
+
+# Set environment variables
+export LD_LIBRARY_PATH=/mnt/c/workshop/repo/LOB/central_exchange/deps/fxcm-linux/ForexConnectAPI-1.6.5-Linux-x86_64/lib
+export FXCM_USER=8000065022
+export FXCM_PASS=Meniscus_321957
+export FXCM_CONNECTION=Real
+export ADMIN_API_KEY=cre2026admin
+
+./central_exchange
+```
+
+### From PowerShell (One-liner)
+
+```powershell
+# IMPORTANT: Use Start-Process to avoid VS Code terminal SIGINT issues
+Start-Process -FilePath "wsl" -ArgumentList "bash", "-c", "'cd /mnt/c/workshop/repo/LOB/central_exchange/build && LD_LIBRARY_PATH=/mnt/c/workshop/repo/LOB/central_exchange/deps/fxcm-linux/ForexConnectAPI-1.6.5-Linux-x86_64/lib FXCM_USER=8000065022 FXCM_PASS=Meniscus_321957 FXCM_CONNECTION=Real ADMIN_API_KEY=cre2026admin ./central_exchange'"
+
+# Wait 35s for FXCM login, then verify:
+Start-Sleep -Seconds 35
 curl http://localhost:8080/api/products
-`
+```
 
----
+### Startup Script
+
+```powershell
+# Automated startup with verification:
+& ~/.brain/scripts/start-cre-server.ps1 -Background
+```
+
+## Configuration
+
+Environment variables:
+- `PORT` - HTTP port (default: 8080)
+- `FXCM_USER` - FXCM account ID
+- `FXCM_PASS` - FXCM password
+- `FXCM_CONNECTION` - "Real" or "Demo"
+- `ADMIN_API_KEY` - Admin operations key
+- `JWT_SECRET` - JWT signing secret (optional)
+
+## FXCM Libraries
+
+The FXCM ForexConnect SDK requires `LD_LIBRARY_PATH` to be set. The CMake `-DFXCM_ENABLED=ON` flag sets RPATH but this may not cover all dependencies.
+
+**Required path:** `deps/fxcm-linux/ForexConnectAPI-1.6.5-Linux-x86_64/lib`
 
 ## License
 
-Proprietary. Central Risk Exchange LLC.
+Proprietary. All rights reserved.
 
----
-
-*Version 2.0 | January 2026*
-
+<!-- Last updated: 2026-01-30 by NEXUS -->
