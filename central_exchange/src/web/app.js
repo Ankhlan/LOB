@@ -3242,3 +3242,77 @@ function updateFundingTimer() {
 // Update funding timer every second
 setInterval(updateFundingTimer, 1000);
 document.addEventListener('DOMContentLoaded', updateFundingTimer);
+
+// ==================== POSITIONS MANAGEMENT ====================
+let positionsData = { positions: [], summary: {} };
+
+async function fetchPositions() {
+    try {
+        const res = await fetch('/api/positions');
+        const data = await res.json();
+        positionsData = data;
+        updateAccountSummary(data.summary);
+        renderPositions(data.positions);
+        document.getElementById('posCount').textContent = data.positions?.length || 0;
+    } catch (e) {
+        console.warn('[CRE] Failed to fetch positions:', e);
+    }
+}
+
+function updateAccountSummary(summary) {
+    if (!summary) return;
+    const fmt = (n) => formatCompact(n || 0);
+    document.getElementById('acctBalance').textContent = fmt(summary.balance);
+    document.getElementById('acctEquity').textContent = fmt(summary.equity);
+    document.getElementById('acctAvailable').textContent = fmt(summary.available);
+    document.getElementById('acctMargin').textContent = fmt(summary.margin_used);
+    const pnlEl = document.getElementById('acctPnl');
+    const pnl = summary.unrealized_pnl || 0;
+    pnlEl.textContent = (pnl >= 0 ? '+' : '') + fmt(pnl);
+    pnlEl.className = 'account-value mono ' + (pnl >= 0 ? 'positive' : 'negative');
+}
+
+function renderPositions(positions) {
+    const tbody = document.getElementById('positionsBody');
+    if (!tbody) return;
+    if (!positions || positions.length === 0) {
+        tbody.innerHTML = '<tr class="no-positions"><td colspan="7">No open positions</td></tr>';
+        return;
+    }
+    tbody.innerHTML = positions.map(pos => {
+        const pnl = pos.unrealized_pnl || 0;
+        const pnlClass = pnl >= 0 ? 'pos-pnl-positive' : 'pos-pnl-negative';
+        const sideClass = pos.side === 'long' ? 'pos-long' : 'pos-short';
+        const sideLabel = pos.side === 'long' ? 'LONG' : 'SHORT';
+        const posId = pos.id || pos.symbol;
+        return '<tr data-position-id="' + posId + '">' +
+            '<td class="pos-symbol mono">' + pos.symbol + '</td>' +
+            '<td class="' + sideClass + '">' + sideLabel + '</td>' +
+            '<td class="mono">' + parseFloat(pos.quantity).toFixed(4) + '</td>' +
+            '<td class="mono">' + formatPrice(pos.entry_price) + '</td>' +
+            '<td class="mono">' + formatPrice(pos.current_price) + '</td>' +
+            '<td class="' + pnlClass + ' mono">' + (pnl >= 0 ? '+' : '') + formatCompact(pnl) + '</td>' +
+            '<td><button class="btn-close-position" onclick="closePosition(\'' + posId + '\')">Close</button></td>' +
+            '</tr>';
+    }).join('');
+}
+
+async function closePosition(positionId) {
+    if (!confirm('Close position ' + positionId + '?')) return;
+    try {
+        const res = await fetch('/api/positions/' + positionId + '/close', { method: 'POST' });
+        if (res.ok) {
+            console.log('[CRE] Position closed:', positionId);
+            fetchPositions();
+        } else {
+            alert('Failed to close position');
+        }
+    } catch (e) {
+        console.error('[CRE] Close position error:', e);
+        alert('Error closing position');
+    }
+}
+
+// Start positions polling (every 2 seconds)
+setInterval(fetchPositions, 2000);
+fetchPositions();

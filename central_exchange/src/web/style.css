@@ -1820,3 +1820,439 @@ button:focus:not(:focus-visible) {
 }
 .bank-toggle-btn:hover { background: var(--green); color: white; }
 .bank-toggle-btn.active { background: var(--green); color: white; }
+
+/* ==================== ACCOUNT SUMMARY BAR ==================== */
+.account-summary {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 16px;
+    gap: 24px;
+}
+
+.account-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.account-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+}
+
+.account-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.account-value.positive { color: var(--green); }
+.account-value.negative { color: var(--red); }
+
+/* ==================== POSITIONS TABLE ==================== */
+.positions-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.positions-table th {
+    text-align: left;
+    padding: 8px 12px;
+    background: var(--bg-hover);
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+}
+
+.positions-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+}
+
+.positions-table tbody tr:hover {
+    background: var(--bg-hover);
+}
+
+.positions-table .pos-symbol {
+    font-weight: 600;
+    color: var(--accent);
+}
+
+.positions-table .pos-long {
+    color: var(--green);
+    font-weight: 600;
+}
+
+.positions-table .pos-short {
+    color: var(--red);
+    font-weight: 600;
+}
+
+.positions-table .pos-pnl-positive {
+    color: var(--green);
+    font-weight: 600;
+}
+
+.positions-table .pos-pnl-negative {
+    color: var(--red);
+    font-weight: 600;
+}
+
+.positions-table .no-positions td {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 20px;
+    font-style: italic;
+}
+
+.btn-close-position {
+    background: var(--red-dim);
+    border: 1px solid var(--red);
+    color: var(--red);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.btn-close-position:hover {
+    background: var(--red);
+    color: #fff;
+}
+
+/* ==================== BESPOKE MARKET INFO VIEWS ==================== */
+
+/* Base market info container */
+.market-info {
+    padding: 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border);
+}
+
+.market-info h3 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    font-weight: 600;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.market-info h4 {
+    margin: 12px 0 6px 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.market-info p {
+    margin: 0;
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+/* Mongolian Domestic (Green) */
+.market-info.mn-domestic {
+    background: linear-gradient(135deg, rgba(26, 95, 44, 0.1) 0%, rgba(26, 95, 44, 0.05) 100%);
+    border-color: rgba(26, 95, 44, 0.3);
+}
+
+.market-info.mn-domestic h3 {
+    color: #4caf50;
+    border-color: rgba(26, 95, 44, 0.3);
+}
+
+.market-info.mn-domestic h4 {
+    color: #81c784;
+}
+
+.mn-section {
+    margin-bottom: 12px;
+    padding: 8px;
+    background: rgba(26, 95, 44, 0.08);
+    border-radius: 6px;
+}
+
+.mn-section:last-child {
+    margin-bottom: 0;
+}
+
+/* Mongolian FX (Blue) */
+.market-info.mn-fx {
+    background: linear-gradient(135deg, rgba(0, 102, 204, 0.1) 0%, rgba(0, 102, 204, 0.05) 100%);
+    border-color: rgba(0, 102, 204, 0.3);
+}
+
+.market-info.mn-fx h3 {
+    color: #42a5f5;
+    border-color: rgba(0, 102, 204, 0.3);
+}
+
+.bank-rates-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    margin-bottom: 12px;
+    background: var(--bg-primary);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.bank-rates-table th {
+    text-align: left;
+    padding: 8px 10px;
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.bank-rates-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    font-family: 'Consolas', monospace;
+}
+
+.bank-rates-table .bank-name {
+    color: var(--text-primary);
+    font-family: inherit;
+}
+
+.bank-rates-table .bid {
+    color: var(--green);
+}
+
+.bank-rates-table .ask {
+    color: var(--red);
+}
+
+.bank-rates-table .spread {
+    color: var(--text-muted);
+}
+
+.best-rate {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: rgba(0, 102, 204, 0.15);
+    border-radius: 6px;
+    margin-bottom: 12px;
+    font-size: 12px;
+}
+
+.best-rate .best-label {
+    color: var(--text-muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.best-rate .best-bid {
+    color: var(--green);
+    font-weight: 600;
+    font-family: 'Consolas', monospace;
+}
+
+.best-rate .best-ask {
+    color: var(--red);
+    font-weight: 600;
+    font-family: 'Consolas', monospace;
+}
+
+.best-rate .best-spread {
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+.mongol-bank {
+    padding: 10px;
+    background: rgba(0, 102, 204, 0.08);
+    border-radius: 6px;
+    border-left: 3px solid #0066cc;
+}
+
+.mongol-bank h4 {
+    color: #42a5f5;
+    margin-top: 0;
+}
+
+/* Crypto (Bitcoin Orange) */
+.market-info.crypto {
+    background: linear-gradient(135deg, rgba(247, 147, 26, 0.1) 0%, rgba(247, 147, 26, 0.05) 100%);
+    border-color: rgba(247, 147, 26, 0.3);
+}
+
+.market-info.crypto h3 {
+    color: #f7931a;
+    border-color: rgba(247, 147, 26, 0.3);
+}
+
+.funding-rate {
+    font-size: 24px;
+    font-weight: 700;
+    color: #f7931a;
+    text-align: center;
+    padding: 12px;
+    background: rgba(247, 147, 26, 0.15);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    font-family: 'Consolas', monospace;
+}
+
+.crypto-stats {
+    display: flex;
+    justify-content: space-around;
+    padding: 10px;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    margin-bottom: 12px;
+}
+
+.crypto-stats .stat {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.crypto-stats .stat strong {
+    color: var(--text-primary);
+    font-family: 'Consolas', monospace;
+}
+
+.crypto-section {
+    margin-bottom: 10px;
+    padding: 8px;
+    background: rgba(247, 147, 26, 0.08);
+    border-radius: 6px;
+}
+
+.crypto-section h4 {
+    color: #ffb74d;
+}
+
+/* Commodities (Gold) */
+.market-info.commodities {
+    background: linear-gradient(135deg, rgba(201, 162, 39, 0.1) 0%, rgba(201, 162, 39, 0.05) 100%);
+    border-color: rgba(201, 162, 39, 0.3);
+}
+
+.market-info.commodities h3 {
+    color: #c9a227;
+    border-color: rgba(201, 162, 39, 0.3);
+}
+
+.spot-price {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    background: rgba(201, 162, 39, 0.15);
+    border-radius: 8px;
+    margin-bottom: 12px;
+}
+
+.spot-price .spot-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.spot-price .spot-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: #c9a227;
+    font-family: 'Consolas', monospace;
+}
+
+.commod-section {
+    margin-bottom: 10px;
+    padding: 8px;
+    background: rgba(201, 162, 39, 0.08);
+    border-radius: 6px;
+}
+
+.commod-section h4 {
+    color: #dab43c;
+}
+
+/* International FX (Blue) */
+.market-info.intl-fx {
+    background: linear-gradient(135deg, rgba(33, 150, 243, 0.1) 0%, rgba(33, 150, 243, 0.05) 100%);
+    border-color: rgba(33, 150, 243, 0.3);
+}
+
+.market-info.intl-fx h3 {
+    color: #2196f3;
+    border-color: rgba(33, 150, 243, 0.3);
+}
+
+.fx-levels {
+    display: flex;
+    justify-content: space-around;
+    padding: 12px;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    margin-bottom: 12px;
+}
+
+.fx-levels .level {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.fx-levels .level-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.fx-levels .level-value {
+    font-size: 13px;
+    font-weight: 600;
+    font-family: 'Consolas', monospace;
+    color: var(--text-primary);
+}
+
+.fx-levels .resistance .level-value {
+    color: var(--red);
+}
+
+.fx-levels .support .level-value {
+    color: var(--green);
+}
+
+.fx-levels .pivot .level-value {
+    color: var(--accent);
+}
+
+.fx-section {
+    margin-bottom: 10px;
+    padding: 8px;
+    background: rgba(33, 150, 243, 0.08);
+    border-radius: 6px;
+}
+
+.fx-section h4 {
+    color: #64b5f6;
+}
+
+/* ==================== END BESPOKE MARKET INFO ==================== */

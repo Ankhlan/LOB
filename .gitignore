@@ -11,3 +11,6 @@ dist/
 
 # ForexConnect Linux SDK (symlinks don't work on Windows)
 central_exchange/deps/fxcm-linux/
+
+# Backup files
+*.backup

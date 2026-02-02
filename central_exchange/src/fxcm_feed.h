@@ -194,10 +194,33 @@ struct PriceUpdate {
 
 using PriceCallback = std::function<void(const PriceUpdate&)>;
 
+// FXCM Contract Specification
+struct FxcmContractSpec {
+    std::string instrument;
+    int min_quantity;       // Minimum lots
+    int max_quantity;       // Maximum lots
+    int base_unit_size;     // Units per lot (e.g., 100 oz for gold)
+    double contract_multiplier;
+    double point_size;
+    double pip_cost;
+    int digits;
+    double mmr;             // Margin maintenance rate
+};
+
+enum class FxcmOrderType {
+    MARKET,       // True Market Order (OM)
+    LIMIT,        // Limit Entry (LE)
+    STOP,         // Stop Entry (SE)
+    OPEN_LIMIT,   // Open Limit (OL) - opens at limit or better
+    CLOSE_MARKET  // Close market (CM)
+};
+
 struct HedgeOrder {
     std::string fxcm_symbol;
     double size;            // Positive = buy, negative = sell
     std::string reason;
+    FxcmOrderType order_type = FxcmOrderType::MARKET;
+    double limit_price = 0.0;  // For LIMIT orders
 };
 
 class FxcmFeed {
@@ -215,6 +238,11 @@ public:
     void disconnect();
     bool is_connected() const { return connected_; }
     
+#ifdef FXCM_ENABLED
+    // Get session for Price History API
+    IO2GSession* get_session() { return session_; }
+#endif
+
     // Price subscription
     void subscribe(const std::string& fxcm_symbol);
     void unsubscribe(const std::string& fxcm_symbol);
@@ -274,6 +302,8 @@ private:
     void price_loop();
     void simulate_prices();  // For demo mode without FXCM
     bool fetch_initial_prices();
+    void load_contract_specs();  // Fetch contract specs from FXCM
+    std::unordered_map<std::string, FxcmContractSpec> contract_specs_;
 };
 
 // ========== IMPLEMENTATION ==========
@@ -371,6 +401,7 @@ inline bool FxcmFeed::connect(const std::string& user,
         
         // Fetch initial prices
         fetch_initial_prices();
+        load_contract_specs();  // Load FXCM contract specs
         
         // Subscribe to price updates
         offers_listener_ = new OffersUpdatesListener(session_, fxcm_prices_, fxcm_price_mutex_, prices_dirty_);
@@ -501,6 +532,84 @@ inline bool FxcmFeed::fetch_initial_prices() {
 #endif
 }
 
+
+inline void FxcmFeed::load_contract_specs() {
+#ifdef FXCM_ENABLED
+    if (!session_) return;
+
+    IO2GLoginRules* rules = session_->getLoginRules();
+    if (!rules) return;
+
+    // Get trading settings provider
+    IO2GTradingSettingsProvider* settings = rules->getTradingSettingsProvider();
+    if (!settings) {
+        std::cout << "[FXCM] Trading settings provider not available" << std::endl;
+        return;
+    }
+
+    // Get account for margin calculations
+    IO2GResponse* acc_resp = rules->getTableRefreshResponse(O2GTable::Accounts);
+    IO2GResponseReaderFactory* rf = session_->getResponseReaderFactory();
+    IO2GAccountsTableResponseReader* acc_reader = rf->createAccountsTableReader(acc_resp);
+    IO2GAccountRow* account = acc_reader && acc_reader->size() > 0 ? acc_reader->getRow(0) : nullptr;
+
+    // Get offers for instrument info
+    IO2GResponse* resp = rules->getTableRefreshResponse(O2GTable::Offers);
+    IO2GOffersTableResponseReader* reader = rf->createOffersTableReader(resp);
+
+    std::cout << "[FXCM] Loading contract specifications..." << std::endl;
+
+    for (int i = 0; i < reader->size(); ++i) {
+        IO2GOfferRow* row = reader->getRow(i);
+        if (!row) continue;
+
+        const char* instr = row->getInstrument();
+        if (!instr) { row->release(); continue; }
+
+        FxcmContractSpec spec;
+        spec.instrument = instr;
+        spec.contract_multiplier = row->getContractMultiplier();
+        spec.point_size = row->getPointSize();
+        spec.digits = row->getDigits();
+
+        // Get from trading settings provider
+        if (account) {
+            spec.min_quantity = settings->getMinQuantity(instr, account);
+            spec.max_quantity = settings->getMaxQuantity(instr, account);
+            spec.base_unit_size = settings->getBaseUnitSize(instr, account);
+            spec.mmr = settings->getMMR(instr, account);
+        }
+
+        // Get pip cost from table row
+        IO2GOfferTableRow* table_row = dynamic_cast<IO2GOfferTableRow*>(row);
+        if (table_row) {
+            spec.pip_cost = table_row->getPipCost();
+        }
+
+        contract_specs_[instr] = spec;
+
+        std::cout << "[FXCM] " << instr 
+                  << " | MinLot=" << spec.min_quantity
+                  << " | MaxLot=" << spec.max_quantity
+                  << " | BaseUnit=" << spec.base_unit_size
+                  << " | ContractMult=" << spec.contract_multiplier
+                  << " | PointSize=" << spec.point_size
+                  << " | MMR=" << spec.mmr
+                  << std::endl;
+
+        row->release();
+    }
+
+    reader->release();
+    resp->release();
+    if (acc_reader) acc_reader->release();
+    if (acc_resp) acc_resp->release();
+    if (account) account->release();
+
+    std::cout << "[FXCM] Loaded specs for " << contract_specs_.size() << " instruments" << std::endl;
+#endif
+}
+
 inline void FxcmFeed::subscribe(const std::string& fxcm_symbol) {
 #ifdef FXCM_ENABLED
     // Subscribe to FXCM symbol
@@ -536,7 +645,7 @@ inline bool FxcmFeed::execute_hedge(const HedgeOrder& order) {
     }
     
     // Get account ID
-    const char* accountId = nullptr;
+    std::string accountId;
     if (IO2GResponse* accResp = rules->getTableRefreshResponse(O2GTable::Accounts)) {
         if (auto rf = session_->getResponseReaderFactory()) {
             if (auto accReader = rf->createAccountsTableReader(accResp)) {
@@ -548,13 +657,13 @@ inline bool FxcmFeed::execute_hedge(const HedgeOrder& order) {
         }
         accResp->release();
     }
-    if (!accountId) { 
+    if (accountId.empty()) { 
         std::cerr << "[FXCM] No account ID" << std::endl; 
         return false; 
     }
     
     // Get offer ID for symbol
-    const char* offerId = nullptr;
+    std::string offerId;
     if (IO2GResponse* offResp = rules->getTableRefreshResponse(O2GTable::Offers)) {
         if (auto rf = session_->getResponseReaderFactory()) {
             if (auto offReader = rf->createOffersTableReader(offResp)) {
@@ -570,7 +679,7 @@ inline bool FxcmFeed::execute_hedge(const HedgeOrder& order) {
         }
         offResp->release();
     }
-    if (!offerId) { 
+    if (offerId.empty()) { 
         std::cerr << "[FXCM] Instrument not found: " << order.fxcm_symbol << std::endl; 
         return false; 
     }
@@ -584,18 +693,63 @@ inline bool FxcmFeed::execute_hedge(const HedgeOrder& order) {
     
     IO2GValueMap* valuemap = factory->createValueMap();
     valuemap->setString(O2GRequestParamsEnum::Command, "CreateOrder");
-    valuemap->setString(O2GRequestParamsEnum::OrderType, "Market");
-    valuemap->setString(O2GRequestParamsEnum::AccountID, accountId);
-    valuemap->setString(O2GRequestParamsEnum::OfferID, offerId);
-    valuemap->setString(O2GRequestParamsEnum::BuySell, (order.size > 0 ? "Buy" : "Sell"));
-    valuemap->setInt(O2GRequestParamsEnum::Amount, static_cast<int>(std::abs(order.size)));
-    valuemap->setString(O2GRequestParamsEnum::TimeInForce, "FOK");
     
+    // Set order type based on order.order_type
+    const char* orderType = O2G2::Orders::TrueMarketOpen;
+    const char* tif = O2G2::TIF::FOK;  // Default: Fill or Kill
+    switch (order.order_type) {
+        case FxcmOrderType::MARKET:
+            orderType = O2G2::Orders::TrueMarketOpen;
+            tif = O2G2::TIF::FOK;
+            break;
+        case FxcmOrderType::LIMIT:
+            orderType = O2G2::Orders::LimitEntry;
+            tif = O2G2::TIF::GTC;  // Good til cancelled for limit orders
+            break;
+        case FxcmOrderType::STOP:
+            orderType = O2G2::Orders::StopEntry;
+            tif = O2G2::TIF::GTC;
+            break;
+        case FxcmOrderType::OPEN_LIMIT:
+            orderType = O2G2::Orders::OpenLimit;
+            tif = O2G2::TIF::GTC;
+            break;
+        case FxcmOrderType::CLOSE_MARKET:
+            orderType = O2G2::Orders::TrueMarketClose;
+            tif = O2G2::TIF::FOK;
+            break;
+    }
+    
+    valuemap->setString(O2GRequestParamsEnum::OrderType, orderType);
+    valuemap->setString(O2GRequestParamsEnum::AccountID, accountId.c_str());
+    valuemap->setString(O2GRequestParamsEnum::OfferID, offerId.c_str());
+    valuemap->setString(O2GRequestParamsEnum::BuySell, (order.size > 0 ? O2G2::Buy : O2G2::Sell));
+    valuemap->setInt(O2GRequestParamsEnum::Amount, static_cast<int>(std::abs(order.size)));
+    valuemap->setString(O2GRequestParamsEnum::TimeInForce, tif);
+    
+    // Set price for limit/stop orders
+    if (order.order_type == FxcmOrderType::LIMIT || 
+        order.order_type == FxcmOrderType::STOP ||
+        order.order_type == FxcmOrderType::OPEN_LIMIT) {
+        if (order.limit_price > 0) {
+            valuemap->setDouble(O2GRequestParamsEnum::Rate, order.limit_price);
+        }
+    }
+    
+    std::cerr << "[FXCM DEBUG] Creating order: Account=" << accountId 
+              << " Offer=" << offerId 
+              << " Type=" << orderType
+              << " Side=" << (order.size > 0 ? "B" : "S") 
+              << " Amt=" << static_cast<int>(std::abs(order.size));
+    if (order.limit_price > 0) {
+        std::cerr << " Price=" << order.limit_price;
+    }
+    std::cerr << std::endl;
     IO2GRequest* request = factory->createOrderRequest(valuemap);
     valuemap->release();
     
     if (!request) { 
-        std::cerr << "[FXCM] Failed to create order request" << std::endl; 
+        std::cerr << "[FXCM] Failed to create order request: " << factory->getLastError() << "" << std::endl; 
         return false; 
     }
     

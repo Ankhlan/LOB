@@ -163,9 +163,9 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
         .is_inverted = false,
-        .contract_size = 100.0,     // 100 oz per contract
+        .contract_size = 1.0,       // 1 oz per contract (FXCM MinLot=1)
         .tick_size = 10.0,
-        .min_order_size = 0.1,
+        .min_order_size = 1.0,     // 1 oz min (FXCM BaseUnit=1)
         .max_order_size = 1000.0,
         .margin_rate = 0.05,
         .maker_fee = 0.0002,
@@ -184,9 +184,9 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
         .is_inverted = false,
-        .contract_size = 100.0,     // 100 barrels
+        .contract_size = 10.0,      // 10 barrels (FXCM ContractMult=10)
         .tick_size = 50.0,
-        .min_order_size = 0.1,
+        .min_order_size = 1.0,     // 1 contract min
         .max_order_size = 500.0,
         .margin_rate = 0.10,
         .maker_fee = 0.0002,
@@ -226,9 +226,9 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
         .is_inverted = false,
-        .contract_size = 10000.0,   // 10,000 MMBtu
+        .contract_size = 100.0,     // 100 MMBtu (FXCM ContractMult=100)
         .tick_size = 1.0,
-        .min_order_size = 0.1,
+        .min_order_size = 1.0,     // 1 contract min
         .max_order_size = 500.0,
         .margin_rate = 0.15,
         .maker_fee = 0.0002,

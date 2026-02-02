@@ -10,6 +10,7 @@
 #include "position_manager.h"
 #include "product_catalog.h"
 #include "fxcm_feed.h"
+#include "fxcm_history.h"
 #include "qpay_handler.h"
 #include "bom_feed.h"
 #include "database.h"
@@ -100,11 +101,11 @@ public:
         }
     }
     
-    // Seed historical candles (only if not already seeded)
+    // Seed historical candles from FXCM or generate synthetic data
     void seed_history(const std::string& symbol, int timeframe_seconds, double mark_price, int count = 100) {
         // SANITY CHECK: Don't seed with corrupted mark price
         if (mark_price <= 0 || mark_price > 1e12 || std::isnan(mark_price) || std::isinf(mark_price)) {
-            return;  // Don't seed with corrupted price
+            return;
         }
 
         std::lock_guard<std::mutex> lock(mutex_);
@@ -112,34 +113,73 @@ public:
 
         // Only seed if fewer than 50 candles
         if (candles.size() >= 50) return;
-        
-        auto now = std::chrono::system_clock::now();
-        int64_t ts = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
-        
-        // Use deterministic pseudo-random based on symbol hash
-        size_t seed = std::hash<std::string>{}(symbol) + timeframe_seconds;
-        
+
         std::vector<Candle> historical;
-        for (int i = count; i >= 1; i--) {
-            int64_t t = ((ts - i * timeframe_seconds) / timeframe_seconds) * timeframe_seconds;
-            // Deterministic but varied noise - use different seeds for different OHLC components
-            double open_noise = ((seed + t * 3) % 1000 - 500) / 100000.0;  // ±0.5% range
-            double body_dir = (((seed + t * 7) % 10) > 5) ? 1.0 : -1.0;   // Random up/down
-            double body_size = ((seed + t * 11) % 500 + 100) / 100000.0;   // 0.1% to 0.6% body
-            double wick_up = ((seed + t * 13) % 300) / 100000.0;           // 0 to 0.3% upper wick
-            double wick_down = ((seed + t * 17) % 300) / 100000.0;         // 0 to 0.3% lower wick
-            double drift = (i * 0.00005);  // Slight trend
-            double base = mark_price * (1.0 - drift);
-            double o = base * (1.0 + open_noise);
-            double c = o * (1.0 + body_dir * body_size);  // Close based on open with body size
-            double h = std::max(o, c) * (1.0 + wick_up);
-            double l = std::min(o, c) * (1.0 - wick_down);
-            historical.push_back({t, o, h, l, c, 10.0 + ((seed + t) % 50)});
+        bool got_fxcm = false;
+
+        // Try FXCM real history first for FXCM-backed symbols
+        auto* product = ProductCatalog::instance().get(symbol);
+        if (product && !product->fxcm_symbol.empty()) {
+            auto fxcm_candles = FxcmHistoryManager::instance().fetchHistory(
+                product->fxcm_symbol, timeframe_seconds, count);
+
+            if (!fxcm_candles.empty()) {
+                // Convert USD prices to MNT using current rate
+                double usd_mnt = USD_MNT_RATE;
+                if (usd_mnt <= 0) usd_mnt = 3564.0;
+
+                for (const auto& fc : fxcm_candles) {
+                    Candle c;
+                    c.time = fc.time;
+                    c.open = fc.open * usd_mnt;
+                    c.high = fc.high * usd_mnt;
+                    c.low = fc.low * usd_mnt;
+                    c.close = fc.close * usd_mnt;
+                    c.volume = fc.volume;
+
+                    if (c.open > 0 && c.open < 1e12 &&
+                        c.high > 0 && c.high < 1e12 &&
+                        c.low > 0 && c.low < 1e12 &&
+                        c.close > 0 && c.close < 1e12) {
+                        historical.push_back(c);
+                    }
+                }
+
+                if (!historical.empty()) {
+                    std::cout << "[CandleStore] Seeded " << historical.size()
+                              << " REAL FXCM candles for " << symbol << std::endl;
+                    got_fxcm = true;
+                }
+            }
         }
-        
-        // Append any existing real candles (filter corrupted)
+
+        // Fallback: Generate synthetic candles
+        if (!got_fxcm) {
+            auto now = std::chrono::system_clock::now();
+            int64_t ts = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+            size_t seed = std::hash<std::string>{}(symbol) + timeframe_seconds;
+
+            for (int i = count; i >= 1; i--) {
+                int64_t t = ((ts - i * timeframe_seconds) / timeframe_seconds) * timeframe_seconds;
+                double open_noise = ((seed + t * 3) % 1000 - 500) / 100000.0;
+                double body_dir = ((i % 2) == 0) ? 1.0 : -1.0;
+                double body_size = ((seed + t * 11) % 500 + 100) / 100000.0;
+                double wick_up = ((seed + t * 13) % 300) / 100000.0;
+                double wick_down = ((seed + t * 17) % 300) / 100000.0;
+                double drift = (i * 0.00005);
+                double base = mark_price * (1.0 - drift);
+                double o = base * (1.0 + open_noise);
+                double c = o * (1.0 + body_dir * body_size);
+                double h = std::max(o, c) * (1.0 + wick_up);
+                double l = std::min(o, c) * (1.0 - wick_down);
+                historical.push_back({t, o, h, l, c, 10.0 + ((seed + t) % 50)});
+            }
+            std::cout << "[CandleStore] Seeded " << historical.size()
+                      << " SYNTHETIC candles for " << symbol << std::endl;
+        }
+
+        // Append existing real candles
         for (const auto& c : candles) {
-            // Sanity check: reject candles with prices > 1 trillion MNT
             if (c.open > 0 && c.open < 1e12 &&
                 c.high > 0 && c.high < 1e12 &&
                 c.low > 0 && c.low < 1e12 &&
@@ -149,19 +189,18 @@ public:
         }
         candles = std::move(historical);
 
-        // CRITICAL: Sort by time to ensure monotonic timestamps for TradingView
+        // Sort by time
         std::sort(candles.begin(), candles.end(),
             [](const Candle& a, const Candle& b) { return a.time < b.time; });
 
         seeded_[symbol][timeframe_seconds] = true;
     }
-    
+
     // Check if already seeded
     bool is_seeded(const std::string& symbol, int timeframe_seconds) {
         std::lock_guard<std::mutex> lock(mutex_);
         return seeded_[symbol][timeframe_seconds];
     }
-    
     // Get candles for symbol and timeframe (filtered for sanity)
     std::vector<Candle> get(const std::string& symbol, int timeframe_seconds, int limit = 100) {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -711,7 +750,7 @@ inline void HttpServer::setup_routes() {
                                 {"unrealized_pnl", pnl},
                                 {"pnl_percent", pnl_pct},
                                 {"margin_used", pos.margin_used},
-                                {"liquidation_price", 0.0}  // TODO: Calculate
+                                {"liquidation_price", product ? pos.liquidation_price(product->margin_rate) : 0.0}
                             });
                         }
                         

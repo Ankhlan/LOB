@@ -17,6 +17,7 @@
 #include "matching_engine.h"
 #include "position_manager.h"
 #include "fxcm_feed.h"
+#include "fxcm_history.h"
 #include "bom_feed.h"
 #include "usdmnt_market.h"
 #include "http_server.h"
@@ -157,7 +158,19 @@ int main(int argc, char* argv[]) {
             fxcm.subscribe(product->fxcm_symbol);
         }
     }
-    
+
+#ifdef FXCM_ENABLED
+    // Initialize FXCM Price History Manager for real historical data
+    if (fxcm.is_connected()) {
+        std::cout << "[INIT] Initializing FXCM Price History Manager...\n";
+        if (FxcmHistoryManager::instance().initialize(fxcm.get_session())) {
+            std::cout << "       Price History API ready\n";
+        } else {
+            std::cout << "       WARNING: Price History API failed to initialize\n";
+        }
+    }
+#endif
+
     // Initialize hedging engine
     std::cout << "[INIT] Initializing hedging engine...\n";
     HedgingEngine::instance().set_hedge_threshold(0.05);  // 5%

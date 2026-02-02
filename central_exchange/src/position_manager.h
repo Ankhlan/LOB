@@ -28,13 +28,43 @@ struct Position {
     double realized_pnl;    // Closed PnL (MNT)
     Timestamp opened_at;
     Timestamp updated_at;
-    
+
     bool is_long() const { return size > 0; }
     bool is_short() const { return size < 0; }
     double abs_size() const { return std::abs(size); }
-    
+
     void update_pnl(double mark_price) {
         unrealized_pnl = size * (mark_price - entry_price);
+    }
+
+    // Calculate liquidation price
+    // Liquidation occurs when equity <= maintenance_margin
+    // Maintenance margin = 50% of initial margin
+    double liquidation_price(double margin_rate) const {
+        if (abs_size() < 0.0001 || entry_price <= 0) return 0.0;
+
+        // Position notional = |size| × entry_price
+        double notional = abs_size() * entry_price;
+
+        // Maintenance margin rate = half of initial margin
+        double maintenance_rate = margin_rate * 0.5;
+
+        // Maintenance margin required
+        double maintenance_margin = notional * maintenance_rate;
+
+        // Distance from entry to liquidation (as fraction of entry price)
+        // For long: we can lose (margin - maintenance) before liquidation
+        // For short: same, but price moves opposite direction
+        double loss_capacity = margin_used - maintenance_margin;
+        double price_move_fraction = loss_capacity / notional;
+
+        if (is_long()) {
+            // Long loses when price drops
+            return entry_price * (1.0 - price_move_fraction);
+        } else {
+            // Short loses when price rises
+            return entry_price * (1.0 + price_move_fraction);
+        }
     }
 };
 

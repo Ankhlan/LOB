@@ -390,7 +390,31 @@
         </div>
     </div>
 
-    <!-- POSITIONS BAR -->
+    <!-- ACCOUNT SUMMARY BAR -->
+<div class="account-summary" id="accountSummary">
+    <div class="account-stat">
+        <span class="account-label">Balance</span>
+        <span class="account-value mono" id="acctBalance">0</span>
+    </div>
+    <div class="account-stat">
+        <span class="account-label">Equity</span>
+        <span class="account-value mono" id="acctEquity">0</span>
+    </div>
+    <div class="account-stat">
+        <span class="account-label">Available</span>
+        <span class="account-value mono" id="acctAvailable">0</span>
+    </div>
+    <div class="account-stat">
+        <span class="account-label">Margin Used</span>
+        <span class="account-value mono" id="acctMargin">0</span>
+    </div>
+    <div class="account-stat">
+        <span class="account-label">Unrealized P&amp;L</span>
+        <span class="account-value mono" id="acctPnl">0</span>
+    </div>
+</div>
+
+<!-- POSITIONS BAR -->
     <div class="positions-bar">
         <div class="positions-tabs">
             <div class="positions-tab active" onclick="showTab('positions')">Positions <span class="count" id="posCount">0</span></div>
@@ -398,7 +422,24 @@
             <div class="positions-tab" onclick="showTab('history')">History</div>
         </div>
         <div class="positions-content" id="tabPositions">
-            <div id="positionsGrid"></div>
+            <div id="positionsGrid">
+            <table class="positions-table">
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Side</th>
+                        <th>Qty</th>
+                        <th>Entry Price</th>
+                        <th>Current Price</th>
+                        <th>P&amp;L</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="positionsBody">
+                    <tr class="no-positions"><td colspan="7">No open positions</td></tr>
+                </tbody>
+            </table>
+        </div>
         </div>
         <div class="positions-content" id="tabOrders" style="display:none;">
             <div id="ordersGrid"></div>

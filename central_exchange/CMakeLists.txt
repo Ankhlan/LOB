@@ -84,8 +84,10 @@ if(FXCM_ENABLED)
             target_link_libraries(central_exchange PRIVATE ForexConnect)
         else()
             # Linux needs pthread and dl
-            target_link_libraries(central_exchange PRIVATE 
+            target_link_libraries(central_exchange PRIVATE
                 ForexConnect
+                pricehistorymgr
+                quotesmgr2
                 pthread
                 dl
             )
