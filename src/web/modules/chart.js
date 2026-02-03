@@ -8,6 +8,10 @@ const Chart = {
     // Current main chart
     mainChart: null,
     mainSeries: null,
+
+    // Track current candle for updates
+    currentCandle: null,
+    currentCandleTime: null,
     
     // Settings
     settings: {
@@ -156,18 +160,32 @@ const Chart = {
     // Update with tick price data (from SSE quotes)
     updatePrice(data) {
         if (!data || !this.mainSeries) return;
-        
+
         const price = data.price || ((data.bid + data.ask) / 2);
-        const time = Math.floor(Date.now() / 1000);
+        if (!price || isNaN(price)) return;
         
-        // Update the last candle with new close price
-        this.mainSeries.update({
-            time,
-            open: price,
-            high: price,
-            low: price,
-            close: price
-        });
+        // Get candle time based on timeframe (default 1 min)
+        const tfSeconds = this.timeframes[this.settings.timeframe]?.seconds || 60;
+        const candleTime = Math.floor(Date.now() / 1000 / tfSeconds) * tfSeconds;
+
+        if (this.currentCandleTime !== candleTime) {
+            // New candle
+            this.currentCandle = {
+                time: candleTime,
+                open: price,
+                high: price,
+                low: price,
+                close: price
+            };
+            this.currentCandleTime = candleTime;
+        } else {
+            // Update existing candle
+            this.currentCandle.high = Math.max(this.currentCandle.high, price);
+            this.currentCandle.low = Math.min(this.currentCandle.low, price);
+            this.currentCandle.close = price;
+        }
+
+        this.mainSeries.update(this.currentCandle);
     },
     // Set timeframe
     setTimeframe(tf) {
