@@ -283,6 +283,73 @@
         </aside>
     </main>
 
+    <!-- Products View (hidden by default) -->
+    <section class="view-panel products-view" id="productsView" style="display: none;">
+        <div class="products-container">
+            <header class="products-header">
+                <h1>Products</h1>
+                <p class="subtitle">Perpetual Futures Contracts</p>
+            </header>
+
+            <!-- Featured Product: USD-MNT-PERP -->
+            <div class="product-card featured" id="productUsdMnt">
+                <div class="product-header">
+                    <div class="product-icon">🇲🇳</div>
+                    <div class="product-title">
+                        <h2>USD-MNT-PERP</h2>
+                        <span class="product-type">Perpetual Swap</span>
+                    </div>
+                    <div class="product-price" id="productPrice">3,564 MNT</div>
+                </div>
+                
+                <div class="product-stats">
+                    <div class="stat">
+                        <label>24h Volume</label>
+                        <span id="productVolume">--</span>
+                    </div>
+                    <div class="stat">
+                        <label>Open Interest</label>
+                        <span id="productOI">--</span>
+                    </div>
+                    <div class="stat">
+                        <label>Funding Rate</label>
+                        <span id="productFunding">+0.01%</span>
+                    </div>
+                    <div class="stat">
+                        <label>Leverage</label>
+                        <span>Up to 100x</span>
+                    </div>
+                </div>
+
+                <div class="product-specs">
+                    <h3>Contract Specifications</h3>
+                    <table class="specs-table">
+                        <tr><td>Underlying</td><td>USD/MNT Exchange Rate</td></tr>
+                        <tr><td>Contract Size</td><td>1 USD</td></tr>
+                        <tr><td>Settlement</td><td>Cash (MNT)</td></tr>
+                        <tr><td>Tick Size</td><td>1 MNT</td></tr>
+                        <tr><td>Trading Hours</td><td>24/7</td></tr>
+                        <tr><td>Circuit Breaker</td><td>±5% Daily Limit</td></tr>
+                    </table>
+                </div>
+
+                <div class="product-actions">
+                    <button class="btn-trade buy" onclick="switchView('trade'); selectInstrument('USD-MNT-PERP');">
+                        Trade USD-MNT-PERP
+                    </button>
+                </div>
+            </div>
+
+            <!-- Other products list placeholder -->
+            <div class="products-list" id="productsList">
+                <h3>All Products</h3>
+                <div class="product-grid">
+                    <!-- Will be populated dynamically -->
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- Connection Status -->
     <div class="connection-status" id="connStatus">
         <span class="conn-dot"></span>
