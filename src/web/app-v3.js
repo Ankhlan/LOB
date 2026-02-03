@@ -146,26 +146,14 @@ const AppState = {
 // THEME MANAGEMENT
 // ============================================================================
 
-const themes = ['dark', 'light', 'blue'];
-let currentThemeIndex = 0;
-
 function initTheme() {
-    // Use Theme module for persistence
     Theme?.init?.();
 }
 
-function applyTheme(theme) {
-    document.body.setAttribute('data-theme', theme);
-    Theme?.set?.(theme);
-}
-
 function cycleTheme() {
-    currentThemeIndex = (currentThemeIndex + 1) % themes.length;
-    applyTheme(themes[currentThemeIndex]);
-    Toast?.show?.(`Theme: ${themes[currentThemeIndex]}`, 'info');
+    Theme?.cycle?.();
 }
 
-// ============================================================================
 // LANGUAGE MANAGEMENT
 // ============================================================================
 

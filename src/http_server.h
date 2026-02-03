@@ -117,6 +117,7 @@ public:
         std::vector<Candle> historical;
         bool got_fxcm = false;
 
+#ifdef FXCM_ENABLED
         // Try FXCM real history first for FXCM-backed symbols
         auto* product = ProductCatalog::instance().get(symbol);
         if (product && !product->fxcm_symbol.empty()) {
@@ -152,6 +153,7 @@ public:
                 }
             }
         }
+#endif
 
         // Fallback: Generate synthetic candles
         if (!got_fxcm) {

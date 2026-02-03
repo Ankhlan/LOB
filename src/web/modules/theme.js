@@ -130,6 +130,15 @@ const Theme = {
         }
     },
     
+    // Cycle through themes (dark -> light -> blue -> dark)
+    cycle() {
+        const available = this.getAvailable();
+        const currentIdx = available.indexOf(this.current);
+        const nextIdx = (currentIdx + 1) % available.length;
+        this.set(available[nextIdx]);
+        return available[nextIdx];
+    },
+
     // Toggle between dark and light
     toggle() {
         if (this.current === 'dark') {
