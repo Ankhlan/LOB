@@ -39,6 +39,7 @@ const Marketplace = {
         MN_FX: 'mn-fx',
         CRYPTO: 'crypto',
         COMMODITIES: 'commodities',
+        INDICES: 'indices',
         INTL_FX: 'intl-fx'
     },
 
@@ -101,12 +102,19 @@ const Marketplace = {
         }
         
         // Commodities (XAU, XAG, OIL, NG)
-        if (id.startsWith('XAU') || id.startsWith('XAG') || 
+        if (id.startsWith('XAU') || id.startsWith('XAG') ||
             id.startsWith('OIL') || id.startsWith('NG') ||
             id.includes('GOLD') || id.includes('SILVER')) {
             return this.categories.COMMODITIES;
         }
-        
+
+        // Indices (SPX, NDX, HSI, DAX, FTSE)
+        if (id.startsWith('SPX') || id.startsWith('NDX') || 
+            id.startsWith('HSI') || id.startsWith('DAX') ||
+            id.startsWith('FTSE')) {
+            return this.categories.INDICES;
+        }
+
         // Default: International FX
         return this.categories.INTL_FX;
     },
@@ -159,6 +167,9 @@ const Marketplace = {
                 break;
             case this.categories.COMMODITIES:
                 categoryHTML = this.renderCommodities(product);
+                break;
+            case this.categories.INDICES:
+                categoryHTML = this.renderIndices(product);
                 break;
             case this.categories.INTL_FX:
             default:
@@ -472,21 +483,56 @@ const Marketplace = {
                 </div>
                 <div class="commod-section">
                     <h4>📈 Macro Indicators</h4>
-                    <p>DXY (Dollar Index), real yields, and central bank policy 
+                    <p>DXY (Dollar Index), real yields, and central bank policy
                        drive precious metals. Fed decisions key catalyst.</p>
                 </div>
                 <div class="commod-section">
                     <h4>⛏️ Supply Factors</h4>
-                    <p>Mine production, ETF holdings, and central bank reserves. 
+                    <p>Mine production, ETF holdings, and central bank reserves.
                        For energy: OPEC+ decisions, US inventory reports.</p>
                 </div>
                 <div class="commod-section">
                     <h4>🇲🇳 Mongolia Connection</h4>
-                    <p>Mongolia is a major copper/gold producer. 
+                    <p>Mongolia is a major copper/gold producer.
                        Oyu Tolgoi and Erdenet production affects global supply.</p>
                 </div>
             </div>
         `;
+    },
+
+    // Stock Indices (SPX, NDX, HSI, etc.)
+    renderIndices(product) {
+        return `
+            <div class="market-info indices">
+                <h3>📈 Global Index</h3>
+                <div class="index-stats">
+                    <span class="stat">Constituents: <strong>${product.symbol.includes('SPX') ? '500' : product.symbol.includes('NDX') ? '100' : '50+'}</strong></span>
+                    <span class="stat">Session: <strong>${this.getMarketSession(product.symbol)}</strong></span>
+                </div>
+                <div class="index-section">
+                    <h4>📊 Market Internals</h4>
+                    <p>Breadth indicators, advance/decline ratio, and 
+                       new highs vs lows provide market health signals.</p>
+                </div>
+                <div class="index-section">
+                    <h4>🌍 Global Correlation</h4>
+                    <p>Overnight futures, Asia/Europe session flow, and 
+                       inter-market relationships with bonds and commodities.</p>
+                </div>
+                <div class="index-section">
+                    <h4>📅 Key Events</h4>
+                    <p>Fed meetings, earnings seasons, and macro data releases 
+                       (NFP, CPI, GDP) drive volatility clusters.</p>
+                </div>
+            </div>
+        `;
+    },
+
+    getMarketSession(symbol) {
+        if (symbol.includes('SPX') || symbol.includes('NDX')) return 'US (9:30-16:00 ET)';
+        if (symbol.includes('HSI')) return 'HK (9:30-16:00 HKT)';
+        if (symbol.includes('DAX')) return 'EU (9:00-17:30 CET)';
+        return 'See contract specs';
     },
 
     // International FX (EUR/USD, GBP/USD, etc.)
