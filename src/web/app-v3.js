@@ -988,11 +988,19 @@ function handleOrderbook(data) {
 }
 
 function handlePosition(data) {
-    Positions?.update?.(data);
+    if (data.action === 'close' || data.status === 'closed') {
+        Positions?.removePosition?.(data.id);
+    } else {
+        Positions?.upsertPosition?.(data);
+    }
 }
 
 function handleOrder(data) {
-    Orders?.update?.(data);
+    if (data.action === 'cancel' || data.status === 'filled' || data.status === 'cancelled') {
+        Orders?.removeOrder?.(data.id);
+    } else {
+        Orders?.upsertOrder?.(data);
+    }
 }
 
 // ============================================================================

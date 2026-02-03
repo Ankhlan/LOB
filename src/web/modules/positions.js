@@ -63,7 +63,34 @@ const Positions = {
         this.render();
         this.updateAccountDisplay();
     },
-    
+
+    // Upsert a single position (for SSE real-time updates)
+    upsertPosition(position) {
+        if (!position || !position.id) return;
+        
+        const index = this.positions.findIndex(p => p.id === position.id);
+        if (index >= 0) {
+            // Update existing
+            this.positions[index] = { ...this.positions[index], ...position };
+        } else {
+            // Add new
+            this.positions.push(position);
+        }
+        
+        // Recalculate totals
+        this.summary.unrealizedPnL = this.positions.reduce((sum, p) => sum + (p.pnl || 0), 0);
+        this.summary.openCount = this.positions.length;
+        
+        this.render();
+    },
+
+    // Remove a closed position
+    removePosition(positionId) {
+        this.positions = this.positions.filter(p => p.id !== positionId);
+        this.summary.openCount = this.positions.length;
+        this.render();
+    },
+
     // Render positions table
     render() {
         const container = document.querySelector('.positions-grid tbody, #positionsTable tbody');

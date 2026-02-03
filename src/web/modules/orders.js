@@ -38,7 +38,35 @@ const Orders = {
         this.render();
         this.updateBadge();
     },
-    
+
+    // Upsert a single order (for SSE real-time updates)
+    upsertOrder(order) {
+        if (!order || !order.id) return;
+        
+        const index = this.orders.findIndex(o => o.id === order.id);
+        if (index >= 0) {
+            // Update existing
+            this.orders[index] = { ...this.orders[index], ...order };
+        } else {
+            // Add new
+            this.orders.push(order);
+        }
+        
+        this.render();
+        this.updateBadge();
+    },
+
+    // Remove an order (cancelled/filled)
+    removeOrder(orderId) {
+        const order = this.orders.find(o => o.id === orderId);
+        if (order) {
+            this.addToHistory(order);
+        }
+        this.orders = this.orders.filter(o => o.id !== orderId);
+        this.render();
+        this.updateBadge();
+    },
+
     // Add to history
     addToHistory(order) {
         this.history.unshift(order);
