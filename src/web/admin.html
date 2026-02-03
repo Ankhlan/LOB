@@ -251,7 +251,7 @@
                 <span class="status-dot"></span>
                 <span id="statusText">System Online</span>
             </div>
-            <a href="/" class="btn">← Back to Trading</a>
+            <a href="/" class="btn">&lt; Back to Trading</a>
         </div>
     </header>
     
@@ -747,7 +747,7 @@
                 const hours = Math.floor(health.uptime_seconds / 3600);
                 const mins = Math.floor((health.uptime_seconds % 3600) / 60);
                 document.getElementById('uptime').textContent = `${hours}h ${mins}m`;
-                document.getElementById('fxcmStatus').textContent = health.fxcm_connected ? 'Connected ✓' : 'Disconnected ✗';
+                document.getElementById('fxcmStatus').textContent = health.fxcm_connected ? 'Connected OK' : 'Disconnected ✗';
             } catch (e) {
                 document.getElementById('statusBadge').className = 'status-badge offline';
                 document.getElementById('statusText').textContent = 'System Offline';

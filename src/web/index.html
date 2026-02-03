@@ -45,7 +45,7 @@
                     </div>
                     <button class="login-btn" id="verifyOtpBtn" onclick="verifyOtp()" disabled data-i18n="verify">Verify</button>
                     <div class="login-error" id="otpError"></div>
-                    <button class="login-back" onclick="backToPhone()" data-i18n="changeNumber">← Change number</button>
+                    <button class="login-back" onclick="backToPhone()" data-i18n="changeNumber">&lt; Change number</button>
                 </div>
             </div>
         </div>
@@ -181,7 +181,7 @@
                 <span class="panel-title">Instruments</span>
                 <div class="panel-actions">
                     <button class="panel-btn" title="Add">+</button>
-                    <button class="panel-btn" title="Settings">⚙</button>
+                    <button class="panel-btn" title="Settings">Settings</button>
                 </div>
             </div>
             <div class="search-box">
@@ -194,7 +194,7 @@
         <section class="center">
             <div class="chart-area">
                 <div class="chart-tabs">
-                    <div class="chart-tab active"><span id="tabSymbol">XAU-MNT-PERP</span><span class="close">×</span></div>
+                    <div class="chart-tab active"><span id="tabSymbol">XAU-MNT-PERP</span><span class="close">X</span></div>
                     <div class="chart-layout-toggle">
                         <button class="layout-btn active" onclick="setChartLayout('single')" title="Single Chart">▢</button>
                         <button class="layout-btn" onclick="setChartLayout('quad')" title="2x2 Grid">▦</button>
@@ -226,9 +226,9 @@
                     <div class="market-info-header" onclick="toggleMarketInfo()">
                         <span class="market-info-title">
                             <span id="marketName">Gold / Mongolian Tugrik</span>
-                            <span class="market-info-badge">ℹ Market Info</span>
+                            <span class="market-info-badge">i Market Info</span>
                         </span>
-                        <span class="market-info-toggle" id="marketInfoToggle">▼</span>
+                        <span class="market-info-toggle" id="marketInfoToggle">v</span>
                     </div>
                     <div class="market-info-content" id="marketInfoContent">
                         <!-- Bespoke market info rendered by Marketplace module -->
@@ -364,7 +364,7 @@
     <div class="bank-rates-panel" id="bankRatesPanel">
         <div class="bank-panel-header">
             <span class="bank-panel-title">FX USD/MNT Bank Rates</span>
-            <button class="bank-panel-close" onclick="toggleBankPanel()">×</button>
+            <button class="bank-panel-close" onclick="toggleBankPanel()">X</button>
         </div>
         <div class="bank-panel-body">
             <div class="bank-mid-rate">
@@ -526,7 +526,7 @@
 
     <!-- ORDER CONFIRMATION OVERLAY -->
     <div class="order-confirm" id="orderConfirm">
-        <div class="order-confirm-icon" id="orderConfirmIcon">✓</div>
+        <div class="order-confirm-icon" id="orderConfirmIcon">OK</div>
         <div class="order-confirm-title" id="orderConfirmTitle">Order Filled</div>
         <div class="order-confirm-details" id="orderConfirmDetails">1 XAU-MNT-PERP @ 18,500,000 MNT</div>
     </div>
@@ -535,8 +535,8 @@
     <div class="modal-overlay hidden" id="keyboardModal" onclick="if(event.target===this)hideKeyboard()">
         <div class="keyboard-modal">
             <div class="keyboard-header">
-                <span class="keyboard-title">⌨️ Keyboard Shortcuts</span>
-                <button class="keyboard-close" onclick="hideKeyboard()">×</button>
+                <span class="keyboard-title"> Keyboard Shortcuts</span>
+                <button class="keyboard-close" onclick="hideKeyboard()">X</button>
             </div>
             <div class="keyboard-body">
                 <div class="shortcut-group">
@@ -550,11 +550,11 @@
                     <div class="shortcut-title">Chart</div>
                     <div class="shortcut-row"><span class="kbd-hint">1</span> - <span class="kbd-hint">6</span> <span>Timeframes (1m-1D)</span></div>
                     <div class="shortcut-row"><span class="kbd-hint">+</span> / <span class="kbd-hint">-</span> <span>Zoom In/Out</span></div>
-                    <div class="shortcut-row"><span class="kbd-hint">←</span> / <span class="kbd-hint">→</span> <span>Pan Chart</span></div>
+                    <div class="shortcut-row"><span class="kbd-hint">&lt;</span> / <span class="kbd-hint">&gt;</span> <span>Pan Chart</span></div>
                 </div>
                 <div class="shortcut-group">
                     <div class="shortcut-title">Navigation</div>
-                    <div class="shortcut-row"><span class="kbd-hint">↑</span> / <span class="kbd-hint">↓</span> <span>Next/Prev Instrument</span></div>
+                    <div class="shortcut-row"><span class="kbd-hint">Up</span> / <span class="kbd-hint">Down</span> <span>Next/Prev Instrument</span></div>
                     <div class="shortcut-row"><span class="kbd-hint">/</span> <span>Search Instruments</span></div>
                     <div class="shortcut-row"><span class="kbd-hint">?</span> <span>Show This Help</span></div>
                 </div>

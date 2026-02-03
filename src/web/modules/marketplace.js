@@ -21,7 +21,7 @@ const Marketplace = {
             whatIsThis: 'Trade gold price without owning physical gold. Priced in MNT per troy ounce.',
             whoTrades: 'Investors seeking inflation hedge, jewelry businesses',
             howPriced: 'FXCM XAU/USD x USD/MNT rate, real-time',
-            icon: '⚜'
+            icon: 'Au'
         },
         'BTC-MNT-PERP': {
             displayName: 'Bitcoin / Mongolian Tugrik',
@@ -29,7 +29,7 @@ const Marketplace = {
             whatIsThis: 'Trade Bitcoin price movements in MNT. Backed by FXCM.',
             whoTrades: 'Crypto investors, tech-savvy traders',
             howPriced: 'FXCM BTC/USD x USD/MNT rate',
-            icon: '₿'
+            icon: 'BTC'
         }
     },
 
@@ -137,7 +137,7 @@ const Marketplace = {
             whatIsThis: product.description,
             whoTrades: 'Market participants',
             howPriced: product.hedgeable ? 'Backed by ' + product.fxcm_symbol : 'CRE pricing',
-            icon: '◈'
+            icon: '*'
         };
     },
 
@@ -187,7 +187,7 @@ const Marketplace = {
     renderMongolianDomestic(product) {
         return `
             <div class="market-info mn-domestic">
-                <h3>🇲🇳 Mongolian Market</h3>
+                <h3>[MN] Mongolian Market</h3>
                 <div class="mn-section">
                     <h4>Local Supply & Demand</h4>
                     <p>Seasonal availability tracked from domestic producers. 
@@ -195,7 +195,7 @@ const Marketplace = {
                 </div>
                 <div class="mn-section">
                     <h4>Export Status</h4>
-                    <p>China border trade volumes via Zamyn-Üüd crossing. 
+                    <p>China border trade volumes via Zamyn-Uud crossing. 
                        Export quotas and licensing requirements monitored.</p>
                 </div>
                 <div class="mn-section">
@@ -212,12 +212,12 @@ const Marketplace = {
     renderMongolianFX(product) {
         const rates = this.bankRates;
         
-        // ═══════════════════════════════════════════════════════════
+        // ---
         // SECTION 1: CRE ORDERBOOK - Who is selling at what rate?
-        // ═══════════════════════════════════════════════════════════
+        // ---
         const orderbookHTML = `
             <div class="marketplace-orderbook">
-                <h3>📖 CRE Order Book</h3>
+                <h3> CRE Order Book</h3>
                 <p class="marketplace-subtitle">Live orders from market participants</p>
                 
                 <div class="orderbook-summary">
@@ -256,9 +256,9 @@ const Marketplace = {
             </div>
         `;
 
-        // ═══════════════════════════════════════════════════════════
+        // ---
         // SECTION 2: BANK COMPARISON - Reference rates from banks
-        // ═══════════════════════════════════════════════════════════
+        // ---
         let bankTableHTML = '<div class="bank-loading">Loading bank rates...</div>';
         let bestRateHTML = '';
 
@@ -300,20 +300,20 @@ const Marketplace = {
 
         const bankComparisonHTML = `
             <div class="marketplace-banks">
-                <h3>🏦 Bank Reference Rates</h3>
+                <h3> Bank Reference Rates</h3>
                 <p class="marketplace-subtitle">Compare with commercial bank rates</p>
                 ${bankTableHTML}
                 ${bestRateHTML}
             </div>
         `;
 
-        // ═══════════════════════════════════════════════════════════
+        // ---
         // SECTION 3: TRADING TERMS - What are the terms to participate?
-        // ═══════════════════════════════════════════════════════════
+        // ---
         const marginPct = product.margin_rate ? (product.margin_rate * 100).toFixed(0) : '2';
         const tradingTermsHTML = `
             <div class="marketplace-terms">
-                <h3>📋 Trading Terms</h3>
+                <h3> Trading Terms</h3>
                 <p class="marketplace-subtitle">Requirements to participate in this market</p>
                 
                 <div class="terms-grid">
@@ -347,12 +347,12 @@ const Marketplace = {
             </div>
         `;
 
-        // ═══════════════════════════════════════════════════════════
+        // ---
         // SECTION 4: TRANSPARENCY - Where does pricing come from?
-        // ═══════════════════════════════════════════════════════════
+        // ---
         const transparencyHTML = `
             <div class="marketplace-transparency">
-                <h3>🔍 Pricing Transparency</h3>
+                <h3> Pricing Transparency</h3>
                 <div class="transparency-box">
                     <p><strong>Mark Price:</strong> Weighted average of Bank of Mongolia rate + commercial bank rates</p>
                     <p><strong>Index Price:</strong> Real-time from TDB, Golomt, and other major banks</p>
@@ -452,19 +452,19 @@ const Marketplace = {
         
         return `
             <div class="market-info crypto">
-                <h3>⚡ 24h Funding</h3>
+                <h3> 24h Funding</h3>
                 <div class="funding-rate">${fundingRate}%</div>
                 <div class="crypto-stats">
                     <span class="stat">Open Interest: <strong>--</strong></span>
                     <span class="stat">24h Volume: <strong>--</strong></span>
                 </div>
                 <div class="crypto-section">
-                    <h4>🐋 Whale Activity</h4>
+                    <h4> Whale Activity</h4>
                     <p>Large transfers monitored via on-chain analytics. 
                        Exchange inflows/outflows tracked for sentiment.</p>
                 </div>
                 <div class="crypto-section">
-                    <h4>📊 Network Stats</h4>
+                    <h4> Network Stats</h4>
                     <p>Hash rate, active addresses, and transaction volume 
                        provide fundamental health metrics.</p>
                 </div>
@@ -476,23 +476,23 @@ const Marketplace = {
     renderCommodities(product) {
         return `
             <div class="market-info commodities">
-                <h3>🌍 Global Reference</h3>
+                <h3> Global Reference</h3>
                 <div class="spot-price">
                     <span class="spot-label">Spot Reference</span>
                     <span class="spot-value">Live via FXCM</span>
                 </div>
                 <div class="commod-section">
-                    <h4>📈 Macro Indicators</h4>
+                    <h4> Macro Indicators</h4>
                     <p>DXY (Dollar Index), real yields, and central bank policy
                        drive precious metals. Fed decisions key catalyst.</p>
                 </div>
                 <div class="commod-section">
-                    <h4>⛏️ Supply Factors</h4>
+                    <h4> Supply Factors</h4>
                     <p>Mine production, ETF holdings, and central bank reserves.
                        For energy: OPEC+ decisions, US inventory reports.</p>
                 </div>
                 <div class="commod-section">
-                    <h4>🇲🇳 Mongolia Connection</h4>
+                    <h4>[MN] Mongolia Connection</h4>
                     <p>Mongolia is a major copper/gold producer.
                        Oyu Tolgoi and Erdenet production affects global supply.</p>
                 </div>
@@ -504,23 +504,23 @@ const Marketplace = {
     renderIndices(product) {
         return `
             <div class="market-info indices">
-                <h3>📈 Global Index</h3>
+                <h3> Global Index</h3>
                 <div class="index-stats">
                     <span class="stat">Constituents: <strong>${product.symbol.includes('SPX') ? '500' : product.symbol.includes('NDX') ? '100' : '50+'}</strong></span>
                     <span class="stat">Session: <strong>${this.getMarketSession(product.symbol)}</strong></span>
                 </div>
                 <div class="index-section">
-                    <h4>📊 Market Internals</h4>
+                    <h4> Market Internals</h4>
                     <p>Breadth indicators, advance/decline ratio, and 
                        new highs vs lows provide market health signals.</p>
                 </div>
                 <div class="index-section">
-                    <h4>🌍 Global Correlation</h4>
+                    <h4> Global Correlation</h4>
                     <p>Overnight futures, Asia/Europe session flow, and 
                        inter-market relationships with bonds and commodities.</p>
                 </div>
                 <div class="index-section">
-                    <h4>📅 Key Events</h4>
+                    <h4> Key Events</h4>
                     <p>Fed meetings, earnings seasons, and macro data releases 
                        (NFP, CPI, GDP) drive volatility clusters.</p>
                 </div>
@@ -539,7 +539,7 @@ const Marketplace = {
     renderInternationalFX(product) {
         return `
             <div class="market-info intl-fx">
-                <h3>📊 Technical Levels</h3>
+                <h3> Technical Levels</h3>
                 <div class="fx-levels">
                     <div class="level resistance">
                         <span class="level-label">R1</span>
@@ -555,12 +555,12 @@ const Marketplace = {
                     </div>
                 </div>
                 <div class="fx-section">
-                    <h4>🏦 Central Banks</h4>
+                    <h4> Central Banks</h4>
                     <p>Fed, ECB, BOJ, BOE policy stances and rate expectations. 
                        Upcoming meetings and rate probabilities monitored.</p>
                 </div>
                 <div class="fx-section">
-                    <h4>📅 Economic Calendar</h4>
+                    <h4> Economic Calendar</h4>
                     <p>High-impact events: NFP, CPI, PMI releases. 
                        Volatility typically elevated around announcements.</p>
                 </div>
