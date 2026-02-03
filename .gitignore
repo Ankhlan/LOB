@@ -14,3 +14,11 @@ central_exchange/deps/fxcm-linux/
 
 # Backup files
 *.backup
+
+# ForexConnect API (large binaries)
+ForexConnectAPI-*
+*.tar.gz
+
+# Local startup scripts
+start_*.bat
+start_*.ps1
