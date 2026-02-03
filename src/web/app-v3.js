@@ -66,41 +66,6 @@ const DOM = {
     indicatorsBtn: () => document.getElementById('indicatorsBtn'),
     fullscreenBtn: () => document.getElementById('fullscreenBtn'),
     
-
-// Load chart data for a symbol/timeframe
-async function loadChartData(symbol, timeframe) {
-    try {
-        // Try API first
-        const data = await Api?.getCandles?.(symbol, timeframe) || generateMockCandles(symbol);
-        Chart?.setData?.(data);
-    } catch (err) {
-        console.warn('[Chart] API failed, using mock data:', err);
-        Chart?.setData?.(generateMockCandles(symbol));
-    }
-}
-
-// Generate mock candle data for development
-function generateMockCandles(symbol) {
-    const candles = [];
-    let price = symbol.includes('EUR') ? 1.08 : 
-                symbol.includes('XAU') ? 2035 : 
-                symbol.includes('BTC') ? 43000 : 1.0;
-    const now = Math.floor(Date.now() / 1000);
-    
-    for (let i = 100; i >= 0; i--) {
-        const time = now - (i * 900); // 15-min candles
-        const volatility = price * 0.001;
-        const open = price + (Math.random() - 0.5) * volatility;
-        const high = open + Math.random() * volatility;
-        const low = open - Math.random() * volatility;
-        const close = low + Math.random() * (high - low);
-        price = close;
-        
-        candles.push({ time, open, high, low, close });
-    }
-    return candles;
-}
-
     // Bottom panel
     bottomPanel: () => document.getElementById('bottomPanel'),
     panelTabs: () => document.querySelectorAll('.panel-tab'),
@@ -396,10 +361,11 @@ function initChart() {
     const canvas = DOM.chartCanvas();
     if (!canvas) return;
     
-
-    // Initialize chart with lightweight-charts (pass container ID)
-    chartInstance = Chart?.init?.('chartCanvas');
+    // Initialize chart with lightweight-charts
+    chartInstance = Chart?.init?.("chartCanvas");
     if (chartInstance) loadChartData(AppState.currentSymbol, AppState.currentTimeframe);
+
+
 
     
     initChartControls();
@@ -738,7 +704,7 @@ async function submitOrder() {
     };
     
     try {
-        const result = await Trade?.submit?.(order) || await Api?.submitOrder?.(order);
+        const result = await Trade?.submit?.(order) || await Api?.placeOrder?.(order);
         Toast?.show?.(`Order submitted: ${order.side.toUpperCase()} ${order.size} ${order.symbol}`, 'success');
     } catch (err) {
         Toast?.show?.(err.message || 'Order failed', 'error');
@@ -933,18 +899,17 @@ function initHistory() {
 // ============================================================================
 
 function initSSE() {
-    // Start quote stream for price updates
-    SSE.startQuoteStream(handleQuote);
-    
-    // Start orderbook stream for depth updates
-    SSE.startOrderbookStream((data) => {
-        // Filter for current symbol or handle all
-        if (data.type === 'orderbook') {
-            handleOrderbook(data);
-        }
+    SSE?.init?.({
+        onQuote: handleQuote,
+        onTrade: handleTrade,
+        onOrderbook: handleOrderbook,
+        onPosition: handlePosition,
+        onOrder: handleOrder,
+        onConnect: () => updateConnectionStatus(true),
+        onDisconnect: () => updateConnectionStatus(false)
     });
     
-    console.log('[SSE] Streams initialized: /api/stream, /api/stream/levels');
+    SSE?.connect?.();
 }
 
 function handleQuote(data) {
@@ -997,82 +962,7 @@ function handleTrade(data) {
 }
 
 function handleOrderbook(data) {
-    // Update OrderBook module state
-    OrderBook?.update?.(data.bids, data.asks);
-    
-    // Render to DOM elements
-    const obBids = DOM.obBids();
-    const obAsks = DOM.obAsks();
-    const obSpread = DOM.obSpread();
-    
-    if (!obBids || !obAsks) return;
-    
-    // Format price with appropriate precision
-    const formatPrice = (price) => {
-        if (typeof price !== 'number') price = parseFloat(price);
-        if (isNaN(price)) return '--';
-        // Auto-detect decimals based on price magnitude
-        const decimals = price < 10 ? 5 : price < 1000 ? 2 : 0;
-        return price.toFixed(decimals);
-    };
-    
-    // Format size with K/M suffix
-    const formatSize = (size) => {
-        if (typeof size !== 'number') size = parseFloat(size);
-        if (isNaN(size)) return '--';
-        if (size >= 1000000) return (size / 1000000).toFixed(2) + 'M';
-        if (size >= 1000) return (size / 1000).toFixed(1) + 'K';
-        return size.toFixed(2);
-    };
-    
-    // Calculate max size for depth bars
-    const allSizes = [
-        ...(data.bids || []).map(b => b[1] || 0),
-        ...(data.asks || []).map(a => a[1] || 0)
-    ];
-    const maxSize = Math.max(...allSizes, 1);
-    
-    // Render asks (reversed - lowest ask at bottom near spread)
-    const asks = (data.asks || []).slice(0, 8);
-    obAsks.innerHTML = asks.reverse().map(([price, size]) => {
-        const depthPct = (size / maxSize) * 100;
-        return `
-            <div class="ob-row ask">
-                <span class="price">${formatPrice(price)}</span>
-                <span class="size">${formatSize(size)}</span>
-                <span class="total">${formatSize(size)}</span>
-                <div class="depth-bar" style="width: ${depthPct}%"></div>
-            </div>
-        `;
-    }).join('');
-    
-    // Render bids (highest bid at top near spread)
-    const bids = (data.bids || []).slice(0, 8);
-    obBids.innerHTML = bids.map(([price, size]) => {
-        const depthPct = (size / maxSize) * 100;
-        return `
-            <div class="ob-row bid">
-                <span class="price">${formatPrice(price)}</span>
-                <span class="size">${formatSize(size)}</span>
-                <span class="total">${formatSize(size)}</span>
-                <div class="depth-bar" style="width: ${depthPct}%"></div>
-            </div>
-        `;
-    }).join('');
-    
-    // Calculate and render spread
-    if (obSpread && bids.length > 0 && asks.length > 0) {
-        const bestBid = bids[0][0];
-        const bestAsk = data.asks[0][0]; // Use original asks (not reversed)
-        const spreadAbs = bestAsk - bestBid;
-        const spreadPct = ((spreadAbs / bestAsk) * 100).toFixed(3);
-        
-        const spreadPrice = obSpread.querySelector('.spread-price');
-        const spreadPctEl = obSpread.querySelector('.spread-pct');
-        
-        if (spreadPrice) spreadPrice.textContent = formatPrice(spreadAbs);
-        if (spreadPctEl) spreadPctEl.textContent = `${spreadPct}%`;
-    }
+    OrderBook?.update?.(data);
 }
 
 function handlePosition(data) {
@@ -1217,6 +1107,45 @@ if (document.readyState === 'loading') {
 }
 
 // ============================================================================
+
+// ============================================================================
+// CHART DATA LOADING
+// ============================================================================
+
+// Load chart data for a symbol/timeframe
+async function loadChartData(symbol, timeframe) {
+    try {
+        // Try API first
+        const data = await Api?.getCandles?.(symbol, timeframe) || generateMockCandles(symbol);
+        Chart?.setData?.(data);
+    } catch (err) {
+        console.warn('[Chart] API failed, using mock data:', err);
+        Chart?.setData?.(generateMockCandles(symbol));
+    }
+}
+
+// Generate mock candle data for development
+function generateMockCandles(symbol) {
+    const candles = [];
+    let price = symbol.includes('EUR') ? 1.08 : 
+                symbol.includes('XAU') ? 2035 : 
+                symbol.includes('BTC') ? 43000 : 1.0;
+    const now = Math.floor(Date.now() / 1000);
+    
+    for (let i = 100; i >= 0; i--) {
+        const time = now - (i * 900); // 15-min candles
+        const volatility = price * 0.001;
+        const open = price + (Math.random() - 0.5) * volatility;
+        const high = open + Math.random() * volatility;
+        const low = open - Math.random() * volatility;
+        const close = low + Math.random() * (high - low);
+        price = close;
+        
+        candles.push({ time, open, high, low, close });
+    }
+    return candles;
+}
+
 // GLOBAL APP OBJECT
 // ============================================================================
 
