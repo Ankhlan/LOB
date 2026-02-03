@@ -871,6 +871,17 @@ function initPositions() {
     });
 }
 
+async function loadPositions() {
+    try {
+        const data = await Api?.getPositions?.();
+        if (data) {
+            Positions?.update?.(data.positions || data, data.account);
+        }
+    } catch (err) {
+        console.warn('[Positions] Failed to load:', err);
+    }
+}
+
 function updatePositionsCount(count) {
     const badge = DOM.posCount();
     if (badge) badge.textContent = count || 0;
@@ -881,6 +892,17 @@ function initOrders() {
         container: DOM.ordersGrid(),
         onUpdate: updateOrdersCount
     });
+}
+
+async function loadOrders() {
+    try {
+        const data = await Api?.getOrders?.();
+        if (data) {
+            Orders?.update?.(data.orders || data);
+        }
+    } catch (err) {
+        console.warn('[Orders] Failed to load:', err);
+    }
 }
 
 function updateOrdersCount(count) {
@@ -1083,6 +1105,8 @@ async function boot() {
         
         // Phase 5: Load data
         await loadInstruments();
+        await loadPositions();
+        await loadOrders();
         
         // Phase 6: Select default instrument
         selectInstrument(AppState.currentSymbol);
