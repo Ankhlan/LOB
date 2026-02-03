@@ -80,6 +80,13 @@ const API = {
     async getOrderBook(symbol) {
         return this.get(`/api/orderbook/${symbol}`);
     },
+
+    // Get candlestick data for chart
+    async getCandles(symbol, timeframe = 'm15', count = 100) {
+        // Convert symbol format: XAU-MNT -> XAU/USD for FXCM
+        const fxcmSymbol = symbol.replace('-MNT', '/USD');
+        return this.get(`/api/candles?symbol=${encodeURIComponent(fxcmSymbol)}&tf=${timeframe}&count=${count}`);
+    },
     
     // Get account info
     async getAccount() {

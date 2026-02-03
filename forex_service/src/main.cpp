@@ -441,6 +441,40 @@ int main(int argc, char* argv[]) {
         }
     });
     
+
+    http.get("/api/candles", [](const HttpRequest& req, HttpResponse& res) {
+        // Extract symbol and timeframe from query params
+        // /api/candles?symbol=EUR/USD&tf=m15&count=100
+        std::string symbol = req.getParam("symbol").empty() ? "EUR/USD" : req.getParam("symbol");
+        std::string tf = req.getParam("tf").empty() ? "m15" : req.getParam("tf");
+        int count = (req.getParam("count").empty() ? 100 : std::stoi(req.getParam("count")));
+        
+        if (!gFxcm) {
+            res.error(500, "FXCM session not available");
+            return;
+        }
+        
+        auto candles = gFxcm->getHistory(symbol, tf, count);
+        
+        // Build JSON response
+        std::string json = "[";
+        for (size_t i = 0; i < candles.size(); ++i) {
+            const auto& c = candles[i];
+            if (i > 0) json += ",";
+            json += "{";
+            json += "\"time\":" + std::to_string(c.timestamp) + ",";
+            json += "\"open\":" + std::to_string(c.open) + ",";
+            json += "\"high\":" + std::to_string(c.high) + ",";
+            json += "\"low\":" + std::to_string(c.low) + ",";
+            json += "\"close\":" + std::to_string(c.close) + ",";
+            json += "\"volume\":" + std::to_string(c.volume);
+            json += "}";
+        }
+        json += "]";
+        
+        res.json(json);
+    });
+
     // Start HTTP server
     if (!http.start()) {
         LOG_ERROR("Failed to start HTTP server");
