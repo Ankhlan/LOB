@@ -150,16 +150,13 @@ const themes = ['dark', 'light', 'blue'];
 let currentThemeIndex = 0;
 
 function initTheme() {
-    const saved = localStorage.getItem('cre-theme') || 'dark';
-    currentThemeIndex = themes.indexOf(saved);
-    if (currentThemeIndex === -1) currentThemeIndex = 0;
-    applyTheme(themes[currentThemeIndex]);
+    // Use Theme module for persistence
+    Theme?.init?.();
 }
 
 function applyTheme(theme) {
     document.body.setAttribute('data-theme', theme);
-    localStorage.setItem('cre-theme', theme);
-    Theme?.setTheme?.(theme);
+    Theme?.set?.(theme);
 }
 
 function cycleTheme() {
