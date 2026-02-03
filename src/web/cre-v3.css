@@ -1523,6 +1523,131 @@ a {
 .text-center { text-align: center; }
 .nowrap { white-space: nowrap; }
 
+
+/* ============================================================================
+   PRODUCTS VIEW
+   ============================================================================ */
+
+.products-view {
+    padding: var(--spacing-lg);
+    background: var(--bg-primary);
+    overflow-y: auto;
+}
+
+.products-header {
+    margin-bottom: var(--spacing-xl);
+}
+
+.products-header h2 {
+    color: var(--text-primary);
+    font-size: 1.5rem;
+    margin: 0;
+}
+
+/* Featured Product Card */
+.product-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    max-width: 600px;
+}
+
+.product-card.featured {
+    border-color: var(--accent-primary);
+}
+
+.product-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--spacing-md);
+}
+
+.product-card-header h3 {
+    color: var(--text-primary);
+    font-size: 1.25rem;
+    margin: 0;
+}
+
+.product-card-header .badge {
+    background: var(--accent-primary);
+    color: var(--bg-primary);
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.product-description {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    margin-bottom: var(--spacing-md);
+}
+
+/* Stats Grid */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+}
+
+.stat-item {
+    text-align: center;
+}
+
+.stat-label {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-value {
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    margin-top: 0.25rem;
+}
+
+/* Specs Table */
+.specs-table {
+    width: 100%;
+    margin-bottom: var(--spacing-lg);
+}
+
+.specs-table tr {
+    border-bottom: 1px solid var(--border-color);
+}
+
+.specs-table td {
+    padding: var(--spacing-sm) 0;
+    font-size: 0.875rem;
+}
+
+.specs-table td:first-child {
+    color: var(--text-muted);
+}
+
+.specs-table td:last-child {
+    color: var(--text-primary);
+    text-align: right;
+}
+
+/* Actions */
+.product-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+/* Products List (future) */
+.products-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--spacing-md);
+    margin-top: var(--spacing-xl);
+}
 /* ============================================
    13. RESPONSIVE ADJUSTMENTS
    ============================================ */
