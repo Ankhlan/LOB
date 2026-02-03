@@ -82,12 +82,10 @@ const API = {
     },
 
     // Get candlestick data for chart
-    async getCandles(symbol, timeframe = 'm15', count = 100) {
-        // Convert symbol format: XAU-MNT -> XAU/USD for FXCM
-        const fxcmSymbol = symbol.replace('-MNT', '/USD');
-        return this.get(`/api/candles?symbol=${encodeURIComponent(fxcmSymbol)}&tf=${timeframe}&count=${count}`);
+    async getCandles(symbol, timeframe = "15", limit = 100) {
+        // Use path parameter format: /api/candles/:symbol
+        return this.get(`/api/candles/${encodeURIComponent(symbol)}?timeframe=${timeframe}&limit=${limit}`);
     },
-    
     // Get account info
     async getAccount() {
         return this.get('/api/account');

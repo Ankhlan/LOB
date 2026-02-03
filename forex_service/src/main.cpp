@@ -449,12 +449,37 @@ int main(int argc, char* argv[]) {
         std::string tf = req.getParam("tf").empty() ? "m15" : req.getParam("tf");
         int count = (req.getParam("count").empty() ? 100 : std::stoi(req.getParam("count")));
         
-        if (!gFxcm) {
-            res.error(500, "FXCM session not available");
-            return;
+        std::vector<OHLCV> candles;
+        if (gFxcm && gFxcm->isConnected()) {
+            candles = gFxcm->getHistory(symbol, tf, count);
+        } else {
+            // Generate simulated candles for demo mode
+            auto now = std::chrono::system_clock::now();
+            auto epoch = now.time_since_epoch();
+            int64_t nowTs = std::chrono::duration_cast<std::chrono::seconds>(epoch).count();
+            
+            double basePrice = 3564.0;
+            std::srand(static_cast<unsigned>(nowTs));
+            double price = basePrice;
+            int tfSeconds = 60;
+            if (tf == "m5" || tf == "5m") tfSeconds = 300;
+            else if (tf == "m15" || tf == "15m") tfSeconds = 900;
+            else if (tf == "h1" || tf == "1h") tfSeconds = 3600;
+            else if (tf == "d1" || tf == "1d") tfSeconds = 86400;
+            
+            for (int i = count - 1; i >= 0; --i) {
+                OHLCV c;
+                c.timestamp = nowTs - (i * tfSeconds);
+                double change = (std::rand() % 200 - 100) / 10000.0;
+                c.open = price;
+                c.high = price * (1.0 + std::abs(change) + 0.001);
+                c.low = price * (1.0 - std::abs(change) - 0.001);
+                price = price * (1.0 + change);
+                c.close = price;
+                c.volume = 1000 + (std::rand() % 9000);
+                candles.push_back(c);
+            }
         }
-        
-        auto candles = gFxcm->getHistory(symbol, tf, count);
         
         // Build JSON response
         std::string json = "[";

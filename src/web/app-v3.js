@@ -1142,9 +1142,10 @@ if (document.readyState === 'loading') {
 // Load chart data for a symbol/timeframe
 async function loadChartData(symbol, timeframe) {
     try {
-        // Try API first
-        const data = await Api?.getCandles?.(symbol, timeframe) || generateMockCandles(symbol);
-        Chart?.setData?.(data);
+        // Try API first - response format: { symbol, timeframe, candles: [...] }
+        const response = await Api?.getCandles?.(symbol, timeframe);
+        const candles = response?.candles || generateMockCandles(symbol);
+        Chart?.setData?.(candles);
     } catch (err) {
         console.warn('[Chart] API failed, using mock data:', err);
         Chart?.setData?.(generateMockCandles(symbol));
