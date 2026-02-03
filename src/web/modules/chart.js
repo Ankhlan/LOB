@@ -152,6 +152,23 @@ const Chart = {
         }
     },
     
+
+    // Update with tick price data (from SSE quotes)
+    updatePrice(data) {
+        if (!data || !this.mainSeries) return;
+        
+        const price = data.price || ((data.bid + data.ask) / 2);
+        const time = Math.floor(Date.now() / 1000);
+        
+        // Update the last candle with new close price
+        this.mainSeries.update({
+            time,
+            open: price,
+            high: price,
+            low: price,
+            close: price
+        });
+    },
     // Set timeframe
     setTimeframe(tf) {
         if (!this.timeframes[tf]) return;
