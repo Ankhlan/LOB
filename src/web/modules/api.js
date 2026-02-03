@@ -100,7 +100,7 @@ const API = {
     
     // Get orders
     async getOrders() {
-        return this.get('/api/orders');
+        return this.get('/api/orders/open');
     },
     
     // Place order
