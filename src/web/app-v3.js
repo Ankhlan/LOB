@@ -916,27 +916,47 @@ function initHistory() {
 // ============================================================================
 
 function initSSE() {
-    SSE?.init?.({
-        onQuote: handleQuote,
-        onTrade: handleTrade,
-        onOrderbook: handleOrderbook,
-        onPosition: handlePosition,
-        onOrder: handleOrder,
-        onConnect: () => updateConnectionStatus(true),
-        onDisconnect: () => updateConnectionStatus(false)
+    // Start quote stream for price updates
+    SSE?.startQuoteStream?.((data) => {
+        // SSE sends array of quotes
+        if (Array.isArray(data)) {
+            data.forEach(quote => handleQuote(quote));
+        } else if (data.symbol) {
+            handleQuote(data);
+        }
     });
     
-    SSE?.connect?.();
+    // Start orderbook stream for depth updates
+    SSE?.startOrderbookStream?.((data) => {
+        // SSE sends {symbol: {asks:[], bids:[]}, ...}
+        if (data && typeof data === 'object') {
+            // Find current symbol's orderbook
+            const symbol = AppState.currentSymbol;
+            if (symbol && data[symbol]) {
+                handleOrderbook(data[symbol]);
+            } else {
+                // Use first available if no current symbol
+                const first = Object.keys(data)[0];
+                if (first) handleOrderbook(data[first]);
+            }
+        }
+    });
+    
+    updateConnectionStatus(true);
 }
 
 function handleQuote(data) {
+    // SSE format: { symbol, bid, ask, mark, mid, spread, timestamp }
+    const price = data.price || data.mark || data.mid || data.bid;
+    const formattedPrice = Utils?.formatPrice?.(price) || price?.toFixed(2) || '-';
+    
     // Update instrument in list
     const item = document.querySelector(`.inst-item[data-symbol="${data.symbol}"]`);
     if (item) {
         const priceEl = item.querySelector('.inst-price');
         const changeEl = item.querySelector('.inst-chg');
-        if (priceEl) priceEl.textContent = data.price;
-        if (changeEl) {
+        if (priceEl) priceEl.textContent = formattedPrice;
+        if (changeEl && data.change !== undefined) {
             changeEl.textContent = `${data.change >= 0 ? '+' : ''}${data.change?.toFixed(2)}%`;
             changeEl.className = `inst-chg ${data.change >= 0 ? 'positive' : 'negative'}`;
         }
@@ -946,10 +966,16 @@ function handleQuote(data) {
     if (data.symbol === AppState.currentSymbol) {
         const topPrice = DOM.topPrice();
         const topChange = DOM.topChange();
-        if (topPrice) topPrice.textContent = data.price;
-        if (topChange) {
+        if (topPrice) topPrice.textContent = formattedPrice;
+        if (topChange && data.change !== undefined) {
             topChange.textContent = `${data.change >= 0 ? '+' : ''}${data.change?.toFixed(2)}%`;
             topChange.className = `inst-change ${data.change >= 0 ? 'positive' : 'negative'}`;
+        }
+        
+        // Also update order entry price if empty
+        const orderPrice = DOM.orderPrice();
+        if (orderPrice && !orderPrice.value) {
+            orderPrice.value = price?.toFixed(2) || '';
         }
     }
     
@@ -979,7 +1005,44 @@ function handleTrade(data) {
 }
 
 function handleOrderbook(data) {
-    OrderBook?.update?.(data);
+    // SSE format: { a: [[price, size], ...], b: [[price, size], ...], t: timestamp }
+    // Or REST format: { asks: [{price, quantity}], bids: [{price, quantity}] }
+    
+    const asks = data.a || data.asks || [];
+    const bids = data.b || data.bids || [];
+    
+    // Render asks (lowest first, reversed so lowest is at bottom near spread)
+    const asksContainer = DOM.obAsks();
+    if (asksContainer) {
+        const askHtml = asks.slice(0, 8).reverse().map(ask => {
+            const price = Array.isArray(ask) ? ask[0] : ask.price;
+            const size = Array.isArray(ask) ? ask[1] : (ask.quantity || ask.size);
+            return `<div class="ob-row ask">
+                <span class="price">${Utils?.formatPrice?.(price) || price}</span>
+                <span class="size">${size}</span>
+                <div class="depth-bar" style="width: ${Math.min(100, size * 10)}%"></div>
+            </div>`;
+        }).join('');
+        asksContainer.innerHTML = askHtml || '<div class="ob-empty">No asks</div>';
+    }
+    
+    // Render bids (highest first)
+    const bidsContainer = DOM.obBids();
+    if (bidsContainer) {
+        const bidHtml = bids.slice(0, 8).map(bid => {
+            const price = Array.isArray(bid) ? bid[0] : bid.price;
+            const size = Array.isArray(bid) ? bid[1] : (bid.quantity || bid.size);
+            return `<div class="ob-row bid">
+                <span class="price">${Utils?.formatPrice?.(price) || price}</span>
+                <span class="size">${size}</span>
+                <div class="depth-bar" style="width: ${Math.min(100, size * 10)}%"></div>
+            </div>`;
+        }).join('');
+        bidsContainer.innerHTML = bidHtml || '<div class="ob-empty">No bids</div>';
+    }
+    
+    // Also update via OrderBook module if available
+    OrderBook?.update?.(bids, asks);
 }
 
 function handlePosition(data) {
