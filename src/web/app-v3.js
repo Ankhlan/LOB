@@ -221,8 +221,18 @@ function switchView(view) {
         item.classList.toggle('active', item.dataset.view === view);
     });
     
-    // TODO: Show/hide workspace sections based on view
-    console.log(`Switched to view: ${view}`);
+    // Show/hide views
+    const workspace = document.querySelector('.workspace');
+    const productsView = document.querySelector('#productsView');
+    
+    if (view === 'products') {
+        if (workspace) workspace.style.display = 'none';
+        if (productsView) productsView.style.display = 'block';
+    } else {
+        // Default to trading view
+        if (workspace) workspace.style.display = 'grid';
+        if (productsView) productsView.style.display = 'none';
+    }
 }
 
 // ============================================================================
