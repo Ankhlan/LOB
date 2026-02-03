@@ -467,7 +467,7 @@ class ChartCanvas {
     }
 }
 
-let state = { selected: 'XAU-MNT-PERP', side: 'long', instruments: [], quotes: {}, chart: null, candleSeries: null, priceHistory: {}, timeframe: '15', theme: 'dark', lang: 'en', user: null, authToken: null };
+let state = { selected: 'XAU-MNT-PERP', side: 'long', orderType: 'market', instruments: [], quotes: {}, chart: null, candleSeries: null, priceHistory: {}, timeframe: '15', theme: 'dark', lang: 'en', user: null, authToken: null };
 const fmt = (n, d=0) => new Intl.NumberFormat('en-US', {minimumFractionDigits:d, maximumFractionDigits:d}).format(n);
 
 // ===== TRANSLATIONS (EN/MN) =====
@@ -1596,6 +1596,12 @@ function selectInstrument(symbol) {
     document.getElementById('chartSymbol').textContent = symbol;
     document.getElementById('tabSymbol').textContent = symbol;
     document.getElementById('submitBtn').textContent = state.side === 'long' ? 'BUY ' + symbol : 'SELL ' + symbol;
+    
+    // Load marketplace info for this symbol
+    const product = state.instruments.find(i => i.symbol === symbol);
+    if (product) {
+        loadMarketInfo(symbol, product);
+    }
 }
 
 function updateSelectedDisplay() {
@@ -1921,6 +1927,32 @@ function setSide(s) {
     const btn = document.getElementById('submitBtn');
     btn.className = 'submit-btn ' + (s === 'long' ? 'buy' : 'sell');
     btn.textContent = s === 'long' ? 'BUY ' + state.selected : 'SELL ' + state.selected;
+    updateSummary();
+}
+
+// Set order type (Market, Limit, Stop)
+function setOrderType(type) {
+    state.orderType = type;
+    
+    // Update tab UI
+    document.querySelectorAll('.trade-tab').forEach(tab => {
+        tab.classList.remove('active');
+        if (tab.textContent.toLowerCase() === type) {
+            tab.classList.add('active');
+        }
+    });
+    
+    // Show/hide limit price input based on order type
+    const limitPriceRow = document.getElementById('limitPriceRow');
+    const stopPriceRow = document.getElementById('stopPriceRow');
+    
+    if (limitPriceRow) {
+        limitPriceRow.style.display = (type === 'limit' || type === 'stop') ? 'flex' : 'none';
+    }
+    if (stopPriceRow) {
+        stopPriceRow.style.display = type === 'stop' ? 'flex' : 'none';
+    }
+    
     updateSummary();
 }
 
@@ -3128,6 +3160,21 @@ function toggleBankPanel() {
     panel.classList.toggle('visible', bankRatesPanelVisible);
     if (bankRatesPanelVisible) {
         fetchBankRates();
+    }
+}
+
+// Toggle Market Info Panel (collapse/expand)
+function toggleMarketInfo() {
+    const panel = document.getElementById('marketInfoPanel');
+    if (panel) {
+        panel.classList.toggle('collapsed');
+    }
+}
+
+// Load marketplace info when symbol changes
+function loadMarketInfo(symbol, product) {
+    if (window.Marketplace && typeof Marketplace.loadMarket === 'function') {
+        Marketplace.loadMarket(symbol, product);
     }
 }
 

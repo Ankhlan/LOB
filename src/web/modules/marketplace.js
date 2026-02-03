@@ -196,17 +196,65 @@ const Marketplace = {
         `;
     },
 
-    // Mongolian FX (USDMNT with bank rates)
+// Mongolian FX (USDMNT with bank rates) - TRUE MARKETPLACE VIEW
+    // Shows: WHO is selling at what rate, are there buyers/sellers, trading terms
     renderMongolianFX(product) {
         const rates = this.bankRates;
+        
+        // ═══════════════════════════════════════════════════════════
+        // SECTION 1: CRE ORDERBOOK - Who is selling at what rate?
+        // ═══════════════════════════════════════════════════════════
+        const orderbookHTML = `
+            <div class="marketplace-orderbook">
+                <h3>📖 CRE Order Book</h3>
+                <p class="marketplace-subtitle">Live orders from market participants</p>
+                
+                <div class="orderbook-summary">
+                    <div class="ob-stat buyers">
+                        <span class="ob-count" id="usdmnt-bid-count">--</span>
+                        <span class="ob-label">Buyers</span>
+                    </div>
+                    <div class="ob-stat sellers">
+                        <span class="ob-count" id="usdmnt-ask-count">--</span>
+                        <span class="ob-label">Sellers</span>
+                    </div>
+                    <div class="ob-stat spread">
+                        <span class="ob-count" id="usdmnt-spread">--</span>
+                        <span class="ob-label">Spread</span>
+                    </div>
+                </div>
+
+                <div class="orderbook-mini">
+                    <div class="ob-side bids">
+                        <div class="ob-header">BIDS (Buyers)</div>
+                        <div class="ob-levels" id="usdmnt-bids">
+                            <div class="ob-empty">No bids yet</div>
+                        </div>
+                    </div>
+                    <div class="ob-side asks">
+                        <div class="ob-header">ASKS (Sellers)</div>
+                        <div class="ob-levels" id="usdmnt-asks">
+                            <div class="ob-empty">No asks yet</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="ob-transparency">
+                    <small>Orders shown are from CRE participants. You can be a market maker.</small>
+                </div>
+            </div>
+        `;
+
+        // ═══════════════════════════════════════════════════════════
+        // SECTION 2: BANK COMPARISON - Reference rates from banks
+        // ═══════════════════════════════════════════════════════════
         let bankTableHTML = '<div class="bank-loading">Loading bank rates...</div>';
         let bestRateHTML = '';
-        let mongolBankHTML = '';
 
         if (rates && rates.banks && rates.banks.length > 0) {
             const bankRows = rates.banks.map(bank => `
                 <tr>
-                    <td class="bank-name">${bank.bank_name}</td>
+                    <td class="bank-name">${bank.bank_name || bank.bank_id}</td>
                     <td class="bid">${bank.bid.toFixed(2)}</td>
                     <td class="ask">${bank.ask.toFixed(2)}</td>
                     <td class="spread">${(bank.ask - bank.bid).toFixed(2)}</td>
@@ -218,8 +266,8 @@ const Marketplace = {
                     <thead>
                         <tr>
                             <th>Bank</th>
-                            <th>Bid</th>
-                            <th>Ask</th>
+                            <th>They Buy USD</th>
+                            <th>They Sell USD</th>
                             <th>Spread</th>
                         </tr>
                     </thead>
@@ -231,30 +279,160 @@ const Marketplace = {
 
             bestRateHTML = `
                 <div class="best-rate">
-                    <span class="best-label">Best Market:</span>
-                    <span class="best-bid">${rates.best_bid}</span> / 
-                    <span class="best-ask">${rates.best_ask}</span>
-                    <span class="best-spread">(Spread: ${rates.spread})</span>
+                    <span class="best-label">Best Available:</span>
+                    <span class="best-bid">${rates.best_bid} MNT</span> /
+                    <span class="best-ask">${rates.best_ask} MNT</span>
+                    <span class="best-spread">(${rates.spread} MNT spread)</span>
                 </div>
             `;
         }
 
-        mongolBankHTML = `
-            <div class="mongol-bank">
-                <h4>🏛️ Mongol Bank Policy</h4>
-                <p>Official reference rate set daily by Bank of Mongolia. 
-                   Foreign reserves: ~$4.2B. Current stance: Neutral intervention policy.</p>
+        const bankComparisonHTML = `
+            <div class="marketplace-banks">
+                <h3>🏦 Bank Reference Rates</h3>
+                <p class="marketplace-subtitle">Compare with commercial bank rates</p>
+                ${bankTableHTML}
+                ${bestRateHTML}
             </div>
         `;
 
-        return `
-            <div class="market-info mn-fx">
-                <h3>🏦 Bank Rates</h3>
-                ${bankTableHTML}
-                ${bestRateHTML}
-                ${mongolBankHTML}
+        // ═══════════════════════════════════════════════════════════
+        // SECTION 3: TRADING TERMS - What are the terms to participate?
+        // ═══════════════════════════════════════════════════════════
+        const marginPct = product.margin_rate ? (product.margin_rate * 100).toFixed(0) : '2';
+        const tradingTermsHTML = `
+            <div class="marketplace-terms">
+                <h3>📋 Trading Terms</h3>
+                <p class="marketplace-subtitle">Requirements to participate in this market</p>
+                
+                <div class="terms-grid">
+                    <div class="term-item">
+                        <span class="term-label">Margin Required</span>
+                        <span class="term-value">${marginPct}%</span>
+                    </div>
+                    <div class="term-item">
+                        <span class="term-label">Min Trade</span>
+                        <span class="term-value">${product.min_order || 1} USD</span>
+                    </div>
+                    <div class="term-item">
+                        <span class="term-label">Max Leverage</span>
+                        <span class="term-value">${Math.round(100 / parseFloat(marginPct))}x</span>
+                    </div>
+                    <div class="term-item">
+                        <span class="term-label">Funding Rate</span>
+                        <span class="term-value">${((product.funding_rate || 0.0001) * 100).toFixed(2)}% / 8h</span>
+                    </div>
+                </div>
+
+                <div class="terms-explanation">
+                    <h4>How This Works</h4>
+                    <ul>
+                        <li><strong>To Go Long (Buy USD):</strong> You profit when MNT weakens</li>
+                        <li><strong>To Go Short (Sell USD):</strong> You profit when MNT strengthens</li>
+                        <li><strong>Settlement:</strong> Perpetual contract, no expiry</li>
+                        <li><strong>Pricing:</strong> Bank of Mongolia reference + CRE orderbook</li>
+                    </ul>
+                </div>
             </div>
         `;
+
+        // ═══════════════════════════════════════════════════════════
+        // SECTION 4: TRANSPARENCY - Where does pricing come from?
+        // ═══════════════════════════════════════════════════════════
+        const transparencyHTML = `
+            <div class="marketplace-transparency">
+                <h3>🔍 Pricing Transparency</h3>
+                <div class="transparency-box">
+                    <p><strong>Mark Price:</strong> Weighted average of Bank of Mongolia rate + commercial bank rates</p>
+                    <p><strong>Index Price:</strong> Real-time from TDB, Golomt, and other major banks</p>
+                    <p><strong>CRE Spread:</strong> Determined by our orderbook - you can provide liquidity!</p>
+                </div>
+            </div>
+        `;
+
+        // Initialize orderbook updates for this market
+        setTimeout(() => this.initUsdMntOrderbook(), 100);
+
+        return `
+            <div class="market-info mn-fx marketplace-view">
+                ${orderbookHTML}
+                ${bankComparisonHTML}
+                ${tradingTermsHTML}
+                ${transparencyHTML}
+            </div>
+        `;
+    },
+
+    // Initialize live orderbook updates for USDMNT
+    initUsdMntOrderbook() {
+        // Get current orderbook state from global OrderBook module if available
+        if (window.OrderBook && window.OrderBook.state) {
+            this.updateUsdMntOrderbook(
+                window.OrderBook.state.bids,
+                window.OrderBook.state.asks
+            );
+        }
+        
+        // Also listen for SSE updates
+        if (window.sseState && window.sseState.levels) {
+            this.updateUsdMntOrderbook(
+                window.sseState.levels.bids,
+                window.sseState.levels.asks
+            );
+        }
+    },
+
+    // Update USDMNT orderbook display
+    updateUsdMntOrderbook(bids, asks) {
+        const bidsEl = document.getElementById('usdmnt-bids');
+        const asksEl = document.getElementById('usdmnt-asks');
+        const bidCountEl = document.getElementById('usdmnt-bid-count');
+        const askCountEl = document.getElementById('usdmnt-ask-count');
+        const spreadEl = document.getElementById('usdmnt-spread');
+
+        if (!bidsEl || !asksEl) return;
+
+        // Update bid count
+        const bidCount = (bids || []).length;
+        const askCount = (asks || []).length;
+        if (bidCountEl) bidCountEl.textContent = bidCount;
+        if (askCountEl) askCountEl.textContent = askCount;
+
+        // Calculate spread
+        if (bids && bids.length > 0 && asks && asks.length > 0) {
+            const bestBid = parseFloat(bids[0].price || bids[0][0]);
+            const bestAsk = parseFloat(asks[0].price || asks[0][0]);
+            const spread = bestAsk - bestBid;
+            if (spreadEl) spreadEl.textContent = spread.toFixed(2);
+        }
+
+        // Render bid levels
+        if (bids && bids.length > 0) {
+            bidsEl.innerHTML = bids.slice(0, 5).map(b => {
+                const price = parseFloat(b.price || b[0]);
+                const qty = parseFloat(b.quantity || b.qty || b[1]);
+                return `<div class="ob-level bid">
+                    <span class="ob-price">${price.toFixed(2)}</span>
+                    <span class="ob-qty">${qty.toFixed(4)}</span>
+                </div>`;
+            }).join('');
+        } else {
+            bidsEl.innerHTML = '<div class="ob-empty">No bids yet - be the first!</div>';
+        }
+
+        // Render ask levels
+        if (asks && asks.length > 0) {
+            asksEl.innerHTML = asks.slice(0, 5).map(a => {
+                const price = parseFloat(a.price || a[0]);
+                const qty = parseFloat(a.quantity || a.qty || a[1]);
+                return `<div class="ob-level ask">
+                    <span class="ob-price">${price.toFixed(2)}</span>
+                    <span class="ob-qty">${qty.toFixed(4)}</span>
+                </div>`;
+            }).join('');
+        } else {
+            asksEl.innerHTML = '<div class="ob-empty">No asks yet - be the first!</div>';
+        }
     },
 
     // Crypto Markets (BTC, ETH, etc.)

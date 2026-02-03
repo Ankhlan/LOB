@@ -221,6 +221,19 @@
                     <div class="chart-change up" id="chartChange">+0.00%</div>
                 </div>
                 <div class="chart-container" id="chartContainer"></div>
+                <!-- Market Info Panel (Bespoke per market) -->
+                <div class="market-info-panel" id="marketInfoPanel">
+                    <div class="market-info-header" onclick="toggleMarketInfo()">
+                        <span class="market-info-title">
+                            <span id="marketName">Gold / Mongolian Tugrik</span>
+                            <span class="market-info-badge">ℹ Market Info</span>
+                        </span>
+                        <span class="market-info-toggle" id="marketInfoToggle">▼</span>
+                    </div>
+                    <div class="market-info-content" id="marketInfoContent">
+                        <!-- Bespoke market info rendered by Marketplace module -->
+                    </div>
+                </div>
                 <!-- Multi-Chart Grid (hidden by default) -->
                 <div class="chart-grid" id="chartGrid" style="display:none;">
                     <div class="chart-cell" data-slot="0">
@@ -295,9 +308,9 @@
         <!-- TRADE PANEL -->
         <aside class="trade-panel">
             <div class="trade-tabs">
-                <div class="trade-tab active">Market</div>
-                <div class="trade-tab">Limit</div>
-                <div class="trade-tab">Stop</div>
+                <div class="trade-tab active" onclick="setOrderType('market')">Market</div>
+                <div class="trade-tab" onclick="setOrderType('limit')">Limit</div>
+                <div class="trade-tab" onclick="setOrderType('stop')">Stop</div>
             </div>
             <div class="trade-form">
                 <div class="side-btns">
