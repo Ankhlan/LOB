@@ -1,247 +1,179 @@
-// CRE OrderBook Module
-// Order book rendering and management
+// CRE OrderBook Module v2 - Row-based rendering
+// Works with v3 UI layout (obAsks, obBids, obSpread)
 
 const OrderBook = {
-    // Canvas elements
-    bidCanvas: null,
-    askCanvas: null,
-    ladderContainer: null,
+    // DOM elements
+    asksContainer: null,
+    bidsContainer: null,
+    spreadEl: null,
     
     // State
     state: {
         bids: [],
         asks: [],
-        targetBids: [],
-        targetAsks: [],
-        animFrame: null,
-        view: 'both', // 'both', 'bids', 'asks'
-        precision: 5
+        symbol: null,
+        precision: 2
     },
     
-    // Animation settings
-    animSpeed: 0.15,
+    // Configuration
+    maxLevels: 8,
     
-    // Initialize
     init() {
-        this.bidCanvas = document.getElementById('bidLevels');
-        this.askCanvas = document.getElementById('askLevels');
-        this.ladderContainer = document.getElementById('orderLadder');
+        this.asksContainer = document.getElementById('obAsks');
+        this.bidsContainer = document.getElementById('obBids');
+        this.spreadEl = document.getElementById('obSpread');
         
-        // Start animation loop if not already running
-        if (!this.state.animFrame) {
-            this.animate();
-        }
+        // Set up precision buttons
+        const precBtns = document.querySelectorAll('.prec-btn');
+        precBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                precBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this.state.precision = parseFloat(btn.dataset.prec) || 2;
+                this.render();
+            });
+        });
+        
+        console.log('[OrderBook] Initialized with row-based renderer');
     },
     
-    // Update order book data
+    setSymbol(symbol) {
+        this.state.symbol = symbol;
+        this.clear();
+    },
+    
     update(bids, asks) {
-        // Set target values for smooth animation
-        this.state.targetBids = (bids || []).slice(0, 8).map(b => ({
+        // Parse and store data
+        this.state.bids = (bids || []).map(b => ({
             price: parseFloat(b.price || b[0]),
             qty: parseFloat(b.quantity || b.qty || b[1])
         }));
         
-        this.state.targetAsks = (asks || []).slice(0, 8).map(a => ({
+        this.state.asks = (asks || []).map(a => ({
             price: parseFloat(a.price || a[0]),
             qty: parseFloat(a.quantity || a.qty || a[1])
         }));
         
-        // Initialize display state if empty
-        if (this.state.bids.length === 0) {
-            this.state.bids = this.state.targetBids.map(b => ({ ...b }));
-        }
-        if (this.state.asks.length === 0) {
-            this.state.asks = this.state.targetAsks.map(a => ({ ...a }));
-        }
-    },
-    
-    // Animation loop
-    animate() {
-        this.interpolate();
         this.render();
-        this.state.animFrame = requestAnimationFrame(() => this.animate());
     },
     
-    // Interpolate between current and target values
-    interpolate() {
-        const lerp = (a, b, t) => a + (b - a) * t;
-        const speed = this.animSpeed;
-        
-        // Ensure arrays match length
-        while (this.state.bids.length < this.state.targetBids.length) {
-            this.state.bids.push({ price: 0, qty: 0 });
-        }
-        while (this.state.asks.length < this.state.targetAsks.length) {
-            this.state.asks.push({ price: 0, qty: 0 });
-        }
-        
-        // Interpolate bids
-        for (let i = 0; i < this.state.targetBids.length; i++) {
-            const target = this.state.targetBids[i];
-            const current = this.state.bids[i];
-            current.price = lerp(current.price, target.price, speed);
-            current.qty = lerp(current.qty, target.qty, speed);
-        }
-        
-        // Interpolate asks
-        for (let i = 0; i < this.state.targetAsks.length; i++) {
-            const target = this.state.targetAsks[i];
-            const current = this.state.asks[i];
-            current.price = lerp(current.price, target.price, speed);
-            current.qty = lerp(current.qty, target.qty, speed);
-        }
-    },
-    
-    // Render order book
     render() {
-        const maxBidQty = Math.max(...this.state.bids.map(b => b.qty), 0.01);
-        const maxAskQty = Math.max(...this.state.asks.map(a => a.qty), 0.01);
-        const maxQty = Math.max(maxBidQty, maxAskQty);
+        if (!this.asksContainer || !this.bidsContainer) return;
         
-        this.drawCanvas(this.bidCanvas, this.state.bids, true, maxQty);
-        this.drawCanvas(this.askCanvas, this.state.asks, false, maxQty);
+        const { bids, asks, precision } = this.state;
+        const decimals = precision < 1 ? 2 : (precision >= 1 ? 0 : 1);
+        
+        // Clear containers
+        this.asksContainer.innerHTML = '';
+        this.bidsContainer.innerHTML = '';
+        
+        // Calculate max quantity for depth bars
+        const maxQty = Math.max(
+            ...bids.map(b => b.qty),
+            ...asks.map(a => a.qty),
+            1
+        );
+        
+        // Render asks (sorted descending, highest at top)
+        const sortedAsks = [...asks].sort((a, b) => b.price - a.price);
+        for (const ask of sortedAsks.slice(0, this.maxLevels)) {
+            const row = this.createRow(ask, 'ask', maxQty, decimals);
+            this.asksContainer.appendChild(row);
+        }
+        
+        // Render bids (sorted descending, highest at top)
+        const sortedBids = [...bids].sort((a, b) => b.price - a.price);
+        for (const bid of sortedBids.slice(0, this.maxLevels)) {
+            const row = this.createRow(bid, 'bid', maxQty, decimals);
+            this.bidsContainer.appendChild(row);
+        }
+        
+        // Update spread
+        this.renderSpread();
     },
     
-    // Draw a canvas (bids or asks)
-    drawCanvas(canvas, levels, isBids, maxQty) {
-        if (!canvas) return;
+    createRow(level, side, maxQty, decimals) {
+        const row = document.createElement('div');
+        row.className = `ob-row ${side}`;
         
-        const ctx = canvas.getContext('2d');
-        const w = canvas.width;
-        const h = canvas.height;
+        const depthPct = (level.qty / maxQty * 100).toFixed(0);
+        row.style.setProperty('--depth', `${depthPct}%`);
         
-        ctx.clearRect(0, 0, w, h);
+        row.innerHTML = `
+            <span class="ob-price">${this.formatPrice(level.price, decimals)}</span>
+            <span class="ob-size">${this.formatQty(level.qty)}</span>
+            <span class="ob-total">${this.formatQty(level.qty * level.price)}</span>
+        `;
         
-        if (levels.length === 0) return;
-        
-        const barHeight = h / Math.max(levels.length, 1);
-        const color = isBids ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)';
-        const textColor = isBids ? '#22c55e' : '#ef4444';
-        
-        levels.forEach((level, i) => {
-            const y = i * barHeight;
-            const barWidth = (level.qty / maxQty) * w * 0.8;
-            
-            // Draw bar
-            ctx.fillStyle = color;
-            if (isBids) {
-                ctx.fillRect(w - barWidth, y, barWidth, barHeight - 1);
-            } else {
-                ctx.fillRect(0, y, barWidth, barHeight - 1);
-            }
-            
-            // Draw price and qty text
-            ctx.fillStyle = textColor;
-            ctx.font = '11px monospace';
-            ctx.textBaseline = 'middle';
-            
-            const priceText = this.formatPrice(level.price);
-            const qtyText = this.formatQty(level.qty);
-            
-            if (isBids) {
-                ctx.textAlign = 'right';
-                ctx.fillText(priceText, w - 5, y + barHeight / 2);
-                ctx.fillStyle = '#888';
-                ctx.textAlign = 'left';
-                ctx.fillText(qtyText, 5, y + barHeight / 2);
-            } else {
-                ctx.textAlign = 'left';
-                ctx.fillText(priceText, 5, y + barHeight / 2);
-                ctx.fillStyle = '#888';
-                ctx.textAlign = 'right';
-                ctx.fillText(qtyText, w - 5, y + barHeight / 2);
+        // Click to fill price
+        row.addEventListener('click', () => {
+            const priceInput = document.getElementById('orderPrice');
+            if (priceInput) {
+                priceInput.value = level.price;
+                priceInput.dispatchEvent(new Event('input'));
             }
         });
+        
+        return row;
     },
     
-    // Format price
-    formatPrice(price) {
-        if (!price || isNaN(price)) return '--';
-        return price.toFixed(this.state.precision);
+    renderSpread() {
+        if (!this.spreadEl) return;
+        
+        const { bids, asks } = this.state;
+        if (!bids.length || !asks.length) {
+            this.spreadEl.querySelector('.spread-price').textContent = '-';
+            this.spreadEl.querySelector('.spread-pct').textContent = '-';
+            return;
+        }
+        
+        const bestBid = Math.max(...bids.map(b => b.price));
+        const bestAsk = Math.min(...asks.map(a => a.price));
+        const spread = bestAsk - bestBid;
+        const spreadPct = (spread / bestAsk * 100);
+        
+        this.spreadEl.querySelector('.spread-price').textContent = spread.toFixed(2);
+        this.spreadEl.querySelector('.spread-pct').textContent = `(${spreadPct.toFixed(3)}%)`;
     },
     
-    // Format quantity
+    formatPrice(price, decimals = 2) {
+        return price.toFixed(decimals);
+    },
+    
     formatQty(qty) {
-        if (!qty || isNaN(qty)) return '--';
-        if (qty >= 1000000) return (qty / 1000000).toFixed(2) + 'M';
-        if (qty >= 1000) return (qty / 1000).toFixed(2) + 'K';
-        return qty.toFixed(2);
+        if (qty >= 1000000) return (qty / 1000000).toFixed(1) + 'M';
+        if (qty >= 1000) return (qty / 1000).toFixed(1) + 'K';
+        return qty.toFixed(0);
     },
     
-    // Set view mode
-    setView(view) {
-        this.state.view = view;
-        
-        const bidPanel = document.querySelector('.ob-bids');
-        const askPanel = document.querySelector('.ob-asks');
-        
-        if (bidPanel) bidPanel.style.display = (view === 'both' || view === 'bids') ? 'block' : 'none';
-        if (askPanel) askPanel.style.display = (view === 'both' || view === 'asks') ? 'block' : 'none';
-    },
-    
-    // Set precision
-    setPrecision(decimals) {
-        this.state.precision = decimals;
-        this.render();
-    },
-    
-    // Get spread
-    getSpread() {
-        if (this.state.bids.length === 0 || this.state.asks.length === 0) return null;
-        
-        const bestBid = this.state.bids[0]?.price || 0;
-        const bestAsk = this.state.asks[0]?.price || 0;
-        
-        if (bestBid === 0 || bestAsk === 0) return null;
-        
-        return {
-            absolute: bestAsk - bestBid,
-            percent: ((bestAsk - bestBid) / bestAsk) * 100,
-            bestBid,
-            bestAsk
-        };
-    },
-    
-    // Get imbalance (positive = more buying pressure)
-    getImbalance() {
-        const bidVolume = this.state.bids.reduce((sum, b) => sum + b.qty, 0);
-        const askVolume = this.state.asks.reduce((sum, a) => sum + a.qty, 0);
-        const total = bidVolume + askVolume;
-        
-        if (total === 0) return 0;
-        
-        return ((bidVolume - askVolume) / total) * 100;
-    },
-    
-    // Current symbol
-    symbol: null,
-
-    // Set symbol
-    setSymbol(symbol) {
-        this.symbol = symbol;
-        // Clear current data when symbol changes
+    clear() {
         this.state.bids = [];
         this.state.asks = [];
-        this.state.targetBids = [];
-        this.state.targetAsks = [];
-        // Re-render empty state
-        this.render();
+        if (this.asksContainer) this.asksContainer.innerHTML = '';
+        if (this.bidsContainer) this.bidsContainer.innerHTML = '';
     },
-
-    // Stop animation
+    
+    getSpread() {
+        const { bids, asks } = this.state;
+        if (!bids.length || !asks.length) return null;
+        
+        const bestBid = Math.max(...bids.map(b => b.price));
+        const bestAsk = Math.min(...asks.map(a => a.price));
+        return { bestBid, bestAsk, spread: bestAsk - bestBid };
+    },
+    
     destroy() {
-        if (this.state.animFrame) {
-            cancelAnimationFrame(this.state.animFrame);
-            this.state.animFrame = null;
-        }
+        this.clear();
     }
 };
 
-// Export
+// Export for ES modules
+export { OrderBook };
+
+// Export for global access
+window.OrderBook = OrderBook;
+
+// CommonJS export
 if (typeof module !== 'undefined') {
     module.exports = OrderBook;
 }
-
-window.OrderBook = OrderBook;
-// ES Module export
-export { OrderBook };

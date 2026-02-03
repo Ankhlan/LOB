@@ -1,5 +1,5 @@
-// CRE SSE (Server-Sent Events) Module
-// Handles real-time data streaming
+// CRE SSE (Server-Sent Events) Module - Fixed for named events
+// Handles real-time data streaming with named event support
 
 const SSE = {
     // Connection instances
@@ -66,6 +66,7 @@ const SSE = {
             this._scheduleReconnect(name, url);
         };
         
+        // Generic message handler (for non-named events)
         eventSource.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
@@ -110,10 +111,12 @@ const SSE = {
         );
         
         console.log(`[SSE] ${name} reconnecting in ${delay}ms (attempt ${attempts + 1})`);
+        this.reconnectAttempts[name] = attempts + 1;
         
         setTimeout(() => {
-            this.reconnectAttempts[name]++;
-            this._createConnection(name, url);
+            if (!this.connections[name]) {
+                this._createConnection(name, url);
+            }
         }, delay);
     },
     
@@ -122,10 +125,6 @@ const SSE = {
             this.connections[name].close();
             delete this.connections[name];
             console.log(`[SSE] ${name} disconnected`);
-            
-            if (this.handlers[name]?.onDisconnect) {
-                this.handlers[name].onDisconnect();
-            }
         }
     },
     
@@ -134,42 +133,95 @@ const SSE = {
     },
     
     isConnected(name) {
-        return this.connections[name]?.readyState === EventSource.OPEN;
+        const conn = this.connections[name];
+        return conn && conn.readyState === EventSource.OPEN;
     },
     
-    // ===== CRE-specific streams =====
-    
-    // Start quote stream
-    startQuoteStream(onQuote) {
-        return this.connect('quotes', '/api/stream', {
+    // Start main stream with all events (quotes, depth, positions)
+    startMainStream(callbacks = {}) {
+        return this.connect('main', '/api/stream', {
             onConnect: () => {
-                console.log('[SSE] Quote stream connected');
+                console.log('[SSE] Main stream connected');
+                if (callbacks.onConnect) callbacks.onConnect();
             },
-            onMessage: (data) => {
-                if (data.type === 'quote' && onQuote) {
-                    onQuote(data);
+            onError: (e) => {
+                console.error('[SSE] Main stream error');
+                if (callbacks.onError) callbacks.onError(e);
+            },
+            // Use named events - the server sends event: quotes, event: depth, etc.
+            events: {
+                quotes: (data) => {
+                    // data is an array of quote objects
+                    if (callbacks.onQuotes) callbacks.onQuotes(data);
+                },
+                depth: (data) => {
+                    // data is { symbol: { asks: [], bids: [] }, ... }
+                    if (callbacks.onDepth) callbacks.onDepth(data);
+                },
+                positions: (data) => {
+                    // data is { positions: [], summary: {} }
+                    if (callbacks.onPositions) callbacks.onPositions(data);
+                },
+                orders: (data) => {
+                    if (callbacks.onOrders) callbacks.onOrders(data);
+                },
+                trades: (data) => {
+                    if (callbacks.onTrades) callbacks.onTrades(data);
                 }
             }
         });
     },
     
-    // Start orderbook stream
+    // Stored callbacks for legacy API
+    _quoteCallback: null,
+    _depthCallback: null,
+    _positionsCallback: null,
+    
+    // Legacy methods - store callbacks and start unified stream
+    startQuoteStream(onQuote) {
+        this._quoteCallback = onQuote;
+        this._ensureMainStream();
+        return { disconnect: () => { this._quoteCallback = null; } };
+    },
+    
     startOrderbookStream(onLevels) {
-        return this.connect('orderbook', '/api/stream/levels', {
-            onMessage: (data) => {
-                if (onLevels) {
-                    onLevels(data);
+        this._depthCallback = onLevels;
+        this._ensureMainStream();
+        return { disconnect: () => { this._depthCallback = null; } };
+    },
+    
+    startPositionsStream(onPositions) {
+        this._positionsCallback = onPositions;
+        this._ensureMainStream();
+        return { disconnect: () => { this._positionsCallback = null; } };
+    },
+    
+    _ensureMainStream() {
+        if (this.connections['main']) return;
+        
+        this.startMainStream({
+            onQuotes: (quotes) => {
+                if (this._quoteCallback && Array.isArray(quotes)) {
+                    quotes.forEach(q => this._quoteCallback(q));
                 }
+            },
+            onDepth: (depth) => {
+                if (this._depthCallback) this._depthCallback(depth);
+            },
+            onPositions: (data) => {
+                if (this._positionsCallback) this._positionsCallback(data);
             }
         });
     }
 };
 
-// Export
+// Export for ES modules
+export { SSE };
+
+// Export for global access
+window.SSE = SSE;
+
+// CommonJS export
 if (typeof module !== 'undefined') {
     module.exports = SSE;
 }
-
-window.SSE = SSE;
-// ES Module export
-export { SSE };
