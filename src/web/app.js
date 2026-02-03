@@ -2606,7 +2606,7 @@ function createHotkeyOverlay() {
     overlay.id = 'hotkeyOverlay';
     overlay.className = 'hotkey-overlay';
     overlay.innerHTML = `
-        <h3>⌨️ Keyboard Shortcuts</h3>
+        <h3>Keyboard Shortcuts</h3>
         ${Object.entries(HOTKEYS).map(([key, {desc}]) => `
             <div class="hotkey-row">
                 <span>${desc}</span>
@@ -2791,14 +2791,14 @@ document.addEventListener('contextmenu', (e) => {
 function showPositionContextMenu(e, position) {
     e.preventDefault();
     createContextMenu([
-        { icon: '📊', label: 'View Details', action: () => console.log('Details:', position) },
-        { icon: '📉', label: 'Add Stop Loss', action: () => console.log('Add SL') },
-        { icon: '📈', label: 'Add Take Profit', action: () => console.log('Add TP') },
+        { icon: '', label: 'View Details', action: () => console.log('Details:', position) },
+        { icon: '', label: 'Add Stop Loss', action: () => console.log('Add SL') },
+        { icon: '', label: 'Add Take Profit', action: () => console.log('Add TP') },
         { divider: true },
-        { icon: '⬆️', label: 'Increase Size', action: () => console.log('Increase') },
-        { icon: '⬇️', label: 'Reduce Size', action: () => console.log('Reduce') },
+        { icon: '', label: 'Increase Size', action: () => console.log('Increase') },
+        { icon: '', label: 'Reduce Size', action: () => console.log('Reduce') },
         { divider: true },
-        { icon: '❌', label: 'Close Position', shortcut: 'X', action: () => closePosition(position.symbol), danger: true }
+        { icon: '', label: 'Close Position', shortcut: 'X', action: () => closePosition(position.symbol), danger: true }
     ], e.clientX, e.clientY);
 }
 
@@ -2806,10 +2806,10 @@ function showPositionContextMenu(e, position) {
 function showOrderContextMenu(e, order) {
     e.preventDefault();
     createContextMenu([
-        { icon: '✏️', label: 'Modify Order', action: () => console.log('Modify:', order) },
-        { icon: '📋', label: 'Duplicate', action: () => console.log('Duplicate') },
+        { icon: '', label: 'Modify Order', action: () => console.log('Modify:', order) },
+        { icon: '', label: 'Duplicate', action: () => console.log('Duplicate') },
         { divider: true },
-        { icon: '❌', label: 'Cancel Order', shortcut: 'Del', action: () => cancelOrder(order.id), danger: true }
+        { icon: '', label: 'Cancel Order', shortcut: 'Del', action: () => cancelOrder(order.id), danger: true }
     ], e.clientX, e.clientY);
 }
 
@@ -2817,12 +2817,12 @@ function showOrderContextMenu(e, order) {
 function showInstrumentContextMenu(e, instrument) {
     e.preventDefault();
     createContextMenu([
-        { icon: '📈', label: 'Open Chart', action: () => selectInstrument(instrument) },
-        { icon: '🔔', label: 'Set Alert', action: () => console.log('Alert:', instrument) },
-        { icon: '⭐', label: 'Add to Favorites', action: () => console.log('Favorite:', instrument) },
+        { icon: '', label: 'Open Chart', action: () => selectInstrument(instrument) },
+        { icon: '', label: 'Set Alert', action: () => console.log('Alert:', instrument) },
+        { icon: '', label: 'Add to Favorites', action: () => console.log('Favorite:', instrument) },
         { divider: true },
-        { icon: '🛒', label: 'Quick Buy', shortcut: 'B', action: () => { selectInstrument(instrument); setSide('long'); } },
-        { icon: '🛍️', label: 'Quick Sell', shortcut: 'S', action: () => { selectInstrument(instrument); setSide('short'); } }
+        { icon: '', label: 'Quick Buy', shortcut: 'B', action: () => { selectInstrument(instrument); setSide('long'); } },
+        { icon: '', label: 'Quick Sell', shortcut: 'S', action: () => { selectInstrument(instrument); setSide('short'); } }
     ], e.clientX, e.clientY);
 }
 
@@ -3031,7 +3031,7 @@ function showOrderConfirmation(side, symbol, qty, price) {
     const title = document.getElementById('orderConfirmTitle');
     const details = document.getElementById('orderConfirmDetails');
     
-    icon.textContent = side === 'long' ? '📈' : '📉';
+    icon.textContent = side === 'long' ? '+' : '-';
     title.textContent = side === 'long' ? 'BUY Order Filled' : 'SELL Order Filled';
     details.textContent = `${qty} ${symbol} @ ${fmt(price, 0)} MNT`;
     
