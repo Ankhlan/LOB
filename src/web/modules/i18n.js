@@ -84,7 +84,18 @@ const I18n = {
             // Misc
             'misc.loading': 'Loading...',
             'misc.noData': 'No data available',
-            'misc.error': 'Error'
+            'misc.error': 'Error',
+            // App / Login
+            'appName': 'CRE.mn',
+            'menuFile': 'File',
+            'login': 'Login',
+            'logout': 'Logout',
+            'loginTitle': 'Sign In',
+            'loginSubtitle': 'Enter your phone number',
+            'sendCode': 'Send Code',
+            'phoneInfo': 'We will send a verification code',
+            'verify': 'Verify',
+            'changeNumber': 'Change Number'
         },
         
         mn: {
@@ -147,7 +158,18 @@ const I18n = {
             // Misc
             'misc.loading': 'Ачааллаж байна...',
             'misc.noData': 'Мэдээлэл байхгүй',
-            'misc.error': 'Алдаа'
+            'misc.error': 'Алдаа',
+            // App / Login
+            'appName': 'CRE.mn',
+            'menuFile': 'Файл',
+            'login': 'Нэвтрэх',
+            'logout': 'Гарах',
+            'loginTitle': 'Нэвтрэх',
+            'loginSubtitle': 'Утасны дугаараа оруулна уу',
+            'sendCode': 'Код илгээх',
+            'phoneInfo': 'Баталгаажуулах код илгээнэ',
+            'verify': 'Баталгаажуулах',
+            'changeNumber': 'Дугаар солих'
         }
     },
     
