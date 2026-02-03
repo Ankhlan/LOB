@@ -259,3 +259,5 @@ if (typeof module !== 'undefined') {
 }
 
 window.Keyboard = Keyboard;
+// ES Module export
+export { Keyboard };

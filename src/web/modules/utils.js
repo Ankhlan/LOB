@@ -257,3 +257,5 @@ if (typeof module !== 'undefined') {
 }
 
 window.Utils = Utils;
+// ES Module export
+export { Utils };

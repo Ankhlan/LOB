@@ -204,3 +204,5 @@ if (typeof module !== 'undefined') {
 }
 
 window.Theme = Theme;
+// ES Module export
+export { Theme };

@@ -319,3 +319,5 @@ if (typeof module !== 'undefined') {
 }
 
 window.Orders = Orders;
+// ES Module export
+export { Orders };

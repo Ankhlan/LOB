@@ -161,3 +161,5 @@ if (typeof module !== 'undefined') {
 }
 
 window.API = API;
+// ES Module export
+export { API as Api };

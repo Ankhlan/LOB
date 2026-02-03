@@ -620,3 +620,5 @@ const Marketplace = {
 };
 
 window.Marketplace = Marketplace;
+// ES Module export
+export { Marketplace };

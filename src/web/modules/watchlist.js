@@ -273,3 +273,5 @@ if (typeof module !== 'undefined') {
 }
 
 window.Watchlist = Watchlist;
+// ES Module export
+export { Watchlist };

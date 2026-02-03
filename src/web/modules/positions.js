@@ -306,3 +306,5 @@ if (typeof module !== 'undefined') {
 }
 
 window.Positions = Positions;
+// ES Module export
+export { Positions };

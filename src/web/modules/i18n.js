@@ -261,3 +261,5 @@ if (typeof module !== 'undefined') {
 
 window.I18n = I18n;
 window.t = t;
+// ES Module export
+export { I18n };

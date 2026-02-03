@@ -182,3 +182,5 @@ if (typeof module !== 'undefined') {
 }
 
 window.App = App;
+// ES Module export
+export { AppInit };

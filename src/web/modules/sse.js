@@ -171,3 +171,5 @@ if (typeof module !== 'undefined') {
 }
 
 window.SSE = SSE;
+// ES Module export
+export { SSE };

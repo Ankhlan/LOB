@@ -186,3 +186,5 @@ if (typeof module !== 'undefined') {
 }
 
 window.Connection = Connection;
+// ES Module export
+export { Connection };

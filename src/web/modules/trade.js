@@ -385,3 +385,5 @@ if (typeof module !== 'undefined') {
 }
 
 window.Trade = Trade;
+// ES Module export
+export { Trade };

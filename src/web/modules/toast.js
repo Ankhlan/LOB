@@ -269,3 +269,5 @@ if (typeof module !== 'undefined') {
 
 window.Toast = Toast;
 window.showToast = showToast;
+// ES Module export
+export { Toast };

@@ -294,3 +294,5 @@ if (typeof module !== 'undefined') {
 }
 
 window.Auth = Auth;
+// ES Module export
+export { Auth };

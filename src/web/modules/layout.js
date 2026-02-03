@@ -308,3 +308,5 @@ if (typeof module !== 'undefined') {
 }
 
 window.Layout = Layout;
+// ES Module export
+export { Layout };

@@ -3,581 +3,328 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRE.mn | Mongolian Derivatives Exchange</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <title>Central Exchange | Professional Trading Platform</title>
-    <!-- Zero external dependencies - using system fonts -->
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="datagrid.css">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="cre-v3.css">
 </head>
 <body data-theme="dark">
-    <!-- LOGIN MODAL -->
-    <div class="modal-overlay hidden" id="loginModal">
-        <div class="login-modal">
-            <div class="login-header">
-                <div class="menubar-logo-icon" style="width:32px;height:32px;font-size:12px;">CRE</div>
-                <div>
-                    <div class="login-title" data-i18n="loginTitle">Central Exchange</div>
-                    <div class="login-subtitle" data-i18n="loginSubtitle">Login with your phone number</div>
-                </div>
+    <!-- TOP BAR - Ultra compact -->
+    <header class="topbar">
+        <div class="topbar-left">
+            <div class="brand">
+                <span class="brand-logo">CRE</span>
+                <span class="brand-suffix">.mn</span>
             </div>
-            <div class="login-body">
-                <!-- Step 1: Phone Input -->
-                <div class="login-step active" id="stepPhone">
-                    <div class="phone-input">
-                        <span class="phone-prefix">+976</span>
-                        <input type="tel" class="phone-number" id="phoneInput" placeholder="99001234" maxlength="8" oninput="validatePhone()">
-                    </div>
-                    <button class="login-btn" id="requestOtpBtn" onclick="requestOtp()" disabled data-i18n="sendCode">Send Code</button>
-                    <div class="login-error" id="phoneError"></div>
-                    <div class="login-info" data-i18n="phoneInfo">We will send a 6-digit code via SMS</div>
-                </div>
-                <!-- Step 2: OTP Input -->
-                <div class="login-step" id="stepOtp">
-                    <div class="otp-inputs">
-                        <input type="text" class="otp-digit" maxlength="1" oninput="otpInput(this, 0)">
-                        <input type="text" class="otp-digit" maxlength="1" oninput="otpInput(this, 1)">
-                        <input type="text" class="otp-digit" maxlength="1" oninput="otpInput(this, 2)">
-                        <input type="text" class="otp-digit" maxlength="1" oninput="otpInput(this, 3)">
-                        <input type="text" class="otp-digit" maxlength="1" oninput="otpInput(this, 4)">
-                        <input type="text" class="otp-digit" maxlength="1" oninput="otpInput(this, 5)">
-                    </div>
-                    <button class="login-btn" id="verifyOtpBtn" onclick="verifyOtp()" disabled data-i18n="verify">Verify</button>
-                    <div class="login-error" id="otpError"></div>
-                    <button class="login-back" onclick="backToPhone()" data-i18n="changeNumber">&lt; Change number</button>
-                </div>
+            <nav class="main-nav">
+                <button class="nav-item active" data-view="trade">Trade</button>
+                <button class="nav-item" data-view="markets">Markets</button>
+                <button class="nav-item" data-view="portfolio">Portfolio</button>
+                <button class="nav-item" data-view="earn">Earn</button>
+            </nav>
+        </div>
+        <div class="topbar-center">
+            <div class="instrument-display" id="instrumentDisplay">
+                <span class="inst-symbol" id="topSymbol">XAU-MNT</span>
+                <span class="inst-price" id="topPrice">-</span>
+                <span class="inst-change positive" id="topChange">-</span>
+                <span class="inst-volume" id="topVolume">24h Vol: -</span>
             </div>
         </div>
-    </div>
+        <div class="topbar-right">
+            <div class="account-info" id="accountInfo">
+                <div class="equity-display">
+                    <span class="eq-label">Equity</span>
+                    <span class="eq-value" id="topEquity">-</span>
+                </div>
+                <div class="pnl-display">
+                    <span class="pnl-label">Day PnL</span>
+                    <span class="pnl-value" id="topPnl">-</span>
+                </div>
+            </div>
+            <div class="quick-actions">
+                <button class="qa-btn" id="themeToggle" title="Toggle theme">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 01-4.4 2.26 5.403 5.403 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/></svg>
+                </button>
+                <button class="qa-btn" id="langToggle" title="Language">EN</button>
+                <button class="qa-btn" id="settingsBtn" title="Settings">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+                </button>
+            </div>
+            <button class="login-btn" id="loginBtn">Connect</button>
+        </div>
+    </header>
 
-    <!-- TOP MENU BAR - Desktop App Style -->
-    <div class="menubar">
-        <div class="menubar-logo">
-            <div class="menubar-logo-icon">CRE</div>
-            <span class="menubar-logo-text" data-i18n="appName">Central Exchange</span>
-        </div>
-        <div class="menu-items">
-            <div class="menu-item has-dropdown" data-i18n="menuFile">File
-                <div class="dropdown">
-                    <div class="dropdown-item" data-i18n="newWorkspace">New Workspace <span class="shortcut">Ctrl+N</span></div>
-                    <div class="dropdown-item" data-i18n="saveLayout">Save Layout <span class="shortcut">Ctrl+S</span></div>
-                    <div class="dropdown-divider"></div>
-                    <div class="dropdown-item" data-i18n="exportTrades">Export Trades</div>
-                    <div class="dropdown-divider"></div>
-                    <div class="dropdown-item" data-i18n="exit">Exit</div>
+    <!-- MAIN WORKSPACE - Flexible Grid -->
+    <main class="workspace">
+        <!-- LEFT RAIL - Instrument selector -->
+        <aside class="rail rail-left" id="leftRail">
+            <div class="rail-header">
+                <input type="text" class="search-box" id="searchInstrument" placeholder="Search markets...">
+            </div>
+            <div class="instrument-groups" id="instrumentGroups">
+                <div class="inst-group" data-group="favorites">
+                    <div class="group-header">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                        <span>Favorites</span>
+                    </div>
+                    <div class="group-items" id="favoritesList"></div>
+                </div>
+                <div class="inst-group" data-group="mn">
+                    <div class="group-header">
+                        <span class="flag-mn">MN</span>
+                        <span>Mongolia</span>
+                    </div>
+                    <div class="group-items" id="mnList"></div>
+                </div>
+                <div class="inst-group expanded" data-group="fx">
+                    <div class="group-header">
+                        <span>FX</span>
+                    </div>
+                    <div class="group-items" id="fxList"></div>
+                </div>
+                <div class="inst-group" data-group="crypto">
+                    <div class="group-header">
+                        <span>Crypto</span>
+                    </div>
+                    <div class="group-items" id="cryptoList"></div>
+                </div>
+                <div class="inst-group" data-group="commodities">
+                    <div class="group-header">
+                        <span>Commodities</span>
+                    </div>
+                    <div class="group-items" id="commoditiesList"></div>
+                </div>
+                <div class="inst-group" data-group="indices">
+                    <div class="group-header">
+                        <span>Indices</span>
+                    </div>
+                    <div class="group-items" id="indicesList"></div>
                 </div>
             </div>
-            <div class="menu-item has-dropdown">View
-                <div class="dropdown">
-                    <div class="dropdown-item">Chart <span class="shortcut">F5</span></div>
-                    <div class="dropdown-item">Order Book <span class="shortcut">F6</span></div>
-                    <div class="dropdown-item">Positions <span class="shortcut">F7</span></div>
-                    <div class="dropdown-divider"></div>
-                    <div class="dropdown-item">Full Screen <span class="shortcut">F11</span></div>
-                    <div class="dropdown-divider"></div>
-                    <div class="dropdown-item" onclick="setTheme('dark')">Theme: Dark</div>
-                    <div class="dropdown-item" onclick="setTheme('light')">Theme: Light</div>
-                    <div class="dropdown-item" onclick="setTheme('blue')">Theme: Blue</div>
-                </div>
-            </div>
-            <div class="menu-item has-dropdown">Account
-                <div class="dropdown">
-                    <div class="dropdown-item" onclick="openQpay()">Deposit <span class="shortcut">Ctrl+D</span></div>
-                    <div class="dropdown-item">Withdraw <span class="shortcut">Ctrl+W</span></div>
-                    <div class="dropdown-divider"></div>
-                    <div class="dropdown-item">Transaction History</div>
-                    <div class="dropdown-item">Account Settings</div>
-                </div>
-            </div>
-            <div class="menu-item has-dropdown">Trade
-                <div class="dropdown">
-                    <div class="dropdown-item">New Order <span class="shortcut">F9</span></div>
-                    <div class="dropdown-item">Close All Positions</div>
-                    <div class="dropdown-divider"></div>
-                    <div class="dropdown-item">Risk Settings</div>
-                </div>
-            </div>
-            <div class="menu-item has-dropdown">Window
-                <div class="dropdown">
-                    <div class="dropdown-item">Tile Horizontally</div>
-                    <div class="dropdown-item">Tile Vertically</div>
-                    <div class="dropdown-item">Cascade</div>
-                </div>
-            </div>
-            <div class="menu-item has-dropdown">Help
-                <div class="dropdown">
-                    <div class="dropdown-item">Documentation</div>
-                    <div class="dropdown-item">Keyboard Shortcuts</div>
-                    <div class="dropdown-divider"></div>
-                    <div class="dropdown-item">About Central Exchange</div>
-                </div>
-            </div>
-        </div>
-        <div class="menu-spacer"></div>
-        <div class="menu-right">
-            <div class="lang-toggle">
-                <button class="lang-btn active" id="langEn" onclick="setLang('en')">EN</button>
-                <button class="lang-btn" id="langMn" onclick="setLang('mn')">MN</button>
-            </div>
-            <div class="user-info" id="userInfo" style="display:none;">
-                <span class="user-phone" id="userPhone">+976 ...</span>
-                <button class="logout-btn" onclick="logout()" data-i18n="logout">Logout</button>
-            </div>
-            <button class="toolbar-btn" id="loginBtn" onclick="showLogin()" data-i18n="login">Login</button>
-        </div>
-    </div>
-    
-    <!-- TOOLBAR -->
-    <div class="toolbar">
-        <div class="toolbar-group">
-            <button class="toolbar-btn active">Chart</button>
-            <button class="toolbar-btn">Orders</button>
-            <button class="toolbar-btn">Positions</button>
-        </div>
-        <div class="account-display">
-            <div class="account-item usdmnt-rate">
-                <span class="account-label">USD/MNT</span>
-                <span class="account-value highlight" id="usdmntRate" onclick="toggleBankPanel()" style="cursor:pointer;" title="Click for bank rates">3,450</span> <button class="bank-toggle-btn" onclick="toggleBankPanel()">FX</button>
-            </div>
-            <div class="account-divider"></div>
-            <div class="account-item">
-                <span class="account-label">Equity</span>
-                <span class="account-value positive" id="equity">0.00 MNT</span>
-            </div>
-            <div class="account-item">
-                <span class="account-label">Available</span>
-                <span class="account-value" id="available">0.00 MNT</span>
-            </div>
-            <div class="account-item">
-                <span class="account-label">Margin</span>
-                <span class="account-value" id="margin">0.00 MNT</span>
-            </div>
-            <div class="account-item">
-                <span class="account-label">Unrealized</span>
-                <span class="account-value" id="unrealizedPnl">0.00 MNT</span>
-            </div>
-            <div class="account-item">
-                <span class="account-label">Margin %</span>
-                <span class="account-value" id="marginPct">0%</span>
-            </div>
-            <div class="account-item sparkline-item">
-                <span class="account-label">Daily P&L</span>
-                <canvas id="dailyPnlSparkline" class="sparkline" width="60" height="20"></canvas>
-            </div>
-            <div class="account-divider"></div>
-            <div class="account-item">
-                <span class="account-label">Funding</span>
-                <span class="account-value" id="fundingTimer" style="color:#d29922;">7:59:32</span>
-            </div>
-        </div>
-    </div>
-    
-    <!-- MAIN WORKSPACE -->
-    <div class="workspace">
-        <!-- WATCHLIST -->
-        <aside class="watchlist">
-            <div class="panel-header">
-                <span class="panel-title">Instruments</span>
-                <div class="panel-actions">
-                    <button class="panel-btn" title="Add">+</button>
-                    <button class="panel-btn" title="Settings">Settings</button>
-                </div>
-            </div>
-            <div class="search-box">
-                <input type="text" placeholder="Search..." id="searchInput" oninput="filterInstruments()">
-            </div>
-            <div class="instrument-list" id="instrumentList"></div>
         </aside>
-        
-        <!-- CENTER - Chart & Orderbook -->
-        <section class="center">
-            <div class="chart-area">
-                <div class="chart-tabs">
-                    <div class="chart-tab active"><span id="tabSymbol">XAU-MNT-PERP</span><span class="close">X</span></div>
-                    <div class="chart-layout-toggle">
-                        <button class="layout-btn active" onclick="setChartLayout('single')" title="Single Chart">▢</button>
-                        <button class="layout-btn" onclick="setChartLayout('quad')" title="2x2 Grid">▦</button>
-                    </div>
-                </div>
+
+        <!-- CENTER - Chart dominant -->
+        <section class="center-area">
+            <!-- Chart Section -->
+            <div class="chart-wrapper" id="chartWrapper">
                 <div class="chart-toolbar">
-                    <button class="tf-btn active" onclick="setTimeframe('1')">1m</button>
-                    <button class="tf-btn" onclick="setTimeframe('5')">5m</button>
-                    <button class="tf-btn" onclick="setTimeframe('15')">15m</button>
-                    <button class="tf-btn" onclick="setTimeframe('60')">1H</button>
-                    <button class="tf-btn" onclick="setTimeframe('240')">4H</button>
-                    <button class="tf-btn" onclick="setTimeframe('D')">1D</button>
-                    <span style="width:1px;height:16px;background:var(--border);margin:0 8px;"></span>
-                    <button class="tf-btn active" id="volBtn" onclick="toggleVolume()" title="Volume">VOL</button>
-                    <button class="tf-btn" id="smaBtn" onclick="toggleSMA()" title="SMA 20">SMA</button>
-                    <button class="tf-btn" id="emaBtn" onclick="toggleEMA()" title="EMA 12">EMA</button>
-                    <button class="tf-btn" id="bbBtn" onclick="toggleBB()" title="Bollinger Bands 20">BB</button>
-                    <span style="width:1px;height:16px;background:var(--border);margin:0 8px;"></span>
-                    <button class="tf-btn" id="webglBtn" onclick="toggleWebGL()" title="WebGL Renderer (GPU)">WebGL</button>
-                </div>
-                <div class="chart-info">
-                    <div class="chart-symbol" id="chartSymbol">XAU-MNT-PERP</div>
-                    <div class="chart-price" id="chartPrice">-</div>
-                    <div class="chart-change up" id="chartChange">+0.00%</div>
-                </div>
-                <div class="chart-container" id="chartContainer"></div>
-                <!-- Market Info Panel (Bespoke per market) -->
-                <div class="market-info-panel" id="marketInfoPanel">
-                    <div class="market-info-header" onclick="toggleMarketInfo()">
-                        <span class="market-info-title">
-                            <span id="marketName">Gold / Mongolian Tugrik</span>
-                            <span class="market-info-badge">i Market Info</span>
-                        </span>
-                        <span class="market-info-toggle" id="marketInfoToggle">v</span>
+                    <div class="toolbar-left">
+                        <div class="tf-selector" id="tfSelector">
+                            <button class="tf-btn" data-tf="1">1m</button>
+                            <button class="tf-btn" data-tf="5">5m</button>
+                            <button class="tf-btn active" data-tf="15">15m</button>
+                            <button class="tf-btn" data-tf="60">1H</button>
+                            <button class="tf-btn" data-tf="240">4H</button>
+                            <button class="tf-btn" data-tf="D">1D</button>
+                        </div>
+                        <div class="chart-type-selector">
+                            <button class="ct-btn active" data-type="candles" title="Candles">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="6" width="4" height="12"/><rect x="10" y="2" width="4" height="20"/><rect x="16" y="8" width="4" height="8"/></svg>
+                            </button>
+                            <button class="ct-btn" data-type="line" title="Line">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17l6-6 4 4 8-8"/></svg>
+                            </button>
+                        </div>
                     </div>
-                    <div class="market-info-content" id="marketInfoContent">
-                        <!-- Bespoke market info rendered by Marketplace module -->
+                    <div class="toolbar-right">
+                        <button class="tool-btn" id="indicatorsBtn" title="Indicators">Indicators</button>
+                        <button class="tool-btn" id="fullscreenBtn" title="Fullscreen">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                        </button>
                     </div>
                 </div>
-                <!-- Multi-Chart Grid (hidden by default) -->
-                <div class="chart-grid" id="chartGrid" style="display:none;">
-                    <div class="chart-cell" data-slot="0">
-                        <div class="chart-cell-header">
-                            <select class="chart-symbol-select" onchange="setGridSymbol(0, this.value)"></select>
-                        </div>
-                        <div class="chart-cell-body" id="chartCell0"></div>
-                    </div>
-                    <div class="chart-cell" data-slot="1">
-                        <div class="chart-cell-header">
-                            <select class="chart-symbol-select" onchange="setGridSymbol(1, this.value)"></select>
-                        </div>
-                        <div class="chart-cell-body" id="chartCell1"></div>
-                    </div>
-                    <div class="chart-cell" data-slot="2">
-                        <div class="chart-cell-header">
-                            <select class="chart-symbol-select" onchange="setGridSymbol(2, this.value)"></select>
-                        </div>
-                        <div class="chart-cell-body" id="chartCell2"></div>
-                    </div>
-                    <div class="chart-cell" data-slot="3">
-                        <div class="chart-cell-header">
-                            <select class="chart-symbol-select" onchange="setGridSymbol(3, this.value)"></select>
-                        </div>
-                        <div class="chart-cell-body" id="chartCell3"></div>
-                    </div>
-                </div>
+                <div class="chart-canvas" id="chartCanvas"></div>
             </div>
-            <div class="orderbook-area">
-                <div class="ob-toggle">
-                    <button class="ob-toggle-btn active" onclick="setObView('split')" title="Split View">Split</button>
-                    <button class="ob-toggle-btn" onclick="setObView('ladder')" title="DOM Ladder">Ladder</button>
+            
+            <!-- Bottom Panel - Collapsible -->
+            <div class="bottom-panel" id="bottomPanel">
+                <div class="panel-tabs">
+                    <button class="panel-tab active" data-panel="positions">
+                        Positions <span class="count" id="posCount">0</span>
+                    </button>
+                    <button class="panel-tab" data-panel="orders">
+                        Orders <span class="count" id="orderCount">0</span>
+                    </button>
+                    <button class="panel-tab" data-panel="fills">Fills</button>
+                    <button class="panel-tab" data-panel="alerts">Alerts</button>
+                    <div class="panel-spacer"></div>
+                    <button class="panel-toggle" id="panelToggle">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>
+                    </button>
                 </div>
-                <div class="orderbook" id="obSplit">
-                    <div class="ob-side ob-bids">
-                        <div class="ob-header"><span>Bid</span><span>Size</span></div>
-                        <canvas id="bidsCanvas" class="ob-canvas"></canvas>
+                <div class="panel-content" id="panelContent">
+                    <div class="panel-view active" id="viewPositions">
+                        <table class="data-grid">
+                            <thead>
+                                <tr><th>Symbol</th><th>Side</th><th>Size</th><th>Entry</th><th>Mark</th><th>Liq.</th><th>uPnL</th><th></th></tr>
+                            </thead>
+                            <tbody id="positionsGrid"></tbody>
+                        </table>
                     </div>
-                    <div class="ob-side ob-asks">
-                        <div class="ob-header"><span>Ask</span><span>Size</span></div>
-                        <canvas id="asksCanvas" class="ob-canvas"></canvas>
+                    <div class="panel-view" id="viewOrders">
+                        <table class="data-grid">
+                            <thead>
+                                <tr><th>Time</th><th>Symbol</th><th>Type</th><th>Side</th><th>Price</th><th>Qty</th><th>Filled</th><th></th></tr>
+                            </thead>
+                            <tbody id="ordersGrid"></tbody>
+                        </table>
                     </div>
-                    <!-- Order Book Imbalance Indicator -->
-                    <div class="ob-imbalance">
-                        <span class="imbalance-label" style="font-size:9px;color:var(--text-muted);">Imbalance</span>
-                        <div class="imbalance-bar">
-                            <div class="imbalance-bid" id="imbalanceBid" style="width:50%;"></div>
-                            <div class="imbalance-ask" id="imbalanceAsk" style="width:50%;"></div>
-                        </div>
-                        <span class="imbalance-pct" id="imbalancePct">0%</span>
+                    <div class="panel-view" id="viewFills">
+                        <table class="data-grid">
+                            <thead>
+                                <tr><th>Time</th><th>Symbol</th><th>Side</th><th>Price</th><th>Qty</th><th>Fee</th><th>rPnL</th></tr>
+                            </thead>
+                            <tbody id="fillsGrid"></tbody>
+                        </table>
                     </div>
-                </div>
-                <!-- DOM Ladder View -->
-                <div class="dom-ladder" id="domLadder" style="display:none;">
-                    <div class="ladder-header">
-                        <span class="ladder-col">Bid Qty</span>
-                        <span class="ladder-col">Price</span>
-                        <span class="ladder-col">Ask Qty</span>
-                        <span class="ladder-col">Orders</span>
-                    </div>
-                    <div class="ladder-body" id="ladderBody"></div>
-                </div>
-                <div class="trade-ticker">
-                    <div class="ob-header"><span>Recent Trades</span><span>Time</span></div>
-                    <div class="ticker-list" id="tickerList">
-                        <div class="ticker-empty">No recent trades</div>
+                    <div class="panel-view" id="viewAlerts">
+                        <div class="alerts-empty">No active alerts</div>
                     </div>
                 </div>
             </div>
         </section>
-        
-        <!-- TRADE PANEL -->
-        <aside class="trade-panel">
-            <div class="trade-tabs">
-                <div class="trade-tab active" onclick="setOrderType('market')">Market</div>
-                <div class="trade-tab" onclick="setOrderType('limit')">Limit</div>
-                <div class="trade-tab" onclick="setOrderType('stop')">Stop</div>
+
+        <!-- RIGHT RAIL - Order entry + book -->
+        <aside class="rail rail-right" id="rightRail">
+            <!-- Order Book -->
+            <div class="orderbook" id="orderBook">
+                <div class="ob-header">
+                    <span class="ob-title">Order Book</span>
+                    <div class="ob-precision">
+                        <button class="prec-btn active" data-prec="0.01">0.01</button>
+                        <button class="prec-btn" data-prec="0.1">0.1</button>
+                        <button class="prec-btn" data-prec="1">1</button>
+                    </div>
+                </div>
+                <div class="ob-grid">
+                    <div class="ob-header-row">
+                        <span>Price</span><span>Size</span><span>Total</span>
+                    </div>
+                    <div class="ob-asks" id="obAsks"></div>
+                    <div class="ob-spread" id="obSpread">
+                        <span class="spread-price">-</span>
+                        <span class="spread-pct">-</span>
+                    </div>
+                    <div class="ob-bids" id="obBids"></div>
+                </div>
             </div>
-            <div class="trade-form">
-                <div class="side-btns">
-                    <button class="side-btn buy active" id="buyBtn" onclick="setSide('long')">BUY</button>
-                    <button class="side-btn sell" id="sellBtn" onclick="setSide('short')">SELL</button>
-                </div>
-                <div class="form-row">
-                    <label class="form-label">Quantity</label>
-                    <div class="quantity-input-group">
-                        <input type="number" class="form-input" id="quantity" value="1" step="0.01" oninput="updateSummary()">
-                        <div class="quick-qty-btns">
-                            <button class="quick-btn" onclick="setQuantity(0.1)">0.1</button>
-                            <button class="quick-btn" onclick="setQuantity(0.5)">0.5</button>
-                            <button class="quick-btn active" onclick="setQuantity(1)">1</button>
-                            <button class="quick-btn" onclick="setQuantity(5)">5</button>
-                            <button class="quick-btn" onclick="setQuantity(10)">10</button>
-                        </div>
+            
+            <!-- Trade Entry -->
+            <div class="trade-entry" id="tradeEntry">
+                <div class="te-header">
+                    <div class="side-toggle">
+                        <button class="side-btn buy active" data-side="buy">Long</button>
+                        <button class="side-btn sell" data-side="sell">Short</button>
                     </div>
                 </div>
-                <div class="form-row">
-                <div class="form-row">
-                    <label class="form-label">Leverage</label>
-                    <div class="leverage-group">
-                        <div class="leverage-slider-row">
-                            <input type="range" class="leverage-slider" id="leverageSlider" min="1" max="100" value="10" oninput="document.getElementById('leverage').value=this.value; document.getElementById('leverageValue').textContent=this.value+'x'; updateSummary()">
-                            <span class="leverage-value" id="leverageValue">10x</span>
-                            <input type="hidden" id="leverage" value="10">
-                        </div>
-                        <div class="leverage-presets">
-                            <button class="leverage-btn" onclick="setLeverage(1)">1x</button>
-                            <button class="leverage-btn" onclick="setLeverage(5)">5x</button>
-                            <button class="leverage-btn active" onclick="setLeverage(10)">10x</button>
-                            <button class="leverage-btn" onclick="setLeverage(25)">25x</button>
-                            <button class="leverage-btn" onclick="setLeverage(50)">50x</button>
-                            <button class="leverage-btn" onclick="setLeverage(100)">100x</button>
+                <div class="te-form">
+                    <div class="order-types">
+                        <button class="ot-btn active" data-type="limit">Limit</button>
+                        <button class="ot-btn" data-type="market">Market</button>
+                        <button class="ot-btn" data-type="stop">Stop</button>
+                    </div>
+                    
+                    <div class="form-row price-row" id="priceRow">
+                        <label>Price</label>
+                        <div class="input-group">
+                            <button class="adj-btn" data-adj="-1">-</button>
+                            <input type="text" class="form-input" id="orderPrice" value="">
+                            <button class="adj-btn" data-adj="+1">+</button>
                         </div>
                     </div>
+                    
+                    <div class="form-row">
+                        <label>Size</label>
+                        <div class="input-group">
+                            <input type="text" class="form-input" id="orderSize" value="1">
+                            <span class="input-suffix">Contracts</span>
+                        </div>
+                        <div class="size-presets">
+                            <button class="preset-btn" data-pct="25">25%</button>
+                            <button class="preset-btn" data-pct="50">50%</button>
+                            <button class="preset-btn" data-pct="75">75%</button>
+                            <button class="preset-btn" data-pct="100">Max</button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row leverage-row">
+                        <label>Leverage</label>
+                        <div class="leverage-control">
+                            <input type="range" class="lev-slider" id="levSlider" min="1" max="100" value="10">
+                            <div class="lev-display" id="levDisplay">10x</div>
+                        </div>
+                        <div class="lev-presets">
+                            <button class="preset-btn" data-lev="1">1x</button>
+                            <button class="preset-btn" data-lev="5">5x</button>
+                            <button class="preset-btn active" data-lev="10">10x</button>
+                            <button class="preset-btn" data-lev="25">25x</button>
+                            <button class="preset-btn" data-lev="50">50x</button>
+                        </div>
+                    </div>
+                    
+                    <div class="order-summary">
+                        <div class="sum-row"><span>Order Value</span><span id="sumValue">-</span></div>
+                        <div class="sum-row"><span>Margin Required</span><span id="sumMargin">-</span></div>
+                        <div class="sum-row"><span>Est. Fee</span><span id="sumFee">-</span></div>
+                    </div>
+                    
+                    <button class="submit-order buy" id="submitOrder">Long XAU-MNT</button>
                 </div>
-                <div class="order-summary">
-                    <div class="summary-row"><span class="summary-label">Entry</span><span class="summary-value" id="entryPrice">-</span></div>
-                    <div class="summary-row"><span class="summary-label">Value</span><span class="summary-value" id="posValue">-</span></div>
-                    <div class="summary-row"><span class="summary-label">Margin</span><span class="summary-value" id="reqMargin">-</span></div>
-                    <div class="summary-row"><span class="summary-label">Fee</span><span class="summary-value" id="estFee">-</span></div>
-                </div>
-                <button class="submit-btn buy" id="submitBtn" onclick="submitOrder()">BUY XAU-MNT-PERP</button>
+            </div>
+            
+            <!-- Recent Trades -->
+            <div class="recent-trades" id="recentTrades">
+                <div class="rt-header">Recent Trades</div>
+                <div class="rt-list" id="rtList"></div>
             </div>
         </aside>
+    </main>
+
+    <!-- Connection Status -->
+    <div class="connection-status" id="connStatus">
+        <span class="conn-dot"></span>
+        <span class="conn-text">Connecting...</span>
     </div>
-    
-    <!-- BANK RATES PANEL (Floating Widget) -->
-    <div class="bank-rates-panel" id="bankRatesPanel">
-        <div class="bank-panel-header">
-            <span class="bank-panel-title">FX USD/MNT Bank Rates</span>
-            <button class="bank-panel-close" onclick="toggleBankPanel()">X</button>
+
+    <!-- Login Modal -->
+    <div class="modal-backdrop hidden" id="modalBackdrop"></div>
+    <div class="modal hidden" id="loginModal">
+        <div class="modal-header">
+            <h3>Connect to CRE.mn</h3>
+            <button class="modal-close" id="modalClose">&times;</button>
         </div>
-        <div class="bank-panel-body">
-            <div class="bank-mid-rate">
-                <div class="bank-mid-label">Mid Market Rate</div>
-                <div class="bank-mid-value" id="bankMidRate">-</div>
-                <div class="bank-mid-spread" id="bankSpread">Spread: -</div>
+        <div class="modal-body">
+            <div class="login-step active" id="stepPhone">
+                <p>Enter your Mongolian phone number</p>
+                <div class="phone-input">
+                    <span class="country-code">+976</span>
+                    <input type="tel" class="phone-field" id="phoneField" placeholder="99001234" maxlength="8">
+                </div>
+                <button class="modal-btn primary" id="sendCodeBtn">Send Code</button>
             </div>
-            <div class="bank-best-rates">
-                <div class="bank-best bid">
-                    <div class="bank-best-label">Best Bid (Buy USD)</div>
-                    <div class="bank-best-value" id="bankBestBid">-</div>
-                    <div class="bank-best-bank" id="bankBestBidBank">-</div>
+            <div class="login-step" id="stepOtp">
+                <p>Enter the 6-digit code sent to your phone</p>
+                <div class="otp-row" id="otpRow">
+                    <input type="text" class="otp-digit" maxlength="1">
+                    <input type="text" class="otp-digit" maxlength="1">
+                    <input type="text" class="otp-digit" maxlength="1">
+                    <input type="text" class="otp-digit" maxlength="1">
+                    <input type="text" class="otp-digit" maxlength="1">
+                    <input type="text" class="otp-digit" maxlength="1">
                 </div>
-                <div class="bank-best ask">
-                    <div class="bank-best-label">Best Ask (Sell USD)</div>
-                    <div class="bank-best-value" id="bankBestAsk">-</div>
-                    <div class="bank-best-bank" id="bankBestAskBank">-</div>
-                </div>
-            </div>
-            <div class="bank-table">
-                <div class="bank-table-header">
-                    <span>Bank</span>
-                    <span>Bid</span>
-                    <span>Ask</span>
-                    <span>Spread</span>
-                </div>
-                <div class="bank-table-body" id="bankTableBody">
-                    <div class="bank-loading">Loading bank rates...</div>
-                </div>
-            </div>
-            <div class="bank-reference">
-                <span>BoM Reference: <strong id="bomRate">-</strong></span>
-                <span>Band: <strong id="priceBand">-</strong></span>
+                <button class="modal-btn primary" id="verifyBtn">Verify</button>
+                <button class="modal-btn link" id="changeNumBtn">Change number</button>
             </div>
         </div>
     </div>
 
-    <!-- ACCOUNT SUMMARY BAR -->
-<div class="account-summary" id="accountSummary">
-    <div class="account-stat">
-        <span class="account-label">Balance</span>
-        <span class="account-value mono" id="acctBalance">0</span>
-    </div>
-    <div class="account-stat">
-        <span class="account-label">Equity</span>
-        <span class="account-value mono" id="acctEquity">0</span>
-    </div>
-    <div class="account-stat">
-        <span class="account-label">Available</span>
-        <span class="account-value mono" id="acctAvailable">0</span>
-    </div>
-    <div class="account-stat">
-        <span class="account-label">Margin Used</span>
-        <span class="account-value mono" id="acctMargin">0</span>
-    </div>
-    <div class="account-stat">
-        <span class="account-label">Unrealized P&amp;L</span>
-        <span class="account-value mono" id="acctPnl">0</span>
-    </div>
-</div>
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
 
-<!-- POSITIONS BAR -->
-    <div class="positions-bar">
-        <div class="positions-tabs">
-            <div class="positions-tab active" onclick="showTab('positions')">Positions <span class="count" id="posCount">0</span></div>
-            <div class="positions-tab" onclick="showTab('orders')">Open Orders <span class="count" id="ordersCount">0</span></div>
-            <div class="positions-tab" onclick="showTab('history')">History</div>
-        </div>
-        <div class="positions-content" id="tabPositions">
-            <div id="positionsGrid">
-            <table class="positions-table">
-                <thead>
-                    <tr>
-                        <th>Symbol</th>
-                        <th>Side</th>
-                        <th>Qty</th>
-                        <th>Entry Price</th>
-                        <th>Current Price</th>
-                        <th>P&amp;L</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody id="positionsBody">
-                    <tr class="no-positions"><td colspan="7">No open positions</td></tr>
-                </tbody>
-            </table>
-        </div>
-        </div>
-        <div class="positions-content" id="tabOrders" style="display:none;">
-            <div id="ordersGrid"></div>
-        </div>
-        <div class="positions-content" id="tabHistory" style="display:none;">
-            <div id="historyGrid"></div>
-        </div>
-    </div>
-    
-    <!-- BOTTOM STATUS BAR -->
-    <div class="statusbar">
-        <div class="status-section">
-            <div class="status-dot online"></div>
-            <span class="status-label">Engine:</span>
-            <span class="status-value">Online</span>
-        </div>
-        <div class="status-section">
-            <div class="status-dot online"></div>
-            <span class="status-label">FXCM:</span>
-            <span class="status-value" id="fxcmStatus">Connected</span>
-        </div>
-        <div class="status-section">
-            <span class="status-label">USD/MNT:</span>
-            <span class="status-value" id="rateStatus">3,450</span>
-        </div>
-        <div class="status-section">
-            <span class="status-label">Used:</span>
-            <span class="status-value" id="usedMargin">0.00 MNT</span>
-        </div>
-        <div class="status-section">
-            <span class="status-label">Free:</span>
-            <span class="status-value green" id="freeMargin">0.00 MNT</span>
-        </div>
-        <div class="status-spacer"></div>
-        <div class="status-section" style="border-right:none;">
-            <span class="status-time" id="serverTime">--:--:--</span>
-        </div>
-    </div>
-    
-    <!-- TradingView Lightweight Charts - Professional charting library -->
+    <!-- Scripts -->
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
-
-    <script src="cre-chart.js"></script>
-    <script src="datagrid.js"></script>
-    <script src="webgl-chart.js"></script>
-    <script src="wasm-loader.js"></script>
-    <script src="modules/utils.js"></script>
-    <script src="modules/state.js"></script>
-    <script src="modules/theme.js"></script>
-    <script src="modules/api.js"></script>
-    <script src="modules/sse.js"></script>
-    <script src="modules/toast.js"></script>
-    <script src="modules/modal.js"></script>
-    <script src="modules/keyboard.js"></script>
-    <script src="modules/orderbook.js"></script>
-    <script src="modules/chart.js"></script>
-    <script src="modules/positions.js"></script>
-    <script src="modules/auth.js"></script>
-    <script src="modules/layout.js"></script>
-    <script src="modules/watchlist.js"></script>
-    <script src="modules/trade.js"></script>
-    <script src="modules/orders.js"></script>
-    <script src="modules/history.js"></script>
-    <script src="modules/alerts.js"></script>
-    <script src="modules/connection.js"></script>
-    <script src="modules/i18n.js"></script>
-    <script src="modules/error-handler.js"></script>
-    <script src="modules/marketplace.js"></script>
-    <script src="app.js"></script>
-    <script src="modules/app-init.js"></script>
-
-
-    <!-- ORDER CONFIRMATION OVERLAY -->
-    <div class="order-confirm" id="orderConfirm">
-        <div class="order-confirm-icon" id="orderConfirmIcon">OK</div>
-        <div class="order-confirm-title" id="orderConfirmTitle">Order Filled</div>
-        <div class="order-confirm-details" id="orderConfirmDetails">1 XAU-MNT-PERP @ 18,500,000 MNT</div>
-    </div>
-
-    <!-- KEYBOARD SHORTCUTS MODAL -->
-    <div class="modal-overlay hidden" id="keyboardModal" onclick="if(event.target===this)hideKeyboard()">
-        <div class="keyboard-modal">
-            <div class="keyboard-header">
-                <span class="keyboard-title"> Keyboard Shortcuts</span>
-                <button class="keyboard-close" onclick="hideKeyboard()">X</button>
-            </div>
-            <div class="keyboard-body">
-                <div class="shortcut-group">
-                    <div class="shortcut-title">Trading</div>
-                    <div class="shortcut-row"><span class="kbd-hint">B</span> <span>Buy (Long)</span></div>
-                    <div class="shortcut-row"><span class="kbd-hint">S</span> <span>Sell (Short)</span></div>
-                    <div class="shortcut-row"><span class="kbd-hint">Enter</span> <span>Submit Order</span></div>
-                    <div class="shortcut-row"><span class="kbd-hint">Esc</span> <span>Cancel / Close</span></div>
-                </div>
-                <div class="shortcut-group">
-                    <div class="shortcut-title">Chart</div>
-                    <div class="shortcut-row"><span class="kbd-hint">1</span> - <span class="kbd-hint">6</span> <span>Timeframes (1m-1D)</span></div>
-                    <div class="shortcut-row"><span class="kbd-hint">+</span> / <span class="kbd-hint">-</span> <span>Zoom In/Out</span></div>
-                    <div class="shortcut-row"><span class="kbd-hint">&lt;</span> / <span class="kbd-hint">&gt;</span> <span>Pan Chart</span></div>
-                </div>
-                <div class="shortcut-group">
-                    <div class="shortcut-title">Navigation</div>
-                    <div class="shortcut-row"><span class="kbd-hint">Up</span> / <span class="kbd-hint">Down</span> <span>Next/Prev Instrument</span></div>
-                    <div class="shortcut-row"><span class="kbd-hint">/</span> <span>Search Instruments</span></div>
-                    <div class="shortcut-row"><span class="kbd-hint">?</span> <span>Show This Help</span></div>
-                </div>
-                <div class="shortcut-group">
-                    <div class="shortcut-title">Account</div>
-                    <div class="shortcut-row"><span class="kbd-hint">Ctrl</span>+<span class="kbd-hint">D</span> <span>Deposit</span></div>
-                    <div class="shortcut-row"><span class="kbd-hint">Ctrl</span>+<span class="kbd-hint">W</span> <span>Withdraw</span></div>
-                </div>
-            </div>
-        </div>
-    </div>
-
+    <script type="module" src="app-v3.js"></script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-

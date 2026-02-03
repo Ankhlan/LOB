@@ -293,3 +293,5 @@ if (typeof module !== 'undefined') {
 }
 
 window.History = History;
+// ES Module export
+export { History };

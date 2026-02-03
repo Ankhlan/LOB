@@ -243,3 +243,5 @@ if (typeof module !== 'undefined') {
 }
 
 window.OrderBook = OrderBook;
+// ES Module export
+export { OrderBook };

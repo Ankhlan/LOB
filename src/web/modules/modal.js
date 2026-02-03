@@ -310,3 +310,5 @@ if (typeof module !== 'undefined') {
 }
 
 window.Modal = Modal;
+// ES Module export
+export { Modal };

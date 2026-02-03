@@ -173,3 +173,5 @@ if (typeof module !== 'undefined') {
 
 // Expose globally for current architecture
 window.State = State;
+// ES Module export
+export { State };

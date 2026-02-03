@@ -306,3 +306,5 @@ if (typeof module !== 'undefined') {
 }
 
 window.Chart = Chart;
+// ES Module export
+export { Chart };

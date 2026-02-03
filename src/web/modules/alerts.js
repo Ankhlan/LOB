@@ -285,3 +285,5 @@ if (typeof module !== 'undefined') {
 }
 
 window.Alerts = Alerts;
+// ES Module export
+export { Alerts };

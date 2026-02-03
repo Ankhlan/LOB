@@ -210,3 +210,5 @@ if (typeof module !== 'undefined') {
 }
 
 window.ErrorHandler = ErrorHandler;
+// ES Module export
+export { ErrorHandler };
