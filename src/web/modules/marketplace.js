@@ -504,23 +504,23 @@ const Marketplace = {
     renderIndices(product) {
         return `
             <div class="market-info indices">
-                <h3> Global Index</h3>
+                <h3>Global Index</h3>
                 <div class="index-stats">
                     <span class="stat">Constituents: <strong>${product.symbol.includes('SPX') ? '500' : product.symbol.includes('NDX') ? '100' : '50+'}</strong></span>
                     <span class="stat">Session: <strong>${this.getMarketSession(product.symbol)}</strong></span>
                 </div>
                 <div class="index-section">
-                    <h4> Market Internals</h4>
+                    <h4>Market Internals</h4>
                     <p>Breadth indicators, advance/decline ratio, and 
                        new highs vs lows provide market health signals.</p>
                 </div>
                 <div class="index-section">
-                    <h4> Global Correlation</h4>
+                    <h4>Global Correlation</h4>
                     <p>Overnight futures, Asia/Europe session flow, and 
                        inter-market relationships with bonds and commodities.</p>
                 </div>
                 <div class="index-section">
-                    <h4> Key Events</h4>
+                    <h4>Key Events</h4>
                     <p>Fed meetings, earnings seasons, and macro data releases 
                        (NFP, CPI, GDP) drive volatility clusters.</p>
                 </div>
