@@ -970,6 +970,35 @@ html, body {
     font-size: 11px;
     color: var(--text-secondary);
     line-height: 1.4;
+    margin-bottom: 8px;
+}
+
+/* Mongolian product details */
+.mongolian-details {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border-color);
+}
+
+.mongolian-details .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 3px 0;
+    font-size: 10px;
+}
+
+.mongolian-details .info-row span:first-child {
+    color: var(--text-muted);
+}
+
+.mongolian-details .info-row .num {
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    font-size: 10px;
+    text-align: right;
+    max-width: 60%;
+    word-break: break-word;
 }
 
 /* ============================================

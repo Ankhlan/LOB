@@ -76,6 +76,14 @@
         productContext: $('#productContext'),
         productName: $('#productName'),
         productDesc: $('#productDesc'),
+        // Mongolian product details
+        mongolianDetails: $('#mongolianDetails'),
+        mnBenchmark: $('#mnBenchmark'),
+        mnGrade: $('#mnGrade'),
+        mnDelivery: $('#mnDelivery'),
+        mnContractSize: $('#mnContractSize'),
+        mnNoteRow: $('#mnNoteRow'),
+        mnNote: $('#mnNote'),
         // Modal
         loginModal: $('#loginModal'),
         loginBtn: $('#loginBtn'),
@@ -381,8 +389,30 @@
             dom.productContext.classList.remove('hidden');
             dom.productName.textContent = info.name;
             dom.productDesc.textContent = info.description;
+            
+            // Display Mongolian-specific product details from NEXUS mongolian_context
+            if (info.mongolian_context) {
+                const ctx = info.mongolian_context;
+                dom.mongolianDetails.classList.remove('hidden');
+                dom.mnBenchmark.textContent = ctx.benchmark || '-';
+                dom.mnGrade.textContent = ctx.grade || '-';
+                dom.mnDelivery.textContent = ctx.delivery_point || '-';
+                dom.mnContractSize.textContent = ctx.contract_size ? 
+                    `${ctx.contract_size} ${ctx.unit || ''}` : '-';
+                
+                // Show note if present
+                if (ctx.note) {
+                    dom.mnNoteRow.classList.remove('hidden');
+                    dom.mnNote.textContent = ctx.note;
+                } else {
+                    dom.mnNoteRow.classList.add('hidden');
+                }
+            } else {
+                dom.mongolianDetails.classList.add('hidden');
+            }
         } else {
             dom.productContext.classList.add('hidden');
+            dom.mongolianDetails.classList.add('hidden');
         }
 
         // Source transparency from NEXUS API
