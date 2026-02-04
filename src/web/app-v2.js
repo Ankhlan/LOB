@@ -246,8 +246,30 @@
         }
     }
 
+    function renderSkeletonRows(count = 8) {
+        // Show skeleton loading placeholders while fetching data
+        const rows = [];
+        for (let i = 0; i < count; i++) {
+            rows.push(`
+                <tr class="skeleton-row">
+                    <td><div class="skeleton-cell long"></div></td>
+                    <td><div class="skeleton-cell medium"></div></td>
+                    <td><div class="skeleton-cell medium"></div></td>
+                    <td><div class="skeleton-cell short"></div></td>
+                </tr>
+            `);
+        }
+        dom.marketList.innerHTML = rows.join('');
+    }
+
     function renderMarketList(filter = 'all') {
         let markets = state.markets;
+        
+        // Show skeleton if no markets loaded yet
+        if (!markets || markets.length === 0) {
+            renderSkeletonRows(8);
+            return;
+        }
         
         // Apply category filter
         if (filter !== 'all') {
@@ -258,6 +280,16 @@
         const searchTerm = ($('#searchMarket')?.value || '').toLowerCase();
         if (searchTerm) {
             markets = markets.filter(m => m.symbol.toLowerCase().includes(searchTerm));
+        }
+        
+        // Show empty state if no results after filtering
+        if (markets.length === 0) {
+            dom.marketList.innerHTML = `
+                <tr class="empty-row">
+                    <td colspan="4">No markets match your filter</td>
+                </tr>
+            `;
+            return;
         }
 
         dom.marketList.innerHTML = markets.map(m => {
@@ -897,6 +929,9 @@
         setupEventHandlers();
         connectSSE();
 
+        // Show skeleton loading immediately
+        renderSkeletonRows(8);
+        
         // Load real data from API
         loadMarketsFromAPI();
         
