@@ -834,42 +834,97 @@
 
         // Load real data from API
         loadMarketsFromAPI();
+        
+        // Refresh 24h stats every 30 seconds
+        setInterval(refreshTickerStats, 30000);
     }
 
     async function loadMarketsFromAPI() {
         try {
-            const res = await fetch(`${API_BASE}/products`);
-            const data = await res.json();
+            // Fetch products and tickers in parallel for better performance
+            const [productsRes, tickersRes] = await Promise.all([
+                fetch(`${API_BASE}/products`),
+                fetch(`${API_BASE}/tickers`).catch(() => null) // Graceful fallback if endpoint not ready
+            ]);
+            
+            const productsData = await productsRes.json();
+            const tickersData = tickersRes ? await tickersRes.json().catch(() => []) : [];
             
             // API returns array directly
-            const products = Array.isArray(data) ? data : (data.products || []);
+            const products = Array.isArray(productsData) ? productsData : (productsData.products || []);
+            
+            // Build ticker lookup map for O(1) access
+            const tickerMap = {};
+            if (Array.isArray(tickersData)) {
+                tickersData.forEach(t => { tickerMap[t.symbol] = t; });
+            }
             
             if (products.length > 0) {
-                // Transform API products to market format
-                const markets = products.map(p => ({
-                    symbol: p.symbol,
-                    category: mapCategory(p.symbol, p.category),
-                    bid: p.mark_price * 0.9998, // Simulate spread
-                    ask: p.mark_price * 1.0002,
-                    last: p.mark_price,
-                    change: 0, // Will come from price updates
-                    high24h: p.mark_price * 1.01,
-                    low24h: p.mark_price * 0.99,
-                    volume24h: 0,
-                    source: {
-                        symbol: p.fxcm_symbol || '-',
-                        usdPrice: p.fxcm_symbol ? p.mark_price / 3576 : null, // Derive USD price
-                        usdMnt: 3576 // BoM rate
-                    },
-                    description: p.description
-                }));
+                // Transform API products to market format, merging with ticker stats
+                const markets = products.map(p => {
+                    const ticker = tickerMap[p.symbol] || {};
+                    
+                    // Use ticker data if available, otherwise derive from mark_price
+                    const bid = ticker.bid || p.mark_price * 0.9998;
+                    const ask = ticker.ask || p.mark_price * 1.0002;
+                    const mark = ticker.mark || p.mark_price;
+                    
+                    return {
+                        symbol: p.symbol,
+                        category: mapCategory(p.symbol, p.category),
+                        bid: bid,
+                        ask: ask,
+                        last: mark,
+                        change: ticker.change_24h || 0,
+                        high24h: ticker.high_24h || mark * 1.01,
+                        low24h: ticker.low_24h || mark * 0.99,
+                        volume24h: ticker.volume_24h || 0,
+                        source: {
+                            symbol: p.fxcm_symbol || '-',
+                            usdPrice: p.fxcm_symbol ? mark / 3576 : null, // Derive USD price
+                            usdMnt: 3576 // BoM rate
+                        },
+                        description: p.description
+                    };
+                });
                 
                 handleMarketsUpdate(markets);
-                console.log('[API] Loaded', markets.length, 'products from API');
+                console.log('[API] Loaded', markets.length, 'products with 24h stats');
             }
         } catch (e) {
             console.error('[API] Failed to load products:', e);
             // Fallback: markets will come from SSE stream
+        }
+    }
+
+    // Refresh 24h stats periodically (every 30 seconds)
+    async function refreshTickerStats() {
+        try {
+            const res = await fetch(`${API_BASE}/tickers`);
+            const tickers = await res.json();
+            
+            if (Array.isArray(tickers)) {
+                tickers.forEach(ticker => {
+                    const market = state.markets.find(m => m.symbol === ticker.symbol);
+                    if (market) {
+                        market.bid = ticker.bid || market.bid;
+                        market.ask = ticker.ask || market.ask;
+                        market.last = ticker.mark || market.last;
+                        market.change = ticker.change_24h || market.change;
+                        market.high24h = ticker.high_24h || market.high24h;
+                        market.low24h = ticker.low_24h || market.low24h;
+                        market.volume24h = ticker.volume_24h || market.volume24h;
+                    }
+                });
+                
+                renderMarketList();
+                // Update selected market display if needed
+                if (state.selectedMarket) {
+                    updateSelectedMarketDisplay();
+                }
+            }
+        } catch (e) {
+            console.error('[API] Failed to refresh ticker stats:', e);
         }
     }
 

@@ -1104,7 +1104,7 @@ inline void HttpServer::setup_routes() {
         response["mark_price_mnt"] = product->mark_price_mnt;
 
         // Add Mongolian product context
-        if (product->category == static_cast<int>(ProductCategory::MN_PERPETUAL) || 
+        if (product->category == ProductCategory::MN_PERPETUAL || 
             symbol.find("MN-") == 0) {
             
             json context;
