@@ -1197,6 +1197,71 @@ inline void HttpServer::setup_routes() {
         res.set_content(quote.dump(), "application/json");
     });
     
+
+    // GET /api/ticker/:symbol - 24h market statistics
+    server_->Get("/api/ticker/:symbol", [](const httplib::Request& req, httplib::Response& res) {
+        auto symbol = req.path_params.at("symbol");
+        auto* product = ProductCatalog::instance().get(symbol);
+
+        if (!product) {
+            res.status = 404;
+            res.set_content(R"({"error":"Symbol not found"})", "application/json");
+            return;
+        }
+
+        // Get 24h stats from candle store
+        auto stats = CandleStore::instance().get_24h_stats(symbol);
+
+        // Get current price info
+        auto [bid, ask] = MatchingEngine::instance().get_bbo(symbol);
+        double bid_price = get_mnt_or(bid, product->mark_price_mnt * 0.999);
+        double ask_price = get_mnt_or(ask, product->mark_price_mnt * 1.001);
+
+        json response = {
+            {"symbol", symbol},
+            {"bid", bid_price},
+            {"ask", ask_price},
+            {"mark", product->mark_price_mnt},
+            {"high_24h", stats.high24h > 0 ? stats.high24h : product->mark_price_mnt * 1.01},
+            {"low_24h", stats.low24h > 0 ? stats.low24h : product->mark_price_mnt * 0.99},
+            {"volume_24h", stats.volume24h},
+            {"change_24h", stats.low24h > 0 ? 
+                ((product->mark_price_mnt - stats.low24h) / stats.low24h) * 100.0 : 0.0},
+            {"funding_rate", product->funding_rate},
+            {"timestamp", stats.timestamp}
+        };
+
+        res.set_content(response.dump(), "application/json");
+    });
+
+    // GET /api/tickers - All market 24h statistics
+    server_->Get("/api/tickers", [](const httplib::Request&, httplib::Response& res) {
+        json tickers = json::array();
+
+        ProductCatalog::instance().for_each([&](const Product& p) {
+            if (!p.is_active) return;
+
+            auto stats = CandleStore::instance().get_24h_stats(p.symbol);
+            auto [bid, ask] = MatchingEngine::instance().get_bbo(p.symbol);
+            double bid_price = get_mnt_or(bid, p.mark_price_mnt * 0.999);
+            double ask_price = get_mnt_or(ask, p.mark_price_mnt * 1.001);
+
+            tickers.push_back({
+                {"symbol", p.symbol},
+                {"bid", bid_price},
+                {"ask", ask_price},
+                {"mark", p.mark_price_mnt},
+                {"high_24h", stats.high24h > 0 ? stats.high24h : p.mark_price_mnt * 1.01},
+                {"low_24h", stats.low24h > 0 ? stats.low24h : p.mark_price_mnt * 0.99},
+                {"volume_24h", stats.volume24h},
+                {"change_24h", stats.low24h > 0 ? 
+                    ((p.mark_price_mnt - stats.low24h) / stats.low24h) * 100.0 : 0.0}
+            });
+        });
+
+        res.set_content(tickers.dump(), "application/json");
+    });
+
     // ==================== ORDER BOOK ====================
     
     server_->Get("/api/book/:symbol", [](const httplib::Request& req, httplib::Response& res) {

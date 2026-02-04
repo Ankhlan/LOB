@@ -100,6 +100,22 @@
         });
     }
 
+    // Abbreviated format per NEXUS spec: 18.09M, 272.72M, 1.25B
+    function formatPriceAbbrev(num, decimals = 2) {
+        if (num === null || num === undefined || isNaN(num)) return '-';
+        const absNum = Math.abs(num);
+        
+        if (absNum >= 1e9) {
+            return (num / 1e9).toFixed(2) + 'B';
+        } else if (absNum >= 1e6) {
+            return (num / 1e6).toFixed(2) + 'M';
+        } else if (absNum >= 1000) {
+            return formatNumber(num, decimals);
+        } else {
+            return formatNumber(num, decimals);
+        }
+    }
+
     function formatMNT(num) {
         if (num === null || num === undefined || isNaN(num)) return '- MNT';
         return formatNumber(num, 0) + ' MNT';
@@ -244,8 +260,8 @@
             return `
                 <tr data-symbol="${m.symbol}" class="${isSelected}">
                     <td class="col-symbol">${m.symbol}</td>
-                    <td class="col-bid num">${formatNumber(m.bid, decimals)}</td>
-                    <td class="col-ask num">${formatNumber(m.ask, decimals)}</td>
+                    <td class="col-bid num">${formatPriceAbbrev(m.bid, decimals)}</td>
+                    <td class="col-ask num">${formatPriceAbbrev(m.ask, decimals)}</td>
                     <td class="col-chg num ${chgClass}">${formatPercent(m.change)}</td>
                 </tr>
             `;
@@ -281,19 +297,19 @@
     function updateSelectedMarketDisplay(market) {
         const decimals = getDecimals(market.symbol);
         dom.selectedSymbol.textContent = market.symbol;
-        dom.selectedPrice.textContent = formatNumber(market.last, decimals);
+        dom.selectedPrice.textContent = formatPriceAbbrev(market.last, decimals);
         
         const chgClass = market.change >= 0 ? 'positive' : 'negative';
         dom.selectedChange.className = 'market-change ' + chgClass;
         dom.selectedChange.textContent = formatPercent(market.change);
 
-        dom.high24h.textContent = formatNumber(market.high24h, decimals);
-        dom.low24h.textContent = formatNumber(market.low24h, decimals);
-        dom.vol24h.textContent = formatNumber(market.volume24h, 0);
+        dom.high24h.textContent = formatPriceAbbrev(market.high24h, decimals);
+        dom.low24h.textContent = formatPriceAbbrev(market.low24h, decimals);
+        dom.vol24h.textContent = formatPriceAbbrev(market.volume24h, 0);
 
-        // Update trade buttons
-        dom.buyPrice.textContent = formatNumber(market.ask, decimals);
-        dom.sellPrice.textContent = formatNumber(market.bid, decimals);
+        // Update trade buttons with abbreviated prices
+        dom.buyPrice.textContent = formatPriceAbbrev(market.ask, decimals);
+        dom.sellPrice.textContent = formatPriceAbbrev(market.bid, decimals);
 
         updateOrderEstimate();
     }
