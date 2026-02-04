@@ -32,7 +32,17 @@
             '.close-btn { background: rgba(224,108,117,0.2); color: #e06c75; border: 1px solid #e06c75; }',
             '.close-btn:hover { background: #e06c75; color: #fff; }',
             '.cancel-btn { background: rgba(255,193,7,0.2); color: #ffc107; border: 1px solid #ffc107; }',
-            '.cancel-btn:hover { background: #ffc107; color: #000; }'
+            '.cancel-btn:hover { background: #ffc107; color: #000; }',
+            '.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; }',
+            '.modal { background: #1e1e2e; border: 1px solid #333; border-radius: 8px; padding: 20px; min-width: 300px; }',
+            '.modal-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }',
+            '.modal-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #333; }',
+            '.modal-label { color: #888; }',
+            '.modal-value { font-weight: 500; }',
+            '.modal-buttons { display: flex; gap: 12px; margin-top: 20px; }',
+            '.modal-btn { flex: 1; padding: 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; }',
+            '.modal-btn.confirm { background: #00c896; color: #fff; }',
+            '.modal-btn.cancel { background: #333; color: #fff; }',
         ].join('\n');
         document.head.appendChild(style);
     }
@@ -137,6 +147,7 @@
         wireTimeframeSelector();
         wireSizePresets();
         wireLeverageSelector();
+        wireChartTypeSelector();
     }
 
     function connectSSE() {
@@ -257,10 +268,12 @@
                 var order = { symbol: symbol, side: side, type: type, quantity: size };
                 if (type !== 'market') order.price = price;
                 console.log('[Bootstrap] Order:', order);
-                fetch('/api/orders', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(order) })
+                showOrderConfirmation(order, function() {
+                    fetch('/api/orders', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(order) })
                 .then(function(r) { return r.json(); })
                 .then(function(res) { showToast(res.order_id ? 'Order placed!' : (res.error || 'Failed'), res.order_id ? 'success' : 'error'); })
                 .catch(function(e) { showToast('Error: ' + e.message, 'error'); });
+                });
             });
         }
         console.log('[Bootstrap] Trade panel wired');
@@ -323,6 +336,27 @@
     
     
     
+    
+    function wireChartTypeSelector() {
+        document.querySelectorAll('.ct-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var type = btn.dataset.type;
+                document.querySelectorAll('.ct-btn').forEach(function(b) { b.classList.remove('active'); });
+                btn.classList.add('active');
+                window.AppState.chartType = type;
+                
+                // Update chart rendering
+                if (window._creChart) {
+                    window._creChart.setChartType(type);
+                    window._creChart.render();
+                }
+                console.log('[Bootstrap] Chart type:', type);
+            });
+        });
+        window.AppState.chartType = 'candles';
+        console.log('[Bootstrap] Chart type selector wired');
+    }
+
     function wireLeverageSelector() {
         document.querySelectorAll('.preset-btn[data-lev]').forEach(function(btn) {
             btn.addEventListener('click', function() {
@@ -466,6 +500,29 @@
         ctx.fill();
     }
 
+    
+    function showOrderConfirmation(order, onConfirm) {
+        var overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.innerHTML = 
+            '<div class="modal">' +
+            '<div class="modal-title">' + (order.side === 'buy' ? 'LONG' : 'SHORT') + ' ' + order.symbol + '</div>' +
+            '<div class="modal-row"><span class="modal-label">Type</span><span class="modal-value">' + order.type.toUpperCase() + '</span></div>' +
+            '<div class="modal-row"><span class="modal-label">Size</span><span class="modal-value">' + order.quantity.toLocaleString() + ' contracts</span></div>' +
+            (order.price ? '<div class="modal-row"><span class="modal-label">Price</span><span class="modal-value">\u20AE' + order.price.toLocaleString() + '</span></div>' : '') +
+            '<div class="modal-row"><span class="modal-label">Leverage</span><span class="modal-value">' + (window.AppState.leverage || 10) + 'x</span></div>' +
+            '<div class="modal-buttons">' +
+            '<button class="modal-btn cancel">Cancel</button>' +
+            '<button class="modal-btn confirm">' + (order.side === 'buy' ? 'Confirm Long' : 'Confirm Short') + '</button>' +
+            '</div></div>';
+        
+        document.body.appendChild(overlay);
+        
+        overlay.querySelector('.modal-btn.cancel').onclick = function() { overlay.remove(); };
+        overlay.querySelector('.modal-btn.confirm').onclick = function() { overlay.remove(); onConfirm(); };
+        overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+    }
+
     function showToast(msg, type) {
         var c = document.getElementById('toastContainer');
         if (!c) return;
@@ -479,6 +536,11 @@
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); }
     else { setTimeout(init, 300); }
 })();
+
+
+
+
+
 
 
 

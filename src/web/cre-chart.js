@@ -42,6 +42,7 @@ class CREChart {
         this.isDragging = false;
         this.dragStart = null;
         this.lastDragX = 0;
+        this.chartType = 'candles';
 
         // Create canvas
         this.canvas = document.createElement('canvas');
@@ -174,6 +175,10 @@ class CREChart {
         this.visibleRange.start = Math.max(0, this.data.length - visibleCount);
         this.visibleRange.end = this.data.length;
         
+        this.render();
+    }
+    setChartType(type) {
+        this.chartType = type || 'candles';
         this.render();
     }
 
@@ -318,6 +323,21 @@ class CREChart {
         // Draw X-axis labels
         this.drawXAxis(ctx, chartLeft, chartBottom, chartWidth, visible);
 
+        
+          // Draw line chart if type is line
+          if (this.chartType === 'line') {
+              ctx.strokeStyle = this.options.upColor;
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              for (let i = 0; i < candleCount; i++) {
+                  const candle = visible[i];
+                  const x = chartLeft + (i + 0.5) * candleSpacing;
+                  const y = chartTop + priceChartHeight - ((candle.close - this.priceRange.min) / (this.priceRange.max - this.priceRange.min)) * priceChartHeight;
+                  if (i === 0) ctx.moveTo(x, y);
+                  else ctx.lineTo(x, y);
+              }
+              ctx.stroke();
+          }
         // Draw crosshair
         if (this.crosshair) {
             this.drawCrosshair(ctx, chartLeft, chartTop, chartRight, chartBottom, priceChartHeight, visible, candleSpacing);
@@ -540,3 +560,7 @@ class CREChart {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = CREChart;
 }
+
+
+
+
