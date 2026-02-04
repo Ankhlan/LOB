@@ -322,6 +322,7 @@
                             <span class="toggle-label">Post Only</span>
                         </label>
                     </div>
+                    <div class="tpsl-row"><div class="tpsl-input"><label>Take Profit</label><input type="text" class="form-input" id="takeProfit" placeholder="Price"></div><div class="tpsl-input"><label>Stop Loss</label><input type="text" class="form-input" id="stopLoss" placeholder="Price"></div></div>
                     <button class="submit-order buy" id="submitOrder">Long XAU-MNT</button>
                 </div>
             </div>
@@ -446,6 +447,7 @@
     <script src="cre-chart.js"></script>
     <script type="module" src="app-v3.js"></script>
     <script src="modules/bootstrap.js"></script>
+<div class="modal-overlay" id="shortcutsModal" style="display:none"><div class="modal-content"><h2>Keyboard Shortcuts</h2><table class="shortcuts-table"><tr><td><kbd>?</kbd></td><td>Show this help</td></tr><tr><td><kbd>B</kbd></td><td>Buy side</td></tr><tr><td><kbd>S</kbd></td><td>Sell side</td></tr><tr><td><kbd>L</kbd></td><td>Limit order</td></tr><tr><td><kbd>M</kbd></td><td>Market order</td></tr><tr><td><kbd>Tab</kbd></td><td>Next input</td></tr><tr><td><kbd>Enter</kbd></td><td>Submit order</td></tr><tr><td><kbd>Esc</kbd></td><td>Close modal</td></tr></table><button onclick="this.closest('.modal-overlay').style.display='none'" class="btn-primary">Close</button></div></div>
 </body>
 </html>
 

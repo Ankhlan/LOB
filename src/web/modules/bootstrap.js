@@ -805,6 +805,17 @@
 
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); }
     else { setTimeout(init, 300); }
+        // Keyboard Shortcuts Overlay
+    var kbStyle = document.createElement('style');
+    kbStyle.textContent = '.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 9999; } .modal-content { background: #1a1a2e; padding: 24px; border-radius: 8px; max-width: 400px; } .modal-content h2 { margin: 0 0 16px 0; color: #fff; } .shortcuts-table { width: 100%; margin-bottom: 16px; } .shortcuts-table td { padding: 8px; color: #ccc; border-bottom: 1px solid #333; } .shortcuts-table kbd { background: #333; padding: 4px 8px; border-radius: 4px; font-family: monospace; color: #fff; }';
+    document.head.appendChild(kbStyle);
+    document.addEventListener('keydown', function(e) {
+        if (e.target.matches('input,textarea,select')) return;
+        var modal = document.getElementById('shortcutsModal');
+        if (e.key === '?') modal.style.display = 'flex';
+        else if (e.key === 'Escape') modal.style.display = 'none';
+        else if (e.key === 'b' || e.key === 'B') document.querySelector('.side-btn[data-side]')?.click();
+    });
     // Time in Force styling
     var tifStyle = document.createElement('style');
     tifStyle.textContent = '.tif-row select { width: 100%; background: #2a2a2a; color: #fff; border: 1px solid #444; padding: 8px; border-radius: 4px; }';
@@ -834,6 +845,17 @@
             });
     });
 
+        // Keyboard Shortcuts Overlay
+    var kbStyle = document.createElement('style');
+    kbStyle.textContent = '.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 9999; } .modal-content { background: #1a1a2e; padding: 24px; border-radius: 8px; max-width: 400px; } .modal-content h2 { margin: 0 0 16px 0; color: #fff; } .shortcuts-table { width: 100%; margin-bottom: 16px; } .shortcuts-table td { padding: 8px; color: #ccc; border-bottom: 1px solid #333; } .shortcuts-table kbd { background: #333; padding: 4px 8px; border-radius: 4px; font-family: monospace; color: #fff; }';
+    document.head.appendChild(kbStyle);
+    document.addEventListener('keydown', function(e) {
+        if (e.target.matches('input,textarea,select')) return;
+        var modal = document.getElementById('shortcutsModal');
+        if (e.key === '?') modal.style.display = 'flex';
+        else if (e.key === 'Escape') modal.style.display = 'none';
+        else if (e.key === 'b' || e.key === 'B') document.querySelector('.side-btn[data-side]')?.click();
+    });
     // Time in Force styling
     var tifStyle = document.createElement('style');
     tifStyle.textContent = '.tif-row select { width: 100%; background: #2a2a2a; color: #fff; border: 1px solid #444; padding: 8px; border-radius: 4px; }';
