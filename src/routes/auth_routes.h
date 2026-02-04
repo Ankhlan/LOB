@@ -220,6 +220,12 @@ private:
         });
     }
     
+    // Shared OTP storage (between request and verify handlers)
+    static std::unordered_map<std::string, std::pair<std::string, int64_t>>& get_otp_store() {
+        static std::unordered_map<std::string, std::pair<std::string, int64_t>> store;
+        return store;
+    }
+
     void register_otp_routes(httplib::Server& server) {
         // Request OTP via SMS
         server.Post("/api/auth/request-otp", [](const httplib::Request& req, httplib::Response& res) {
@@ -231,7 +237,7 @@ private:
                 std::string otp = std::to_string(100000 + rand() % 900000);
                 
                 // Store OTP with expiry (in-memory for demo)
-                static std::unordered_map<std::string, std::pair<std::string, int64_t>> otp_store;
+                auto& otp_store = get_otp_store();
                 int64_t expires = std::chrono::duration_cast<std::chrono::seconds>(
                     std::chrono::system_clock::now().time_since_epoch()
                 ).count() + 300; // 5 min expiry
@@ -259,7 +265,7 @@ private:
                 std::string otp = body["otp"];
                 
                 // Verify OTP (simplified - use proper verification in production)
-                static std::unordered_map<std::string, std::pair<std::string, int64_t>> otp_store;
+                auto& otp_store = get_otp_store();
                 
                 auto it = otp_store.find(phone);
                 if (it == otp_store.end()) {
