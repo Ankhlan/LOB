@@ -62,7 +62,14 @@
             '.inst-highlow #high24h { color: #00c896; }',
             '.inst-highlow #low24h { color: #e06c75; }',
             '.inst-spread { margin-left: 12px; font-size: 11px; color: #888; }',
-            '.inst-spread #spreadBps { color: #98c379; font-weight: 500; }',,
+            '.inst-spread #spreadBps { color: #98c379; font-weight: 500; }',
+            '.quick-sizes { display: flex; gap: 4px; margin: 6px 0; }',
+            '.quick-size-btn { flex: 1; padding: 4px; background: rgba(255,255,255,0.05); border: 1px solid #444; border-radius: 3px; color: #888; font-size: 10px; cursor: pointer; }',
+            '.quick-size-btn:hover { background: rgba(0,200,150,0.2); border-color: #00c896; color: #00c896; }',
+            '.order-options { display: flex; gap: 16px; margin: 8px 0; }',
+            '.toggle-option { display: flex; align-items: center; gap: 6px; cursor: pointer; }',
+            '.toggle-option input { width: 14px; height: 14px; accent-color: #00c896; }',
+            '.toggle-label { font-size: 11px; color: #888; }',,
             '.rt-row { display: flex; justify-content: space-between; padding: 4px 8px; font-size: 11px; font-family: monospace; border-bottom: 1px solid rgba(255,255,255,0.05); }',
             '.rt-row.buy .rt-price { color: #00c896; }',
             '.rt-row.sell .rt-price { color: #e06c75; }',
@@ -83,6 +90,13 @@
             '.inst-highlow #low24h { color: #e06c75; }',
             '.inst-spread { margin-left: 12px; font-size: 11px; color: #888; }',
             '.inst-spread #spreadBps { color: #98c379; font-weight: 500; }',
+            '.quick-sizes { display: flex; gap: 4px; margin: 6px 0; }',
+            '.quick-size-btn { flex: 1; padding: 4px; background: rgba(255,255,255,0.05); border: 1px solid #444; border-radius: 3px; color: #888; font-size: 10px; cursor: pointer; }',
+            '.quick-size-btn:hover { background: rgba(0,200,150,0.2); border-color: #00c896; color: #00c896; }',
+            '.order-options { display: flex; gap: 16px; margin: 8px 0; }',
+            '.toggle-option { display: flex; align-items: center; gap: 6px; cursor: pointer; }',
+            '.toggle-option input { width: 14px; height: 14px; accent-color: #00c896; }',
+            '.toggle-label { font-size: 11px; color: #888; }',
         ].join('\n');
         document.head.appendChild(style);
     }
@@ -211,6 +225,8 @@
         wireSizePresets();
         wireLeverageSelector();
         wireChartTypeSelector();
+        wireQuickSizes();
+        wireOrderCalculator();
     }
 
     function connectSSE() {
@@ -450,6 +466,47 @@
         console.log('[Bootstrap] Chart type selector wired');
     }
 
+
+
+    function updateOrderSummary() {
+        var price = parseFloat(document.getElementById('orderPrice')?.value) || parseFloat(document.getElementById('topPrice')?.textContent) || 0;
+        var size = parseFloat(document.getElementById('orderSize')?.value) || 0;
+        var leverage = parseFloat(document.querySelector('.lev-btn.active')?.dataset.lev) || 10;
+        
+        var orderValue = price * size;
+        var margin = orderValue / leverage;
+        var fee = orderValue * 0.0006; // 6 bps taker fee
+        
+        var valueEl = document.getElementById('sumValue');
+        var marginEl = document.getElementById('sumMargin');
+        var feeEl = document.getElementById('sumFee');
+        
+        if (valueEl) valueEl.textContent = '\u20AE' + orderValue.toLocaleString(undefined, {maximumFractionDigits: 0});
+        if (marginEl) marginEl.textContent = '\u20AE' + margin.toLocaleString(undefined, {maximumFractionDigits: 0});
+        if (feeEl) feeEl.textContent = '\u20AE' + fee.toFixed(2);
+    }
+    function wireQuickSizes() {
+        document.querySelectorAll('.quick-size-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var size = parseInt(btn.dataset.size);
+                var sizeInput = document.getElementById('orderSize');
+                if (sizeInput) sizeInput.value = size;
+            });
+        });
+        console.log('[Bootstrap] Quick sizes wired');
+    }
+
+    function wireOrderCalculator() {
+        var priceInput = document.getElementById('orderPrice');
+        var sizeInput = document.getElementById('orderSize');
+        if (priceInput) priceInput.addEventListener('input', updateOrderSummary);
+        if (sizeInput) sizeInput.addEventListener('input', updateOrderSummary);
+        document.querySelectorAll('.lev-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() { setTimeout(updateOrderSummary, 50); });
+        });
+        updateOrderSummary();
+        console.log('[Bootstrap] Order calculator wired');
+    }
     function wireLeverageSelector() {
         document.querySelectorAll('.preset-btn[data-lev]').forEach(function(btn) {
             btn.addEventListener('click', function() {
@@ -631,7 +688,14 @@
             '.inst-highlow #high24h { color: #00c896; }',
             '.inst-highlow #low24h { color: #e06c75; }',
             '.inst-spread { margin-left: 12px; font-size: 11px; color: #888; }',
-            '.inst-spread #spreadBps { color: #98c379; font-weight: 500; }',).onclick = function() { overlay.remove(); };
+            '.inst-spread #spreadBps { color: #98c379; font-weight: 500; }',
+            '.quick-sizes { display: flex; gap: 4px; margin: 6px 0; }',
+            '.quick-size-btn { flex: 1; padding: 4px; background: rgba(255,255,255,0.05); border: 1px solid #444; border-radius: 3px; color: #888; font-size: 10px; cursor: pointer; }',
+            '.quick-size-btn:hover { background: rgba(0,200,150,0.2); border-color: #00c896; color: #00c896; }',
+            '.order-options { display: flex; gap: 16px; margin: 8px 0; }',
+            '.toggle-option { display: flex; align-items: center; gap: 6px; cursor: pointer; }',
+            '.toggle-option input { width: 14px; height: 14px; accent-color: #00c896; }',
+            '.toggle-label { font-size: 11px; color: #888; }',).onclick = function() { overlay.remove(); };
         overlay.querySelector('.modal-btn.confirm').onclick = function() { overlay.remove(); onConfirm(); };
         overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
     }

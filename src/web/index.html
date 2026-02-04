@@ -266,6 +266,12 @@
                             <input type="text" class="form-input" id="orderSize" value="1">
                             <span class="input-suffix">Contracts</span>
                         </div>
+                            <div class="quick-sizes">
+                                <button class="quick-size-btn" data-size="1000">1K</button>
+                                <button class="quick-size-btn" data-size="5000">5K</button>
+                                <button class="quick-size-btn" data-size="10000">10K</button>
+                                <button class="quick-size-btn" data-size="50000">50K</button>
+                            </div>
                           <div class="size-presets">
                               <button class="preset-btn" data-pct="25">25%</button>
                               <button class="preset-btn" data-pct="50">50%</button>
@@ -301,6 +307,16 @@
                         <div class="sum-row"><span>Est. Fee</span><span id="sumFee">-</span></div>
                     </div>
                     
+                    <div class="order-options">
+                        <label class="toggle-option">
+                            <input type="checkbox" id="reduceOnly">
+                            <span class="toggle-label">Reduce Only</span>
+                        </label>
+                        <label class="toggle-option">
+                            <input type="checkbox" id="postOnly">
+                            <span class="toggle-label">Post Only</span>
+                        </label>
+                    </div>
                     <button class="submit-order buy" id="submitOrder">Long XAU-MNT</button>
                 </div>
             </div>
