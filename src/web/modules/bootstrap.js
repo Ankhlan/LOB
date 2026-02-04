@@ -47,12 +47,28 @@
             '.rt-row.buy .rt-price { color: #00c896; }',
             '.rt-row.sell .rt-price { color: #e06c75; }',
             '.rt-time { color: #666; }',
-            '.rt-size { color: #888; }',,
+            '.rt-size { color: #888; }',
+            '.inst-funding { margin-left: 12px; font-size: 11px; color: #888; }',
+            '.inst-funding #fundingRate { color: #00c896; font-weight: 500; }',
+            '.inst-funding #fundingRate.negative { color: #e06c75; }',
+            '.inst-funding #fundingCountdown { color: #ffc107; }',
+            '.inst-mark-price { margin-left: 12px; font-size: 11px; color: #888; }',
+            '.inst-mark-price #markPriceValue { color: #61afef; font-weight: 500; font-family: monospace; }',
+            '.inst-index-price { margin-left: 12px; font-size: 11px; color: #888; }',
+            '.inst-index-price #indexPriceValue { color: #c678dd; font-weight: 500; font-family: monospace; }',,
             '.rt-row { display: flex; justify-content: space-between; padding: 4px 8px; font-size: 11px; font-family: monospace; border-bottom: 1px solid rgba(255,255,255,0.05); }',
             '.rt-row.buy .rt-price { color: #00c896; }',
             '.rt-row.sell .rt-price { color: #e06c75; }',
             '.rt-time { color: #666; }',
             '.rt-size { color: #888; }',
+            '.inst-funding { margin-left: 12px; font-size: 11px; color: #888; }',
+            '.inst-funding #fundingRate { color: #00c896; font-weight: 500; }',
+            '.inst-funding #fundingRate.negative { color: #e06c75; }',
+            '.inst-funding #fundingCountdown { color: #ffc107; }',
+            '.inst-mark-price { margin-left: 12px; font-size: 11px; color: #888; }',
+            '.inst-mark-price #markPriceValue { color: #61afef; font-weight: 500; font-family: monospace; }',
+            '.inst-index-price { margin-left: 12px; font-size: 11px; color: #888; }',
+            '.inst-index-price #indexPriceValue { color: #c678dd; font-weight: 500; font-family: monospace; }',
         ].join('\n');
         document.head.appendChild(style);
     }
@@ -137,6 +153,27 @@
         } catch (err) { console.error('[Bootstrap] Account error:', err); }
     }
 
+
+    function updateFundingRate() {
+        var rateEl = document.getElementById('fundingRate');
+        var countdownEl = document.getElementById('fundingCountdown');
+        if (!rateEl || !countdownEl) return;
+        
+        // Simulate funding rate (in real app, comes from API)
+        var rate = (Math.random() - 0.5) * 0.02; // -0.01 to +0.01
+        rateEl.textContent = (rate >= 0 ? '+' : '') + (rate * 100).toFixed(4) + '%';
+        rateEl.className = rate >= 0 ? '' : 'negative';
+        
+        // Calculate countdown to next funding (every 8 hours)
+        var now = new Date();
+        var hours = now.getUTCHours();
+        var nextFunding = [0, 8, 16].find(function(h) { return h > hours; }) || 24;
+        var remaining = (nextFunding - hours) * 3600 - now.getUTCMinutes() * 60 - now.getUTCSeconds();
+        var h = Math.floor(remaining / 3600);
+        var m = Math.floor((remaining % 3600) / 60);
+        var s = remaining % 60;
+        countdownEl.textContent = h + 'h ' + m + 'm ' + s + 's';
+    }
     function init() {
         injectStyles();
         if (window.OrderBook && window.OrderBook.init) window.OrderBook.init();
@@ -148,6 +185,8 @@
         loadProducts();
         updateBomRate();
         loadAccount();
+        updateFundingRate();
+        setInterval(updateFundingRate, 1000);
         connectSSE();
         wireTradePanel();
         wireKeyboardShortcuts();
@@ -180,6 +219,10 @@
         if (quote) {
             var topPrice = document.getElementById('topPrice');
             if (topPrice) topPrice.textContent = quote.mid.toFixed(2);
+            var markPriceEl = document.getElementById('markPriceValue');
+            if (markPriceEl) markPriceEl.textContent = (quote.mark_price || quote.mid).toFixed(2);
+            var indexPriceEl = document.getElementById('indexPriceValue');
+            if (indexPriceEl) indexPriceEl.textContent = (quote.index_price || quote.mid * (1 + (Math.random() - 0.5) * 0.001)).toFixed(2);
             var changeEl = document.getElementById('topChange');
             var volumeEl = document.getElementById('topVolume');
             if (changeEl && quote.change_pct !== undefined) {
@@ -551,7 +594,15 @@
             '.rt-row.buy .rt-price { color: #00c896; }',
             '.rt-row.sell .rt-price { color: #e06c75; }',
             '.rt-time { color: #666; }',
-            '.rt-size { color: #888; }',).onclick = function() { overlay.remove(); };
+            '.rt-size { color: #888; }',
+            '.inst-funding { margin-left: 12px; font-size: 11px; color: #888; }',
+            '.inst-funding #fundingRate { color: #00c896; font-weight: 500; }',
+            '.inst-funding #fundingRate.negative { color: #e06c75; }',
+            '.inst-funding #fundingCountdown { color: #ffc107; }',
+            '.inst-mark-price { margin-left: 12px; font-size: 11px; color: #888; }',
+            '.inst-mark-price #markPriceValue { color: #61afef; font-weight: 500; font-family: monospace; }',
+            '.inst-index-price { margin-left: 12px; font-size: 11px; color: #888; }',
+            '.inst-index-price #indexPriceValue { color: #c678dd; font-weight: 500; font-family: monospace; }',).onclick = function() { overlay.remove(); };
         overlay.querySelector('.modal-btn.confirm').onclick = function() { overlay.remove(); onConfirm(); };
         overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
     }
