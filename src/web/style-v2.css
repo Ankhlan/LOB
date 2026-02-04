@@ -1116,3 +1116,149 @@ html, body {
 
 .positive { color: var(--buy-color); }
 .negative { color: var(--sell-color); }
+
+/* ============================================
+   RESPONSIVE BREAKPOINTS
+   ============================================ */
+
+/* Tablet: 768-1200px */
+@media (max-width: 1200px) {
+    .main-grid {
+        grid-template-columns: 200px 1fr 260px;
+    }
+    
+    .panel-left {
+        min-width: 200px;
+    }
+    
+    .panel-right {
+        min-width: 260px;
+    }
+    
+    .chart-header {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .chart-stats {
+        margin-left: 0;
+        width: 100%;
+        justify-content: flex-start;
+    }
+}
+
+/* Small Tablet: 768-992px */
+@media (max-width: 992px) {
+    .main-grid {
+        grid-template-columns: 180px 1fr;
+        grid-template-rows: 1fr auto;
+    }
+    
+    .panel-right {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 1px;
+        min-width: 100%;
+    }
+    
+    .orderbook,
+    .trade-form,
+    .market-info {
+        border-top: none;
+        border-left: 1px solid var(--border-color);
+    }
+    
+    .orderbook {
+        border-left: none;
+    }
+    
+    .bottom-panel {
+        height: 150px;
+    }
+}
+
+/* Mobile: <768px */
+@media (max-width: 768px) {
+    .header {
+        padding: 0 8px;
+    }
+    
+    .logo-tag {
+        display: none;
+    }
+    
+    .main-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr auto auto;
+    }
+    
+    .panel-left {
+        min-width: 100%;
+        max-height: 200px;
+    }
+    
+    .panel-right {
+        grid-template-columns: 1fr;
+    }
+    
+    .orderbook,
+    .trade-form,
+    .market-info {
+        border-left: none;
+    }
+    
+    .chart-container {
+        min-height: 250px;
+    }
+    
+    .chart-canvas {
+        min-height: 200px;
+    }
+    
+    .bottom-panel {
+        height: 120px;
+    }
+    
+    .category-filter {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+    }
+    
+    .trade-buttons {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Extra Small: <480px */
+@media (max-width: 480px) {
+    .header {
+        height: 32px;
+    }
+    
+    .logo {
+        font-size: 14px;
+    }
+    
+    .header-btn {
+        padding: 2px 8px;
+        font-size: 10px;
+    }
+    
+    .panel-header {
+        padding: 6px 8px;
+    }
+    
+    .panel-title {
+        font-size: 11px;
+    }
+    
+    .data-table {
+        font-size: 11px;
+    }
+    
+    .data-table th,
+    .data-table td {
+        padding: 4px 6px;
+    }
+}
