@@ -26,7 +26,7 @@
     // CONFIG
     // ===========================================
     const API_BASE = '/api';
-    const SSE_URL = '/api/events';
+    const SSE_URL = '/api/stream';
 
     // ===========================================
     // DOM CACHE
@@ -347,10 +347,22 @@
     // ===========================================
     // ORDERBOOK
     // ===========================================
-    function subscribeOrderbook(symbol) {
-        // In real impl, send subscribe message
-        // For now, orderbook updates come via SSE
-        console.log('[OB] Subscribing to', symbol);
+    async function subscribeOrderbook(symbol) {
+        // Fetch orderbook from API
+        try {
+            const res = await fetch(`${API_BASE}/orderbook/${symbol}`);
+            const ob = await res.json();
+            
+            if (ob && ob.bids && ob.asks) {
+                handleOrderbookUpdate({
+                    symbol: symbol,
+                    bids: ob.bids,
+                    asks: ob.asks
+                });
+            }
+        } catch (e) {
+            console.error('[OB] Failed to fetch orderbook:', e);
+        }
     }
 
     function handleOrderbookUpdate(ob) {
