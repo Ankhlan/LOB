@@ -406,6 +406,15 @@
             else if (key === 's') { var sellBtn = document.querySelector('.side-btn[data-side="sell"]'); if (sellBtn) sellBtn.click(); }
             else if (key === 'escape') { var sizeInput = document.getElementById('orderSize'); var priceInput = document.getElementById('orderPrice'); if (sizeInput) sizeInput.value = ''; if (priceInput) priceInput.value = ''; }
             else if (key === 'enter' && e.ctrlKey) { var submitBtn = document.querySelector('.submit-order'); if (submitBtn) submitBtn.click(); }
+            else if (key === 'tab' && document.activeElement?.closest('.trade-entry')) {
+                e.preventDefault();
+                var inputs = Array.from(document.querySelectorAll('.trade-entry input:not([disabled])'));
+                var idx = inputs.indexOf(document.activeElement);
+                var next = e.shiftKey ? idx - 1 : idx + 1;
+                if (next >= inputs.length) next = 0;
+                if (next < 0) next = inputs.length - 1;
+                inputs[next]?.focus();
+            }
         });
         console.log('[Bootstrap] Keyboard shortcuts wired');
     }
@@ -733,6 +742,28 @@
         overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
     }
 
+
+    function playOrderSound(type) {
+        try {
+            var ctx = new (window.AudioContext || window.webkitAudioContext)();
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.type = 'sine';
+            if (type === 'success') {
+                osc.frequency.setValueAtTime(800, ctx.currentTime);
+                osc.frequency.setValueAtTime(1200, ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                gain.gain.exponentialDecayTo(0.01, ctx.currentTime + 0.2);
+            } else {
+                osc.frequency.setValueAtTime(300, ctx.currentTime);
+                gain.gain.setValueAtTime(0.1, ctx.currentTime);
+            }
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.2);
+        } catch (e) {}
+    }
     function showToast(msg, type) {
         var c = document.getElementById('toastContainer');
         if (!c) return;

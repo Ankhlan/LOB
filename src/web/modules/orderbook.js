@@ -76,15 +76,19 @@ const OrderBook = {
         
         // Render asks (sorted descending, highest at top)
         const sortedAsks = [...asks].sort((a, b) => b.price - a.price);
+        let cumQtyAsks = 0;
         for (const ask of sortedAsks.slice(0, this.maxLevels)) {
-            const row = this.createRow(ask, 'ask', maxQty, decimals);
+            cumQtyAsks += ask.qty;
+            const row = this.createRowWithCum(ask, 'ask', maxQty, decimals, cumQtyAsks);
             this.asksContainer.appendChild(row);
         }
         
         // Render bids (sorted descending, highest at top)
         const sortedBids = [...bids].sort((a, b) => b.price - a.price);
+        let cumQtyBids = 0;
         for (const bid of sortedBids.slice(0, this.maxLevels)) {
-            const row = this.createRow(bid, 'bid', maxQty, decimals);
+            cumQtyBids += bid.qty;
+            const row = this.createRowWithCum(bid, 'bid', maxQty, decimals, cumQtyBids);
             this.bidsContainer.appendChild(row);
         }
         
@@ -92,7 +96,32 @@ const OrderBook = {
         this.renderSpread();
     },
     
-    createRow(level, side, maxQty, decimals) {
+
+    createRowWithCum(level, side, maxQty, decimals, cumQty) {
+        const row = document.createElement('div');
+        row.className = `ob-row ${side}`;
+
+        const depthPct = (cumQty / maxQty / 2 * 100).toFixed(0);
+        row.style.setProperty('--depth', `min(${depthPct}%, 100%)`);
+
+        row.innerHTML = `
+            <span class="ob-price">${this.formatPrice(level.price, decimals)}</span>
+            <span class="ob-size">${this.formatQty(level.qty)}</span>
+            <span class="ob-total">${this.formatQty(cumQty)}</span>
+        `;
+
+        row.addEventListener('click', () => {
+            const priceInput = document.getElementById('orderPrice');
+            if (priceInput) {
+                priceInput.value = level.price;
+                priceInput.dispatchEvent(new Event('input'));
+            }
+        });
+
+        return row;
+    },
+
+        createRow(level, side, maxQty, decimals) {
         const row = document.createElement('div');
         row.className = `ob-row ${side}`;
         
