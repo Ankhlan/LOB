@@ -104,7 +104,7 @@ const API = {
     // Place order
     async placeOrder(order) {
         // order: { symbol, side, type, quantity, price?, stopPrice?, tp?, sl? }
-        return this.post('/api/orders', order);
+        return this.post('/api/order', order);
     },
     
     // Cancel order

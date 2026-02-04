@@ -43,7 +43,7 @@
                 <span class="inst-highlow" id="topHighLow">24h H/L: <span id="high24h">-</span> / <span id="low24h">-</span></span>
                 <span class="inst-volume" id="topVolume">24h Vol: -</span>
                 <span class="inst-oi" id="topOI" title="Open Interest">OI: <span id="oiValue">-</span></span>
-                <span class="inst-spread" id="topSpread">Spread: <span id="spreadBps">-</span> bps</span>
+                <button class="inst-btn" id="alertBtn" title="Set Alert">🔔</button><span class="inst-spread" id="topSpread">Spread: <span id="spreadBps">-</span> bps</span>
                 <span class="inst-last-trade" id="lastTradeTime">Last: <span id="lastTradeValue">-</span></span>
                 <span class="session-pnl" id="sessionPnl"><span class="pnl-label">Session:</span> <span class="pnl-value" id="sessionPnlValue">+0.00</span></span>
                 <span class="server-time" id="serverTime"></span>
@@ -324,7 +324,7 @@
                             <span class="toggle-label">Post Only</span>
                         </label>
                     </div>
-                    <div class="tpsl-row"><div class="tpsl-input"><label>Take Profit</label><input type="text" class="form-input" id="takeProfit" placeholder="Price"></div><div class="tpsl-input"><label>Stop Loss</label><input type="text" class="form-input" id="stopLoss" placeholder="Price"></div></div>
+                    <div class="tpsl-row"><div class="tpsl-input"><label>Take Profit</label><input type="text" class="form-input" id="takeProfit" placeholder="Price"></div><div class="tpsl-input"><label>Stop Loss</label><input type="text" class="form-input" id="stopLoss" placeholder="Price"></div><div class="rr-display"><span class="rr-label">R:R</span><span class="rr-value" id="rrRatio">-</span></div></div>
                     <button class="submit-order buy" id="submitOrder">Long XAU-MNT</button>
                 </div>
             </div>
@@ -450,6 +450,8 @@
     <script type="module" src="app-v3.js"></script>
     <script src="modules/bootstrap.js"></script>
 <div class="modal-overlay" id="shortcutsModal" style="display:none"><div class="modal-content"><h2>Keyboard Shortcuts</h2><table class="shortcuts-table"><tr><td><kbd>?</kbd></td><td>Show this help</td></tr><tr><td><kbd>B</kbd></td><td>Buy side</td></tr><tr><td><kbd>S</kbd></td><td>Sell side</td></tr><tr><td><kbd>L</kbd></td><td>Limit order</td></tr><tr><td><kbd>M</kbd></td><td>Market order</td></tr><tr><td><kbd>Tab</kbd></td><td>Next input</td></tr><tr><td><kbd>Enter</kbd></td><td>Submit order</td></tr><tr><td><kbd>Esc</kbd></td><td>Close modal</td></tr></table><button onclick="this.closest('.modal-overlay').style.display='none'" class="btn-primary">Close</button></div></div>
+<div class="modal-overlay" id="alertModal" style="display:none"><div class="modal-content"><h2>Set Price Alert</h2><div class="alert-form"><input type="text" class="form-input" id="alertPrice" placeholder="Price"><select class="form-input" id="alertCondition"><option value="above">Price Above</option><option value="below">Price Below</option></select><button class="btn-primary" id="setAlertBtn">Set Alert</button></div><div class="active-alerts" id="activeAlerts"></div><button onclick="this.closest('.modal-overlay').style.display='none'" class="btn-secondary" style="margin-top:12px">Close</button></div></div>
+<div class="modal-overlay" id="alertModal" style="display:none"><div class="modal-content"><h2>Price Alert</h2><div class="alert-form"><input type="text" class="form-input" id="alertPrice" placeholder="Price"><select class="form-input" id="alertCondition"><option value="above">Above</option><option value="below">Below</option></select><button class="btn-primary" id="setAlertBtn">Set</button></div><div id="activeAlerts"></div></div></div>
 </body>
 </html>
 
