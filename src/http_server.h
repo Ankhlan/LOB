@@ -1318,6 +1318,70 @@ inline void HttpServer::setup_routes() {
         res.set_content(tickers.dump(), "application/json");
     });
 
+
+    // GET /api/open-interest/:symbol - Open interest for a symbol
+    server_->Get("/api/open-interest/:symbol", [](const httplib::Request& req, httplib::Response& res) {
+        auto symbol = req.path_params.at("symbol");
+        
+        // Get exposure (net position across all users)
+        auto exposure = PositionManager::instance().get_exposure(symbol);
+        
+        // Calculate open interest (sum of absolute position sizes)
+        // For now, use absolute value of net as approximation
+        // True OI would require iterating all positions
+        double open_interest = std::abs(exposure.net_position);
+        
+        json response = {
+            {"symbol", symbol},
+            {"open_interest", open_interest},
+            {"net_exposure", exposure.net_position},
+            {"hedge_position", exposure.hedge_position},
+            {"unhedged", exposure.unhedged()}
+        };
+        
+        res.set_content(response.dump(), "application/json");
+    });
+
+    // GET /api/funding-rates - Funding rates for all symbols
+    server_->Get("/api/funding-rates", [](const httplib::Request&, httplib::Response& res) {
+        json rates = json::array();
+        
+        // Next funding time (every 8 hours: 00:00, 08:00, 16:00 UTC)
+        auto now = std::chrono::system_clock::now();
+        auto time = std::chrono::system_clock::to_time_t(now);
+        std::tm* utc = std::gmtime(&time);
+        
+        // Calculate hours until next funding
+        int current_hour = utc->tm_hour;
+        int next_funding_hour = ((current_hour / 8) + 1) * 8;
+        if (next_funding_hour >= 24) next_funding_hour = 0;
+        
+        int hours_until = (next_funding_hour - current_hour + 24) % 24;
+        if (hours_until == 0) hours_until = 8;
+        
+        int mins_until = 60 - utc->tm_min;
+        int secs_until = 60 - utc->tm_sec;
+        
+        // Format countdown
+        char countdown[32];
+        snprintf(countdown, sizeof(countdown), "%02d:%02d:%02d", 
+                 hours_until - 1, mins_until - 1, secs_until);
+        
+        ProductCatalog::instance().for_each([&](const Product& p) {
+            if (!p.is_active) return;
+            
+            rates.push_back({
+                {"symbol", p.symbol},
+                {"funding_rate", p.funding_rate},
+                {"funding_rate_8h", p.funding_rate},  // Same for now
+                {"next_funding", countdown},
+                {"predicted_rate", p.funding_rate}  // Could add prediction logic
+            });
+        });
+        
+        res.set_content(rates.dump(), "application/json");
+    });
+
     // ==================== ORDER BOOK ====================
     
     server_->Get("/api/book/:symbol", [](const httplib::Request& req, httplib::Response& res) {
