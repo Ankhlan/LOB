@@ -45,6 +45,7 @@
                 <span class="inst-oi" id="topOI" title="Open Interest">OI: <span id="oiValue">-</span></span>
                 <span class="inst-spread" id="topSpread">Spread: <span id="spreadBps">-</span> bps</span>
                 <span class="inst-last-trade" id="lastTradeTime">Last: <span id="lastTradeValue">-</span></span>
+                <span class="session-pnl" id="sessionPnl"><span class="pnl-label">Session:</span> <span class="pnl-value" id="sessionPnlValue">+0.00</span></span>
                 <span class="server-time" id="serverTime"></span>
                 <span class="inst-funding" id="topFunding">Funding: <span id="fundingRate">-</span> in <span id="fundingCountdown">-</span></span>
             </div>
@@ -60,6 +61,7 @@
                     <span class="pnl-value" id="topPnl">-</span>
                 </div>
             </div>
+            <div class="margin-usage"><span class="mu-label">Margin Used</span><div class="mu-bar"><div class="mu-fill" id="marginFill" style="width:0%"></div></div><span class="mu-pct" id="marginPct">0%</span></div>
             <div class="quick-actions">
                 <button class="qa-btn" id="themeToggle" title="Toggle theme">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 01-4.4 2.26 5.403 5.403 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/></svg>
@@ -189,7 +191,7 @@
                             <tbody id="ordersGrid"></tbody>
                         </table>
                     </div>
-                    <div class="panel-view" id="viewFills">
+                    <div class="panel-view" id="viewFills"><div class="panel-actions"><button class="btn-secondary btn-sm" id="exportFills">Export CSV</button></div>
                         <table class="data-grid">
                             <thead>
                                 <tr><th>Time</th><th>Symbol</th><th>Side</th><th>Price</th><th>Qty</th><th>Fee</th><th>rPnL</th></tr>
@@ -221,7 +223,7 @@
                     <div class="ob-precision">
                         <button class="prec-btn active" data-prec="0.01">0.01</button>
                         <button class="prec-btn" data-prec="0.1">0.1</button>
-                        <button class="prec-btn" data-prec="1">1</button>
+                        <button class="prec-btn" data-prec="1">1</button><button class="prec-btn" id="depthToggle" title="Toggle Depth Chart">📊</button>
                     </div>
                 </div>
                 <div class="ob-grid">
