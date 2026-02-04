@@ -69,7 +69,12 @@
             '.order-options { display: flex; gap: 16px; margin: 8px 0; }',
             '.toggle-option { display: flex; align-items: center; gap: 6px; cursor: pointer; }',
             '.toggle-option input { width: 14px; height: 14px; accent-color: #00c896; }',
-            '.toggle-label { font-size: 11px; color: #888; }',,
+            '.toggle-label { font-size: 11px; color: #888; }',
+            '.liq-row { border-top: 1px solid #333; padding-top: 8px !important; margin-top: 8px; }',
+            '.liq-price { color: #e06c75 !important; font-weight: 600; }',
+            '.pnl-row { font-size: 10px; }',
+            '.pnl-row .positive { color: #00c896; }',
+            '.pnl-row .negative { color: #e06c75; }',,
             '.rt-row { display: flex; justify-content: space-between; padding: 4px 8px; font-size: 11px; font-family: monospace; border-bottom: 1px solid rgba(255,255,255,0.05); }',
             '.rt-row.buy .rt-price { color: #00c896; }',
             '.rt-row.sell .rt-price { color: #e06c75; }',
@@ -97,6 +102,11 @@
             '.toggle-option { display: flex; align-items: center; gap: 6px; cursor: pointer; }',
             '.toggle-option input { width: 14px; height: 14px; accent-color: #00c896; }',
             '.toggle-label { font-size: 11px; color: #888; }',
+            '.liq-row { border-top: 1px solid #333; padding-top: 8px !important; margin-top: 8px; }',
+            '.liq-price { color: #e06c75 !important; font-weight: 600; }',
+            '.pnl-row { font-size: 10px; }',
+            '.pnl-row .positive { color: #00c896; }',
+            '.pnl-row .negative { color: #e06c75; }',
         ].join('\n');
         document.head.appendChild(style);
     }
@@ -484,6 +494,24 @@
         if (valueEl) valueEl.textContent = '\u20AE' + orderValue.toLocaleString(undefined, {maximumFractionDigits: 0});
         if (marginEl) marginEl.textContent = '\u20AE' + margin.toLocaleString(undefined, {maximumFractionDigits: 0});
         if (feeEl) feeEl.textContent = '\u20AE' + fee.toFixed(2);
+        var liqEl = document.getElementById('sumLiq');
+        if (liqEl && price > 0 && size > 0) {
+            var side = document.querySelector('.side-btn.active')?.dataset.side || 'buy';
+            var maintenanceMargin = 0.005; // 0.5%
+            var liqPrice = side === 'buy' ? price * (1 - 1/leverage + maintenanceMargin) : price * (1 + 1/leverage - maintenanceMargin);
+            liqEl.textContent = liqPrice.toFixed(2);
+        }
+        var pnlUpEl = document.getElementById('pnlUp');
+        var pnlDownEl = document.getElementById('pnlDown');
+        if (pnlUpEl && pnlDownEl && orderValue > 0) {
+            var side = document.querySelector('.side-btn.active')?.dataset.side || 'buy';
+            var pnlUp = side === 'buy' ? orderValue * 0.01 * leverage : -orderValue * 0.01 * leverage;
+            var pnlDown = side === 'buy' ? -orderValue * 0.01 * leverage : orderValue * 0.01 * leverage;
+            pnlUpEl.textContent = (pnlUp >= 0 ? '+' : '') + '\u20AE' + pnlUp.toFixed(0);
+            pnlUpEl.className = pnlUp >= 0 ? 'positive' : 'negative';
+            pnlDownEl.textContent = (pnlDown >= 0 ? '+' : '') + '\u20AE' + pnlDown.toFixed(0);
+            pnlDownEl.className = pnlDown >= 0 ? 'positive' : 'negative';
+        }
     }
     function wireQuickSizes() {
         document.querySelectorAll('.quick-size-btn').forEach(function(btn) {
@@ -695,7 +723,12 @@
             '.order-options { display: flex; gap: 16px; margin: 8px 0; }',
             '.toggle-option { display: flex; align-items: center; gap: 6px; cursor: pointer; }',
             '.toggle-option input { width: 14px; height: 14px; accent-color: #00c896; }',
-            '.toggle-label { font-size: 11px; color: #888; }',).onclick = function() { overlay.remove(); };
+            '.toggle-label { font-size: 11px; color: #888; }',
+            '.liq-row { border-top: 1px solid #333; padding-top: 8px !important; margin-top: 8px; }',
+            '.liq-price { color: #e06c75 !important; font-weight: 600; }',
+            '.pnl-row { font-size: 10px; }',
+            '.pnl-row .positive { color: #00c896; }',
+            '.pnl-row .negative { color: #e06c75; }',).onclick = function() { overlay.remove(); };
         overlay.querySelector('.modal-btn.confirm').onclick = function() { overlay.remove(); onConfirm(); };
         overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
     }
