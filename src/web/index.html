@@ -204,7 +204,8 @@
                     </div>
                 </div>
                 <div class="ob-grid">
-                    <div class="ob-header-row">
+                    <div class="depth-chart"><canvas id="depthCanvas" width="280" height="60"></canvas></div>
+                      <div class="ob-header-row">
                         <span>Price</span><span>Size</span><span>Total</span>
                     </div>
                     <div class="ob-asks" id="obAsks"></div>
@@ -246,6 +247,12 @@
                             <input type="text" class="form-input" id="orderSize" value="1">
                             <span class="input-suffix">Contracts</span>
                         </div>
+                          <div class="size-presets">
+                              <button class="preset-btn" data-pct="25">25%</button>
+                              <button class="preset-btn" data-pct="50">50%</button>
+                              <button class="preset-btn" data-pct="75">75%</button>
+                              <button class="preset-btn" data-pct="100">MAX</button>
+                          </div>
                         <div class="size-presets">
                             <button class="preset-btn" data-pct="25">25%</button>
                             <button class="preset-btn" data-pct="50">50%</button>
@@ -401,4 +408,7 @@
     <script src="modules/bootstrap.js"></script>
 </body>
 </html>
+
+
+
 

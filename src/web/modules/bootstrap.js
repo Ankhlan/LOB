@@ -77,6 +77,7 @@
                 });
                 group.appendChild(list); container.appendChild(group);
             });
+            window._products = products;
             console.log('[Bootstrap] Loaded', products.length, 'products');
         } catch (err) { console.error('[Bootstrap] Products error:', err); }
     }
@@ -134,6 +135,8 @@
         wireActionButtons();
         wireThemeToggle();
         wireTimeframeSelector();
+        wireSizePresets();
+        wireLeverageSelector();
     }
 
     function connectSSE() {
@@ -173,6 +176,7 @@
                 asks.push({ price: mid + offset, qty: Math.floor(Math.random() * 100000 + 10000) });
             }
             if (window.OrderBook && window.OrderBook.update) window.OrderBook.update(bids, asks);
+            drawDepthChart(bids, asks);
             lastPrice[current] = quote.mid;
         }
         quotes.forEach(function(q) {
@@ -317,6 +321,53 @@
     }
 
     
+    
+    
+    function wireLeverageSelector() {
+        document.querySelectorAll('.preset-btn[data-lev]').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var lev = parseInt(btn.dataset.lev);
+                window.AppState.leverage = lev;
+                document.querySelectorAll('.preset-btn[data-lev]').forEach(function(b) { b.classList.remove('active'); });
+                btn.classList.add('active');
+                
+                // Update margin requirement display
+                var marginEl = document.getElementById('marginReq');
+                if (marginEl) {
+                    var size = parseFloat(document.getElementById('orderSize')?.value) || 1;
+                    var price = parseFloat(document.getElementById('topPrice')?.textContent) || 3500;
+                    var margin = (size * price) / lev;
+                    marginEl.textContent = '\u20AE' + Math.round(margin).toLocaleString();
+                }
+                console.log('[Bootstrap] Leverage:', lev + 'x');
+            });
+        });
+        window.AppState.leverage = 10;
+        console.log('[Bootstrap] Leverage selector wired');
+    }
+
+    function wireSizePresets() {
+        document.querySelectorAll('.preset-btn[data-pct]').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var pct = parseInt(btn.dataset.pct);
+                var account = window._accountData || { available: 10000000 };
+                var symbol = window.AppState.currentSymbol || 'USD-MNT-PERP';
+                var product = window._products?.find(function(p) { return p.symbol === symbol; });
+                var price = parseFloat(document.getElementById('topPrice')?.textContent) || 3500;
+                var marginRate = product?.margin_rate || 0.05;
+                
+                // Calculate max size based on available margin
+                var maxSize = Math.floor(account.available / (price * marginRate));
+                var size = Math.floor(maxSize * pct / 100);
+                
+                document.getElementById('orderSize').value = size;
+                document.querySelectorAll('.preset-btn[data-pct]').forEach(function(b) { b.classList.remove('active'); });
+                btn.classList.add('active');
+            });
+        });
+        console.log('[Bootstrap] Size presets wired');
+    }
+
     function wireTimeframeSelector() {
         document.querySelectorAll('.tf-btn').forEach(function(btn) {
             btn.addEventListener('click', function() {
@@ -370,6 +421,50 @@
         });
         ctx.stroke();
     }
+    function drawDepthChart(bids, asks) {
+        var canvas = document.getElementById('depthCanvas');
+        if (!canvas) return;
+        var ctx = canvas.getContext('2d');
+        var w = canvas.width, h = canvas.height;
+        ctx.clearRect(0, 0, w, h);
+        
+        if (!bids || !asks || bids.length === 0 || asks.length === 0) return;
+        
+        // Calculate cumulative quantities
+        var bidCum = [], askCum = [];
+        var bidTotal = 0, askTotal = 0;
+        bids.forEach(function(b) { bidTotal += b.qty; bidCum.push({ price: b.price, cum: bidTotal }); });
+        asks.forEach(function(a) { askTotal += a.qty; askCum.push({ price: a.price, cum: askTotal }); });
+        
+        var maxCum = Math.max(bidTotal, askTotal);
+        var minPrice = bids[bids.length - 1].price;
+        var maxPrice = asks[asks.length - 1].price;
+        var priceRange = maxPrice - minPrice;
+        
+        // Draw bids (left side, green)
+        ctx.fillStyle = 'rgba(0,200,150,0.3)';
+        ctx.beginPath();
+        ctx.moveTo(w/2, h);
+        bidCum.forEach(function(b) {
+            var x = w/2 - ((b.price - minPrice) / priceRange) * (w/2);
+            var y = h - (b.cum / maxCum) * h;
+            ctx.lineTo(x, y);
+        });
+        ctx.lineTo(0, h);
+        ctx.fill();
+        
+        // Draw asks (right side, red)
+        ctx.fillStyle = 'rgba(224,108,117,0.3)';
+        ctx.beginPath();
+        ctx.moveTo(w/2, h);
+        askCum.forEach(function(a) {
+            var x = w/2 + ((a.price - minPrice) / priceRange) * (w/2);
+            var y = h - (a.cum / maxCum) * h;
+            ctx.lineTo(x, y);
+        });
+        ctx.lineTo(w, h);
+        ctx.fill();
+    }
 
     function showToast(msg, type) {
         var c = document.getElementById('toastContainer');
@@ -384,6 +479,9 @@
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); }
     else { setTimeout(init, 300); }
 })();
+
+
+
 
 
 
