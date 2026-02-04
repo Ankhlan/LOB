@@ -74,26 +74,41 @@ private:
                         get_mnt_or(bid, product->mark_price_mnt * 0.999);
                 }
                 
-                // Submit order
-                auto order = MatchingEngine::instance().submit_order(
-                    symbol, user_id, side, quantity, from_mnt(price), order_type
+                // Convert string to enums
+                auto side_enum = (side == "buy") ? Side::BUY : Side::SELL;
+                auto type_enum = (order_type == "market") ? OrderType::MARKET : 
+                                 (order_type == "ioc") ? OrderType::IOC :
+                                 (order_type == "fok") ? OrderType::FOK :
+                                 (order_type == "post_only") ? OrderType::POST_ONLY :
+                                 OrderType::LIMIT;
+                
+                // Submit order with correct parameter order
+                auto trades = MatchingEngine::instance().submit_order(
+                    symbol, user_id, side_enum, type_enum, from_mnt(price), quantity
                 );
                 
-                if (order) {
-                    // Persist to database
-                    Database::instance().save_order(*order);
+                if (!trades.empty()) {
+                    // Order matched and produced trades
                     
                     send_success(res, {
                         {"success", true},
-                        {"order_id", order->id},
-                        {"symbol", order->symbol},
-                        {"side", order->side},
-                        {"quantity", order->remaining_qty},
-                        {"price", to_mnt(order->price)},
-                        {"status", order->status}
+                        {"trades", (int)trades.size()},
+                        {"symbol", symbol},
+                        {"side", side},
+                        {"quantity", quantity},
+                        {"price", price},
+                        {"status", "filled"}
                     });
                 } else {
-                    send_error(res, 400, "Order rejected");
+                    // Limit order resting in book
+                    send_success(res, {
+                        {"success", true},
+                        {"symbol", symbol},
+                        {"side", side},
+                        {"quantity", quantity},
+                        {"price", price},
+                        {"status", "open"}
+                    });
                 }
                 
             } catch (const std::exception& e) {
