@@ -391,11 +391,24 @@
 
     async function fetchMarketInfo(symbol) {
         try {
-            const res = await fetch(`${API_BASE}/market-info/${symbol}`);
-            const info = await res.json();
+            // Fetch market info, funding rates, and open interest in parallel
+            const [infoRes, fundingRes, oiRes] = await Promise.all([
+                fetch(`${API_BASE}/market-info/${symbol}`),
+                fetch(`${API_BASE}/funding-rates`).catch(() => null),
+                fetch(`${API_BASE}/open-interest/${symbol}`).catch(() => null)
+            ]);
+            
+            const info = await infoRes.json();
+            const fundingData = fundingRes ? await fundingRes.json().catch(() => []) : [];
+            const oiData = oiRes ? await oiRes.json().catch(() => null) : null;
+            
+            // Find funding rate for this symbol
+            const fundingInfo = Array.isArray(fundingData) 
+                ? fundingData.find(f => f.symbol === symbol)
+                : (fundingData.symbol === symbol ? fundingData : null);
             
             if (info && info.symbol) {
-                updateTransparencyPanel(info);
+                updateTransparencyPanel(info, fundingInfo, oiData);
             }
         } catch (e) {
             console.error('[API] Failed to load market info:', e);
@@ -407,14 +420,25 @@
         }
     }
 
-    function updateTransparencyPanel(info) {
+    function updateTransparencyPanel(info, fundingInfo = null, oiData = null) {
         // Transparency: Show price source info from /api/market-info/:symbol
         const market = state.markets.find(m => m.symbol === info.symbol);
         
         dom.infoVolume.textContent = formatMNT(market?.volume24h || 0);
-        dom.infoOI.textContent = formatNumber(market?.openInterest || 0, 0);
-        dom.infoFunding.textContent = market?.fundingRate ? (market.fundingRate * 100).toFixed(4) + '%' : '-';
-        dom.infoNextFunding.textContent = market?.nextFunding || '-';
+        
+        // Open Interest from NEXUS endpoint
+        const openInterest = oiData?.open_interest || market?.openInterest || 0;
+        dom.infoOI.textContent = formatNumber(openInterest, 0);
+        
+        // Funding rate and countdown from NEXUS endpoint
+        if (fundingInfo) {
+            const rate = fundingInfo.funding_rate || 0;
+            dom.infoFunding.textContent = (rate * 100).toFixed(4) + '%';
+            dom.infoNextFunding.textContent = fundingInfo.next_funding || '-';
+        } else {
+            dom.infoFunding.textContent = market?.fundingRate ? (market.fundingRate * 100).toFixed(4) + '%' : '-';
+            dom.infoNextFunding.textContent = market?.nextFunding || '-';
+        }
 
         // Product Context for Mongolian products
         if (info.name && info.description) {
