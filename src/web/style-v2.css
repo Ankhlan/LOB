@@ -158,6 +158,12 @@ html, body {
 .status-indicator.connected .status-dot {
     background: var(--buy-color);
     box-shadow: 0 0 6px var(--buy-color);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--buy-color); }
+    50% { opacity: 0.7; box-shadow: 0 0 10px var(--buy-color); }
 }
 
 .status-text {
@@ -326,6 +332,11 @@ html, body {
 .data-table tbody tr {
     cursor: pointer;
     transition: background 0.1s;
+}
+
+/* Zebra striping per NEXUS spec */
+.data-table tbody tr:nth-child(even) {
+    background: var(--bg-tertiary);
 }
 
 .data-table tbody tr:hover {
