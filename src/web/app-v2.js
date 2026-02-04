@@ -264,9 +264,11 @@
         const market = state.markets.find(m => m.symbol === symbol);
         if (market) {
             updateSelectedMarketDisplay(market);
-            updateTransparencyPanel(market);
             dom.sizeUnit.textContent = symbol.split('-')[0]; // XAU from XAU-MNT-PERP
         }
+
+        // Fetch detailed market info from NEXUS's new endpoint
+        fetchMarketInfo(symbol);
 
         // Subscribe to orderbook
         subscribeOrderbook(symbol);
@@ -292,25 +294,53 @@
         updateOrderEstimate();
     }
 
-    function updateTransparencyPanel(market) {
-        // Transparency: Show price source info
-        dom.infoVolume.textContent = formatMNT(market.volume24h);
-        dom.infoOI.textContent = formatNumber(market.openInterest || 0, 0);
-        dom.infoFunding.textContent = market.fundingRate ? (market.fundingRate * 100).toFixed(4) + '%' : '-';
-        dom.infoNextFunding.textContent = market.nextFunding || '-';
-
-        // FXCM source transparency
-        if (market.source) {
-            dom.fxcmSymbol.textContent = market.source.symbol || '-';
-            dom.fxcmPrice.textContent = market.source.usdPrice ? '$' + formatNumber(market.source.usdPrice, 2) : '-';
-            dom.usdMntRate.textContent = market.source.usdMnt ? formatNumber(market.source.usdMnt, 2) : '-';
+    async function fetchMarketInfo(symbol) {
+        try {
+            const res = await fetch(`${API_BASE}/market-info/${symbol}`);
+            const info = await res.json();
             
-            if (market.source.usdPrice && market.source.usdMnt) {
-                const calc = `$${formatNumber(market.source.usdPrice, 2)} × ${formatNumber(market.source.usdMnt, 2)}`;
-                dom.priceCalc.textContent = calc;
-            } else {
-                dom.priceCalc.textContent = '-';
+            if (info && info.symbol) {
+                updateTransparencyPanel(info);
             }
+        } catch (e) {
+            console.error('[API] Failed to load market info:', e);
+            // Clear transparency panel on error
+            dom.fxcmSymbol.textContent = '-';
+            dom.fxcmPrice.textContent = '-';
+            dom.usdMntRate.textContent = '-';
+            dom.priceCalc.textContent = '-';
+        }
+    }
+
+    function updateTransparencyPanel(info) {
+        // Transparency: Show price source info from /api/market-info/:symbol
+        const market = state.markets.find(m => m.symbol === info.symbol);
+        
+        dom.infoVolume.textContent = formatMNT(market?.volume24h || 0);
+        dom.infoOI.textContent = formatNumber(market?.openInterest || 0, 0);
+        dom.infoFunding.textContent = market?.fundingRate ? (market.fundingRate * 100).toFixed(4) + '%' : '-';
+        dom.infoNextFunding.textContent = market?.nextFunding || '-';
+
+        // Source transparency from NEXUS API
+        if (info.source) {
+            const srcSymbol = info.source.symbol || '-';
+            dom.fxcmSymbol.textContent = srcSymbol + (info.source.provider === 'FXCM' ? '' : ` (${info.source.provider})`);
+            
+            // Use mid price (average of bid/ask) for display
+            const usdMid = info.source.mid_usd || ((info.source.bid_usd + info.source.ask_usd) / 2);
+            dom.fxcmPrice.textContent = usdMid ? '$' + formatNumber(usdMid, 2) : '-';
+        } else {
+            dom.fxcmSymbol.textContent = '-';
+            dom.fxcmPrice.textContent = '-';
+        }
+
+        // Conversion info
+        if (info.conversion) {
+            dom.usdMntRate.textContent = formatNumber(info.conversion.usd_mnt_rate, 2);
+            dom.priceCalc.textContent = info.conversion.formula || '-';
+        } else {
+            dom.usdMntRate.textContent = '-';
+            dom.priceCalc.textContent = '-';
         }
     }
 
