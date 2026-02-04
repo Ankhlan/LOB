@@ -713,11 +713,14 @@
             const res = await fetch(`${API_BASE}/products`);
             const data = await res.json();
             
-            if (data.success && data.products) {
+            // API returns array directly
+            const products = Array.isArray(data) ? data : (data.products || []);
+            
+            if (products.length > 0) {
                 // Transform API products to market format
-                const markets = data.products.map(p => ({
+                const markets = products.map(p => ({
                     symbol: p.symbol,
-                    category: mapCategory(p.symbol),
+                    category: mapCategory(p.symbol, p.category),
                     bid: p.mark_price * 0.9998, // Simulate spread
                     ask: p.mark_price * 1.0002,
                     last: p.mark_price,
@@ -742,7 +745,22 @@
         }
     }
 
-    function mapCategory(symbol) {
+    function mapCategory(symbol, apiCategory) {
+        // API categories: 0=commodities, 2=fx, 3=index, 4=crypto, 5=mongolia, 6=hedge
+        const categoryMap = {
+            0: 'commodities',
+            2: 'fx',
+            3: 'commodities', // indices -> treat as commodities
+            4: 'crypto',
+            5: 'mongolia',
+            6: 'fx' // hedge -> treat as fx
+        };
+        
+        if (apiCategory !== undefined && categoryMap[apiCategory]) {
+            return categoryMap[apiCategory];
+        }
+        
+        // Fallback to symbol parsing
         if (symbol.includes('BTC') || symbol.includes('ETH')) return 'crypto';
         if (symbol.includes('XAU') || symbol.includes('XAG') || symbol.includes('OIL')) return 'commodities';
         if (symbol.startsWith('MN-') || symbol.includes('COAL') || symbol.includes('CASHMERE') || symbol.includes('COPPER')) return 'mongolia';
