@@ -704,45 +704,49 @@
         setupEventHandlers();
         connectSSE();
 
-        // Demo data for development
-        loadDemoData();
+        // Load real data from API
+        loadMarketsFromAPI();
     }
 
-    function loadDemoData() {
-        // Demo markets
-        const demoMarkets = [
-            { symbol: 'XAU-MNT-PERP', category: 'commodities', bid: 8890000, ask: 8892000, last: 8891000, change: 0.45, high24h: 8950000, low24h: 8800000, volume24h: 125000000, source: { symbol: 'XAU/USD', usdPrice: 2485.50, usdMnt: 3576.00 } },
-            { symbol: 'XAG-MNT-PERP', category: 'commodities', bid: 108500, ask: 108700, last: 108600, change: -0.23, high24h: 110000, low24h: 107000, volume24h: 45000000, source: { symbol: 'XAG/USD', usdPrice: 30.35, usdMnt: 3576.00 } },
-            { symbol: 'USD-MNT-PERP', category: 'fx', bid: 3574, ask: 3578, last: 3576, change: 0.12, high24h: 3590, low24h: 3560, volume24h: 890000000, source: { symbol: 'USD/MNT', usdPrice: 1.00, usdMnt: 3576.00 } },
-            { symbol: 'EUR-MNT-PERP', category: 'fx', bid: 3850, ask: 3856, last: 3853, change: -0.08, high24h: 3870, low24h: 3840, volume24h: 234000000, source: { symbol: 'EUR/USD', usdPrice: 1.0775, usdMnt: 3576.00 } },
-            { symbol: 'BTC-MNT-PERP', category: 'crypto', bid: 376800000, ask: 377200000, last: 377000000, change: 2.34, high24h: 380000000, low24h: 365000000, volume24h: 567000000, source: { symbol: 'BTC/USD', usdPrice: 105420, usdMnt: 3576.00 } },
-            { symbol: 'ETH-MNT-PERP', category: 'crypto', bid: 12350000, ask: 12380000, last: 12365000, change: 1.87, high24h: 12500000, low24h: 12100000, volume24h: 234000000, source: { symbol: 'ETH/USD', usdPrice: 3458, usdMnt: 3576.00 } },
-            { symbol: 'COAL-MNT-PERP', category: 'mongolia', bid: 450000, ask: 452000, last: 451000, change: 0.67, high24h: 455000, low24h: 445000, volume24h: 78000000, source: { symbol: 'Coal (Tavan Tolgoi)', usdPrice: 126, usdMnt: 3576.00 } },
-            { symbol: 'CSHM-MNT-PERP', category: 'mongolia', bid: 185000, ask: 187000, last: 186000, change: -0.32, high24h: 190000, low24h: 183000, volume24h: 12000000, source: { symbol: 'Cashmere (Grade A)', usdPrice: 52, usdMnt: 3576.00 } }
-        ];
+    async function loadMarketsFromAPI() {
+        try {
+            const res = await fetch(`${API_BASE}/products`);
+            const data = await res.json();
+            
+            if (data.success && data.products) {
+                // Transform API products to market format
+                const markets = data.products.map(p => ({
+                    symbol: p.symbol,
+                    category: mapCategory(p.symbol),
+                    bid: p.mark_price * 0.9998, // Simulate spread
+                    ask: p.mark_price * 1.0002,
+                    last: p.mark_price,
+                    change: 0, // Will come from price updates
+                    high24h: p.mark_price * 1.01,
+                    low24h: p.mark_price * 0.99,
+                    volume24h: 0,
+                    source: {
+                        symbol: p.fxcm_symbol || '-',
+                        usdPrice: p.fxcm_symbol ? p.mark_price / 3576 : null, // Derive USD price
+                        usdMnt: 3576 // BoM rate
+                    },
+                    description: p.description
+                }));
+                
+                handleMarketsUpdate(markets);
+                console.log('[API] Loaded', markets.length, 'products from API');
+            }
+        } catch (e) {
+            console.error('[API] Failed to load products:', e);
+            // Fallback: markets will come from SSE stream
+        }
+    }
 
-        handleMarketsUpdate(demoMarkets);
-
-        // Demo orderbook
-        const demoOB = {
-            symbol: 'XAU-MNT-PERP',
-            bids: [
-                { price: 8890000, size: 1.5, total: 1.5 },
-                { price: 8889000, size: 2.3, total: 3.8 },
-                { price: 8888000, size: 0.8, total: 4.6 },
-                { price: 8887000, size: 3.2, total: 7.8 },
-                { price: 8886000, size: 1.1, total: 8.9 }
-            ],
-            asks: [
-                { price: 8892000, size: 1.2, total: 1.2 },
-                { price: 8893000, size: 1.8, total: 3.0 },
-                { price: 8894000, size: 2.5, total: 5.5 },
-                { price: 8895000, size: 0.9, total: 6.4 },
-                { price: 8896000, size: 2.1, total: 8.5 }
-            ]
-        };
-
-        setTimeout(() => handleOrderbookUpdate(demoOB), 500);
+    function mapCategory(symbol) {
+        if (symbol.includes('BTC') || symbol.includes('ETH')) return 'crypto';
+        if (symbol.includes('XAU') || symbol.includes('XAG') || symbol.includes('OIL')) return 'commodities';
+        if (symbol.startsWith('MN-') || symbol.includes('COAL') || symbol.includes('CASHMERE') || symbol.includes('COPPER')) return 'mongolia';
+        return 'fx';
     }
 
     // Start app
