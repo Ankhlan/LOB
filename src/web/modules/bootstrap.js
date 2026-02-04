@@ -15,6 +15,7 @@
             '.inst-item:hover { background: rgba(255,255,255,0.05); }',
             '.inst-item.active { background: rgba(0,200,150,0.1); border-left-color: #00c896; }',
             '.inst-symbol { color: #fff; font-size: 12px; font-weight: 500; }',
+            '.sparkline { margin: 0 8px; opacity: 0.8; }',
             '.inst-price { color: #00c896; font-size: 12px; font-family: monospace; }',
             '.toast { padding: 10px 16px; margin: 8px; border-radius: 4px; color: #fff; }',
             '.toast.success { background: #00c896; }',
@@ -43,7 +44,7 @@
         container.innerHTML = '';
         window._creChart = new CREChart(container);
         try {
-            var response = await fetch('/api/candles/' + symbol + '?timeframe=15&limit=200');
+            var response = await fetch('/api/candles/' + symbol + '?timeframe=' + (window.AppState.timeframe || '15') + '&limit=200');
             var data = await response.json();
             window._creChart.setData(data.candles || data);
             console.log('[Bootstrap] Chart loaded:', (data.candles || data).length, 'candles');
@@ -67,7 +68,9 @@
                 cat.products.forEach(function(product) {
                     var item = document.createElement('div');
                     item.className = 'inst-item'; item.dataset.symbol = product.symbol;
-                    item.innerHTML = '<span class="inst-symbol">' + product.symbol + '</span><span class="inst-price">' + (product.mark_price ? product.mark_price.toLocaleString() : '-') + '</span>';
+                                        item.innerHTML = '<span class="inst-symbol">' + product.symbol + '</span>' +
+                        '<canvas class="sparkline" width="40" height="16"></canvas>' +
+                        '<span class="inst-price">' + (product.mark_price ? product.mark_price.toLocaleString() : '-') + '</span>';
                     item.onclick = function() { selectProduct(product, item); };
                     list.appendChild(item);
                     if (product.symbol === 'USD-MNT-PERP') item.classList.add('active');
@@ -130,6 +133,7 @@
         wirePanelTabs();
         wireActionButtons();
         wireThemeToggle();
+        wireTimeframeSelector();
     }
 
     function connectSSE() {
@@ -151,6 +155,16 @@
         if (quote) {
             var topPrice = document.getElementById('topPrice');
             if (topPrice) topPrice.textContent = quote.mid.toFixed(2);
+            var changeEl = document.getElementById('topChange');
+            var volumeEl = document.getElementById('topVolume');
+            if (changeEl && quote.change_pct !== undefined) {
+                var change = quote.change_pct;
+                changeEl.textContent = (change >= 0 ? '+' : '') + change.toFixed(2) + '%';
+                changeEl.className = 'inst-change ' + (change >= 0 ? 'positive' : 'negative');
+            }
+            if (volumeEl && quote.volume_24h !== undefined) {
+                volumeEl.textContent = '24h Vol: ' + (quote.volume_24h / 1000000).toFixed(1) + 'M';
+            }
             var mid = quote.mid, spread = quote.spread / 2;
             var bids = [], asks = [];
             for (var i = 0; i < 5; i++) {
@@ -302,6 +316,21 @@
         console.log('[Bootstrap] Action buttons wired');
     }
 
+    
+    function wireTimeframeSelector() {
+        document.querySelectorAll('.tf-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.tf-btn').forEach(function(b) { b.classList.remove('active'); });
+                btn.classList.add('active');
+                window.AppState.timeframe = btn.dataset.tf;
+                initChart(window.AppState.currentSymbol);
+                console.log('[Bootstrap] Timeframe:', btn.dataset.tf);
+            });
+        });
+        window.AppState.timeframe = '15';
+        console.log('[Bootstrap] Timeframe selector wired');
+    }
+
     function wireThemeToggle() {
         var themeBtn = document.getElementById('themeToggle');
         if (!themeBtn) return;
@@ -317,6 +346,31 @@
         console.log('[Bootstrap] Theme toggle wired');
     }
 
+    
+    function drawSparkline(canvas, prices) {
+        var ctx = canvas.getContext('2d');
+        var w = canvas.width, h = canvas.height;
+        ctx.clearRect(0, 0, w, h);
+        if (prices.length < 2) return;
+        
+        var min = Math.min.apply(null, prices);
+        var max = Math.max.apply(null, prices);
+        var range = max - min || 1;
+        
+        var color = prices[prices.length - 1] >= prices[0] ? '#00c896' : '#e06c75';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        
+        prices.forEach(function(p, i) {
+            var x = (i / (prices.length - 1)) * w;
+            var y = h - ((p - min) / range) * h;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+    }
+
     function showToast(msg, type) {
         var c = document.getElementById('toastContainer');
         if (!c) return;
@@ -330,3 +384,6 @@
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); }
     else { setTimeout(init, 300); }
 })();
+
+
+
