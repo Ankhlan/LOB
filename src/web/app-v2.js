@@ -289,12 +289,47 @@
 
         // Fetch detailed market info from NEXUS's new endpoint
         fetchMarketInfo(symbol);
+        
+        // Fetch fresh ticker stats for selected market
+        fetchSingleTicker(symbol);
 
         // Subscribe to orderbook
         subscribeOrderbook(symbol);
     }
+    
+    async function fetchSingleTicker(symbol) {
+        try {
+            const res = await fetch(`${API_BASE}/ticker/${symbol}`);
+            const ticker = await res.json();
+            
+            if (ticker && ticker.symbol) {
+                const market = state.markets.find(m => m.symbol === ticker.symbol);
+                if (market) {
+                    market.bid = ticker.bid || market.bid;
+                    market.ask = ticker.ask || market.ask;
+                    market.last = ticker.mark || market.last;
+                    market.change = ticker.change_24h ?? market.change;
+                    market.high24h = ticker.high_24h || market.high24h;
+                    market.low24h = ticker.low_24h || market.low24h;
+                    market.volume24h = ticker.volume_24h ?? market.volume24h;
+                    
+                    // Update display with fresh data
+                    updateSelectedMarketDisplay(market);
+                    renderMarketList();
+                }
+            }
+        } catch (e) {
+            console.log('[API] Ticker fetch failed (may not be available yet):', symbol);
+        }
+    }
 
     function updateSelectedMarketDisplay(market) {
+        // If no market passed, look up the currently selected one
+        if (!market && state.selectedMarket) {
+            market = state.markets.find(m => m.symbol === state.selectedMarket);
+        }
+        if (!market) return;
+        
         const decimals = getDecimals(market.symbol);
         dom.selectedSymbol.textContent = market.symbol;
         dom.selectedPrice.textContent = formatPriceAbbrev(market.last, decimals);
