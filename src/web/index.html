@@ -44,6 +44,8 @@
                 <span class="inst-volume" id="topVolume">24h Vol: -</span>
                 <span class="inst-oi" id="topOI" title="Open Interest">OI: <span id="oiValue">-</span></span>
                 <span class="inst-spread" id="topSpread">Spread: <span id="spreadBps">-</span> bps</span>
+                <span class="inst-last-trade" id="lastTradeTime">Last: <span id="lastTradeValue">-</span></span>
+                <span class="server-time" id="serverTime"></span>
                 <span class="inst-funding" id="topFunding">Funding: <span id="fundingRate">-</span> in <span id="fundingCountdown">-</span></span>
             </div>
         </div>
@@ -179,7 +181,7 @@
                             <tbody id="positionsGrid"></tbody>
                         </table>
                     </div>
-                    <div class="panel-view" id="viewOrders">
+                    <div class="panel-view" id="viewOrders"><div class="panel-actions"><button class="btn-danger btn-sm" id="cancelAllOrders">Cancel All</button></div>
                         <table class="data-grid">
                             <thead>
                                 <tr><th>Time</th><th>Symbol</th><th>Type</th><th>Side</th><th>Price</th><th>Qty</th><th>Filled</th><th></th></tr>
@@ -251,7 +253,7 @@
                         <button class="ot-btn" data-type="stop">Stop</button>
                     </div>
                     
-                    <div class="form-row price-row" id="priceRow">
+                    <div class="form-row tif-row"><label>Time</label><select class="form-input" id="orderTIF"><option value="GTC" selected>GTC</option><option value="IOC">IOC</option><option value="FOK">FOK</option></select></div><div class="form-row price-row" id="priceRow">
                         <label>Price</label>
                         <div class="input-group">
                             <button class="adj-btn" data-adj="-1">-</button>

@@ -74,7 +74,14 @@
             '.liq-price { color: #e06c75 !important; font-weight: 600; }',
             '.pnl-row { font-size: 10px; }',
             '.pnl-row .positive { color: #00c896; }',
-            '.pnl-row .negative { color: #e06c75; }',,
+            '.pnl-row .negative { color: #e06c75; }',
+            '@keyframes flash-up { 0% { background: rgba(0,200,150,0.3); } 100% { background: transparent; } }',
+            '@keyframes flash-down { 0% { background: rgba(224,108,117,0.3); } 100% { background: transparent; } }',
+            '.price-flash-up { animation: flash-up 0.5s ease-out; }',
+            '.price-flash-down { animation: flash-down 0.5s ease-out; }',
+            '.inst-last-trade { margin-left: 12px; font-size: 11px; color: #888; }',
+            '.inst-last-trade #lastTradeValue { color: #abb2bf; }',
+            '.server-time { margin-left: 12px; font-size: 11px; color: #666; font-family: monospace; }',,
             '.rt-row { display: flex; justify-content: space-between; padding: 4px 8px; font-size: 11px; font-family: monospace; border-bottom: 1px solid rgba(255,255,255,0.05); }',
             '.rt-row.buy .rt-price { color: #00c896; }',
             '.rt-row.sell .rt-price { color: #e06c75; }',
@@ -107,6 +114,13 @@
             '.pnl-row { font-size: 10px; }',
             '.pnl-row .positive { color: #00c896; }',
             '.pnl-row .negative { color: #e06c75; }',
+            '@keyframes flash-up { 0% { background: rgba(0,200,150,0.3); } 100% { background: transparent; } }',
+            '@keyframes flash-down { 0% { background: rgba(224,108,117,0.3); } 100% { background: transparent; } }',
+            '.price-flash-up { animation: flash-up 0.5s ease-out; }',
+            '.price-flash-down { animation: flash-down 0.5s ease-out; }',
+            '.inst-last-trade { margin-left: 12px; font-size: 11px; color: #888; }',
+            '.inst-last-trade #lastTradeValue { color: #abb2bf; }',
+            '.server-time { margin-left: 12px; font-size: 11px; color: #666; font-family: monospace; }',
         ].join('\n');
         document.head.appendChild(style);
     }
@@ -225,6 +239,7 @@
         loadAccount();
         updateFundingRate();
         setInterval(updateFundingRate, 1000);
+        setInterval(function() { var el = document.getElementById('serverTime'); if (el) el.textContent = new Date().toLocaleTimeString(); }, 1000);
         connectSSE();
         wireTradePanel();
         wireKeyboardShortcuts();
@@ -258,7 +273,12 @@
         var quote = quotes.find(function(q) { return q.symbol === current; });
         if (quote) {
             var topPrice = document.getElementById('topPrice');
-            if (topPrice) topPrice.textContent = quote.mid.toFixed(2);
+            if (topPrice) {
+                var oldPrice = parseFloat(topPrice.textContent) || 0;
+                topPrice.textContent = quote.mid.toFixed(2);
+                if (quote.mid > oldPrice) { topPrice.classList.add('price-flash-up'); setTimeout(function() { topPrice.classList.remove('price-flash-up'); }, 500); }
+                else if (quote.mid < oldPrice) { topPrice.classList.add('price-flash-down'); setTimeout(function() { topPrice.classList.remove('price-flash-down'); }, 500); }
+            }
             var markPriceEl = document.getElementById('markPriceValue');
             if (markPriceEl) markPriceEl.textContent = (quote.mark_price || quote.mid).toFixed(2);
             var indexPriceEl = document.getElementById('indexPriceValue');
@@ -353,6 +373,8 @@
                 '<span class="rt-price">' + (t.price || 0).toFixed(2) + '</span>' +
                 '<span class="rt-size">' + (t.quantity || t.size || 0).toLocaleString() + '</span>';
             container.insertBefore(row, container.firstChild);
+            var lastTradeEl = document.getElementById('lastTradeValue');
+            if (lastTradeEl) lastTradeEl.textContent = time;
             while (container.children.length > 20) container.removeChild(container.lastChild);
         });
     }
@@ -737,7 +759,14 @@
             '.liq-price { color: #e06c75 !important; font-weight: 600; }',
             '.pnl-row { font-size: 10px; }',
             '.pnl-row .positive { color: #00c896; }',
-            '.pnl-row .negative { color: #e06c75; }',).onclick = function() { overlay.remove(); };
+            '.pnl-row .negative { color: #e06c75; }',
+            '@keyframes flash-up { 0% { background: rgba(0,200,150,0.3); } 100% { background: transparent; } }',
+            '@keyframes flash-down { 0% { background: rgba(224,108,117,0.3); } 100% { background: transparent; } }',
+            '.price-flash-up { animation: flash-up 0.5s ease-out; }',
+            '.price-flash-down { animation: flash-down 0.5s ease-out; }',
+            '.inst-last-trade { margin-left: 12px; font-size: 11px; color: #888; }',
+            '.inst-last-trade #lastTradeValue { color: #abb2bf; }',
+            '.server-time { margin-left: 12px; font-size: 11px; color: #666; font-family: monospace; }',).onclick = function() { overlay.remove(); };
         overlay.querySelector('.modal-btn.confirm').onclick = function() { overlay.remove(); onConfirm(); };
         overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
     }
@@ -776,15 +805,55 @@
 
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); }
     else { setTimeout(init, 300); }
+    // Time in Force styling
+    var tifStyle = document.createElement('style');
+    tifStyle.textContent = '.tif-row select { width: 100%; background: #2a2a2a; color: #fff; border: 1px solid #444; padding: 8px; border-radius: 4px; }';
+    document.head.appendChild(tifStyle);
+
+    // Cancel All Orders Button
+    var style = document.createElement('style');
+    style.textContent = `
+        .panel-actions { padding: 8px 12px; border-bottom: 1px solid #333; display: flex; gap: 8px; }
+        .btn-danger { background: #dc3545; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-sm { padding: 2px 8px; }
+    `;
+    document.head.appendChild(style);
+
+    document.getElementById('cancelAllOrders')?.addEventListener('click', function() {
+        if (!confirm('Cancel all open orders?')) return;
+        fetch('/api/cancel-all', { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                console.log('Cancel all result:', data);
+                if (typeof playOrderSound === 'function') playOrderSound('success');
+            })
+            .catch(function(e) {
+                console.error('Cancel all failed:', e);
+                if (typeof playOrderSound === 'function') playOrderSound('error');
+            });
+    });
+
+    // Time in Force styling
+    var tifStyle = document.createElement('style');
+    tifStyle.textContent = '.tif-row select { width: 100%; background: #2a2a2a; color: #fff; border: 1px solid #444; padding: 8px; border-radius: 4px; }';
+    document.head.appendChild(tifStyle);
+
+    // Cancel All Orders Button
+    var cancelStyle = document.createElement('style');
+    cancelStyle.textContent = '.panel-actions { padding: 8px 12px; border-bottom: 1px solid #333; display: flex; gap: 8px; } .btn-danger { background: #dc3545; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; } .btn-danger:hover { background: #c82333; } .btn-sm { padding: 2px 8px; }';
+    document.head.appendChild(cancelStyle);
+    document.getElementById('cancelAllOrders')?.addEventListener('click', function() {
+        if (!confirm('Cancel all open orders?')) return;
+        fetch('/api/cancel-all', { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                console.log('Cancel all result:', data);
+                if (typeof playOrderSound === 'function') playOrderSound('success');
+            })
+            .catch(function(e) {
+                console.error('Cancel all failed:', e);
+                if (typeof playOrderSound === 'function') playOrderSound('error');
+            });
+    });
 })();
-
-
-
-
-
-
-
-
-
-
-
