@@ -72,6 +72,10 @@
         fxcmPrice: $('#fxcmPrice'),
         usdMntRate: $('#usdMntRate'),
         priceCalc: $('#priceCalc'),
+        // Product Context
+        productContext: $('#productContext'),
+        productName: $('#productName'),
+        productDesc: $('#productDesc'),
         // Modal
         loginModal: $('#loginModal'),
         loginBtn: $('#loginBtn'),
@@ -320,6 +324,15 @@
         dom.infoOI.textContent = formatNumber(market?.openInterest || 0, 0);
         dom.infoFunding.textContent = market?.fundingRate ? (market.fundingRate * 100).toFixed(4) + '%' : '-';
         dom.infoNextFunding.textContent = market?.nextFunding || '-';
+
+        // Product Context for Mongolian products
+        if (info.name && info.description) {
+            dom.productContext.classList.remove('hidden');
+            dom.productName.textContent = info.name;
+            dom.productDesc.textContent = info.description;
+        } else {
+            dom.productContext.classList.add('hidden');
+        }
 
         // Source transparency from NEXUS API
         if (info.source) {

@@ -223,6 +223,67 @@ public:
         return std::vector<Candle>(clean.begin() + start, clean.end());
     }
     
+
+    // Get 24h stats (high, low, volume) for a symbol
+    // Uses D1 candles or aggregates from H1 candles
+    struct Stats24h {
+        double high24h = 0;
+        double low24h = 0;
+        double volume24h = 0;
+        int64_t timestamp = 0;
+    };
+
+    Stats24h get_24h_stats(const std::string& symbol) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        Stats24h stats;
+        
+        auto now = std::chrono::system_clock::now();
+        stats.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now.time_since_epoch()).count();
+        
+        int64_t now_secs = std::chrono::duration_cast<std::chrono::seconds>(
+            now.time_since_epoch()).count();
+        int64_t cutoff_24h = now_secs - 86400;  // 24 hours ago
+        
+        // Try H1 candles first (more granular)
+        auto h1_it = data_.find(symbol);
+        if (h1_it != data_.end()) {
+            auto tf_it = h1_it->second.find(3600);  // H1
+            if (tf_it != h1_it->second.end() && !tf_it->second.empty()) {
+                bool first = true;
+                for (const auto& c : tf_it->second) {
+                    if (c.time >= cutoff_24h) {
+                        if (first) {
+                            stats.high24h = c.high;
+                            stats.low24h = c.low;
+                            first = false;
+                        } else {
+                            stats.high24h = std::max(stats.high24h, c.high);
+                            stats.low24h = std::min(stats.low24h, c.low);
+                        }
+                        stats.volume24h += c.volume;
+                    }
+                }
+                if (!first) return stats;  // Got data from H1
+            }
+        }
+        
+        // Fallback to D1 candle
+        if (h1_it != data_.end()) {
+            auto tf_it = h1_it->second.find(86400);  // D1
+            if (tf_it != h1_it->second.end() && !tf_it->second.empty()) {
+                const auto& latest = tf_it->second.back();
+                stats.high24h = latest.high;
+                stats.low24h = latest.low;
+                stats.volume24h = latest.volume;
+                return stats;
+            }
+        }
+        
+        // No candle data - return zeros (caller should use mark price)
+        return stats;
+    }
+
     // Get all active timeframes: 60s (1m), 300s (5m), 900s (15m), 3600s (1H), 14400s (4H), 86400s (1D)
     static constexpr std::array<int, 6> TIMEFRAMES = {60, 300, 900, 3600, 14400, 86400};
     
