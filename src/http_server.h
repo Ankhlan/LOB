@@ -1103,6 +1103,62 @@ inline void HttpServer::setup_routes() {
         // Current mark price
         response["mark_price_mnt"] = product->mark_price_mnt;
 
+        // Add Mongolian product context
+        if (product->category == static_cast<int>(ProductCategory::MN_PERPETUAL) || 
+            symbol.find("MN-") == 0) {
+            
+            json context;
+            
+            if (symbol == "MN-COAL-PERP") {
+                context = {
+                    {"benchmark", "Tavan Tolgoi"},
+                    {"grade", "5,500 kcal/kg coking coal"},
+                    {"delivery_point", "FOB Gashuun Sukhait border"},
+                    {"unit", "per metric tonne"},
+                    {"contract_size", "1 tonne"},
+                    {"note", "Mongolia's largest coal deposit, supplying China's steel industry"}
+                };
+            } else if (symbol == "MN-CASHMERE-PERP") {
+                context = {
+                    {"grade", "White dehairing cashmere"},
+                    {"micron_range", "14.5-16.0 microns"},
+                    {"season", "Spring clip (April-June)"},
+                    {"unit", "per kilogram"},
+                    {"contract_size", "1 kg"},
+                    {"note", "Mongolia produces 40% of world's cashmere supply"}
+                };
+            } else if (symbol == "MN-COPPER-PERP") {
+                context = {
+                    {"benchmark", "Oyu Tolgoi concentrate"},
+                    {"grade", "Cu 28% concentrate"},
+                    {"delivery_point", "Khanbogd processing plant"},
+                    {"unit", "per dry metric tonne (DMT)"},
+                    {"note", "One of world's largest copper-gold deposits"}
+                };
+            } else if (symbol == "MN-MEAT-PERP") {
+                context = {
+                    {"benchmark", "Mutton/lamb composite index"},
+                    {"grade", "Fresh chilled carcass"},
+                    {"market", "Ulaanbaatar wholesale"},
+                    {"unit", "per kilogram carcass weight"},
+                    {"note", "Mongolia has 67+ million head of livestock"}
+                };
+            } else if (symbol == "MN-REALESTATE-PERP") {
+                context = {
+                    {"benchmark", "UB apartment price index"},
+                    {"location", "Central districts 1-4"},
+                    {"type", "Residential apartment"},
+                    {"unit", "per square meter"},
+                    {"note", "Ulaanbaatar housing 60% of Mongolia's 3.4M population"}
+                };
+            }
+            
+            if (!context.empty()) {
+                response["mongolian_context"] = context;
+            }
+        }
+
+
         res.set_content(response.dump(), "application/json");
     });
 

@@ -753,6 +753,63 @@
                 dom.loginModal.classList.remove('active');
             }
         });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', handleKeyboard);
+    }
+
+    function handleKeyboard(e) {
+        // Escape: close modal
+        if (e.key === 'Escape') {
+            dom.loginModal.classList.remove('active');
+            return;
+        }
+
+        // Don't intercept if typing in input
+        if (e.target.tagName === 'INPUT') return;
+
+        // Arrow keys: navigate markets
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            navigateMarkets(e.key === 'ArrowUp' ? -1 : 1);
+            return;
+        }
+
+        // B: Quick buy, S: Quick sell
+        if (e.key === 'b' || e.key === 'B') {
+            submitOrder('buy');
+            return;
+        }
+        if (e.key === 's' || e.key === 'S') {
+            submitOrder('sell');
+            return;
+        }
+
+        // T: Toggle theme
+        if (e.key === 't' || e.key === 'T') {
+            const body = document.body;
+            body.dataset.theme = body.dataset.theme === 'light' ? 'dark' : 'light';
+            localStorage.setItem('cre_theme', body.dataset.theme);
+            return;
+        }
+
+        // /: Focus search
+        if (e.key === '/') {
+            e.preventDefault();
+            $('#searchMarket')?.focus();
+            return;
+        }
+    }
+
+    function navigateMarkets(direction) {
+        const symbols = state.markets.map(m => m.symbol);
+        const currentIdx = symbols.indexOf(state.selectedMarket);
+        let newIdx = currentIdx + direction;
+        
+        if (newIdx < 0) newIdx = symbols.length - 1;
+        if (newIdx >= symbols.length) newIdx = 0;
+        
+        selectMarket(symbols[newIdx]);
     }
 
     // ===========================================
