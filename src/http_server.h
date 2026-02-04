@@ -987,6 +987,64 @@ inline void HttpServer::setup_routes() {
         res.set_content(product_to_json(*product).dump(), "application/json");
     });
     
+    // ==================== TRANSPARENCY INFO ====================
+    // Full source transparency for each market (CRE design philosophy)
+    server_->Get("/api/market-info/:symbol", [](const httplib::Request& req, httplib::Response& res) {
+        auto symbol = req.path_params.at("symbol");
+        auto* product = ProductCatalog::instance().get(symbol);
+
+        if (!product) {
+            res.status = 404;
+            res.set_content(R"({"error":"Product not found"})", "application/json");
+            return;
+        }
+
+        json response = {
+            {"symbol", symbol},
+            {"name", product->name},
+            {"description", product->description},
+            {"category", static_cast<int>(product->category)}
+        };
+
+        // Source transparency
+        if (!product->fxcm_symbol.empty()) {
+            response["source"] = {
+                {"provider", "FXCM"},
+                {"symbol", product->fxcm_symbol}
+            };
+
+            // Get USD price from FXCM feed
+            auto fxcm_price = FxcmFeed::instance().get_price(product->fxcm_symbol);
+            if (fxcm_price.has_value()) {
+                double mid = (fxcm_price->bid + fxcm_price->ask) / 2.0;
+                response["source"]["bid_usd"] = fxcm_price->bid;
+                response["source"]["ask_usd"] = fxcm_price->ask;
+                response["source"]["mid_usd"] = mid;
+                response["source"]["timestamp"] = fxcm_price->timestamp;
+            }
+        } else {
+            response["source"] = {
+                {"provider", "CRE"},
+                {"note", "Mongolian local market - CRE is the source"}
+            };
+        }
+
+        // Conversion transparency
+        response["conversion"] = {
+            {"usd_mnt_rate", USD_MNT_RATE},
+            {"multiplier", product->usd_multiplier},
+            {"is_inverted", product->is_inverted},
+            {"formula", product->is_inverted 
+                ? "MNT = USD_MNT_RATE / USD_PRICE" 
+                : "MNT = USD_PRICE * MULTIPLIER * USD_MNT_RATE"}
+        };
+
+        // Current mark price
+        response["mark_price_mnt"] = product->mark_price_mnt;
+
+        res.set_content(response.dump(), "application/json");
+    });
+
     // ==================== PUBLIC FX RATES ====================
     // Public bank rates for transparency (USD-MNT market)
     server_->Get("/api/fx/rates", [](const httplib::Request&, httplib::Response& res) {
