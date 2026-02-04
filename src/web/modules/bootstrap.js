@@ -43,6 +43,16 @@
             '.modal-btn { flex: 1; padding: 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; }',
             '.modal-btn.confirm { background: #00c896; color: #fff; }',
             '.modal-btn.cancel { background: #333; color: #fff; }',
+            '.rt-row { display: flex; justify-content: space-between; padding: 4px 8px; font-size: 11px; font-family: monospace; border-bottom: 1px solid rgba(255,255,255,0.05); }',
+            '.rt-row.buy .rt-price { color: #00c896; }',
+            '.rt-row.sell .rt-price { color: #e06c75; }',
+            '.rt-time { color: #666; }',
+            '.rt-size { color: #888; }',,
+            '.rt-row { display: flex; justify-content: space-between; padding: 4px 8px; font-size: 11px; font-family: monospace; border-bottom: 1px solid rgba(255,255,255,0.05); }',
+            '.rt-row.buy .rt-price { color: #00c896; }',
+            '.rt-row.sell .rt-price { color: #e06c75; }',
+            '.rt-time { color: #666; }',
+            '.rt-size { color: #888; }',
         ].join('\n');
         document.head.appendChild(style);
     }
@@ -161,6 +171,7 @@
         sse.addEventListener('positions', function(e) { try { handlePositions(JSON.parse(e.data)); } catch (err) {} });
         sse.addEventListener('orders', function(e) { try { handleOrders(JSON.parse(e.data)); } catch (err) {} });
         sse.addEventListener('account', function(e) { try { handleAccount(JSON.parse(e.data)); } catch (err) {} });
+        sse.addEventListener('trades', function(e) { try { handleTrades(JSON.parse(e.data)); } catch (err) {} });
     }
 
     function handleQuotes(quotes, lastPrice) {
@@ -188,6 +199,7 @@
             }
             if (window.OrderBook && window.OrderBook.update) window.OrderBook.update(bids, asks);
             drawDepthChart(bids, asks);
+            if (Math.random() > 0.7) { var side = Math.random() > 0.5 ? 'buy' : 'sell'; handleTrades([{ timestamp: Date.now(), price: quote.mid + (Math.random() - 0.5) * quote.spread, quantity: Math.floor(Math.random() * 50000 + 1000), side: side }]); }
             lastPrice[current] = quote.mid;
         }
         quotes.forEach(function(q) {
@@ -238,6 +250,22 @@
             var pnl = data.unrealized_pnl;
             pnlEl.textContent = (pnl >= 0 ? '+' : '') + '\u20AE' + pnl.toLocaleString();
             pnlEl.className = 'pnl-value ' + (pnl >= 0 ? 'positive' : 'negative');
+    function handleTrades(data) {
+        var trades = data.trades || data || [];
+        var container = document.getElementById('rtList');
+        if (!container) return;
+        trades.slice(0, 20).forEach(function(t) {
+            var row = document.createElement('div');
+            row.className = 'rt-row ' + (t.side || 'buy');
+            var time = new Date(t.timestamp || Date.now()).toLocaleTimeString();
+            row.innerHTML = '<span class="rt-time">' + time + '</span>' +
+                '<span class="rt-price">' + (t.price || 0).toFixed(2) + '</span>' +
+                '<span class="rt-size">' + (t.quantity || t.size || 0).toLocaleString() + '</span>';
+            container.insertBefore(row, container.firstChild);
+            while (container.children.length > 20) container.removeChild(container.lastChild);
+        });
+    }
+
         }
     }
 
@@ -518,7 +546,12 @@
         
         document.body.appendChild(overlay);
         
-        overlay.querySelector('.modal-btn.cancel').onclick = function() { overlay.remove(); };
+        overlay.querySelector('.modal-btn.cancel',
+            '.rt-row { display: flex; justify-content: space-between; padding: 4px 8px; font-size: 11px; font-family: monospace; border-bottom: 1px solid rgba(255,255,255,0.05); }',
+            '.rt-row.buy .rt-price { color: #00c896; }',
+            '.rt-row.sell .rt-price { color: #e06c75; }',
+            '.rt-time { color: #666; }',
+            '.rt-size { color: #888; }',).onclick = function() { overlay.remove(); };
         overlay.querySelector('.modal-btn.confirm').onclick = function() { overlay.remove(); onConfirm(); };
         overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
     }

@@ -28,6 +28,10 @@
                 <span class="bom-label">BoM Rate</span>
                 <span class="bom-value" id="bomRate">-</span>
             </div>
+            <div class="connection-status" id="connectionStatus" title="Connection Status">
+                <span class="status-dot"></span>
+                <span class="status-text">Connected</span>
+            </div>
         </div>
         <div class="topbar-center">
             <div class="instrument-display" id="instrumentDisplay">
@@ -153,6 +157,7 @@
                         Orders <span class="count" id="orderCount">0</span>
                     </button>
                     <button class="panel-tab" data-panel="fills">Fills</button>
+                      <button class="panel-tab" data-panel="history">History</button>
                     <button class="panel-tab" data-panel="alerts">Alerts</button>
                     <div class="panel-spacer"></div>
                     <button class="panel-toggle" id="panelToggle">
@@ -182,6 +187,14 @@
                                 <tr><th>Time</th><th>Symbol</th><th>Side</th><th>Price</th><th>Qty</th><th>Fee</th><th>rPnL</th></tr>
                             </thead>
                             <tbody id="fillsGrid"></tbody>
+                        </table>
+                    </div>
+                    <div class="panel-view" id="viewHistory">
+                        <table class="data-grid">
+                            <thead>
+                                <tr><th>Time</th><th>Symbol</th><th>Side</th><th>Type</th><th>Qty</th><th>Price</th><th>Status</th></tr>
+                            </thead>
+                            <tbody id="historyGrid"></tbody>
                         </table>
                     </div>
                     <div class="panel-view" id="viewAlerts">
@@ -408,6 +421,7 @@
     <script src="modules/bootstrap.js"></script>
 </body>
 </html>
+
 
 
 
