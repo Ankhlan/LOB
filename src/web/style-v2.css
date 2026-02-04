@@ -1,37 +1,39 @@
-/* CRE.mn Design System - Dukascopy-Inspired Professional Theme */
-/* NEXUS Design Spec v2 Implementation */
+/* CRE.mn Design System - CRE Brand Book v2.0 */
+/* Professional Mongolian Exchange Theme */
 
 /* ============================================
    CSS VARIABLES - Theme System
+   Brandbook Colors: https://cre.mn/brand
    ============================================ */
 :root {
     /* Light Theme - Default */
-    --bg-primary: #F5F6F8;
+    --bg-primary: #FAFAFA;           /* Off White - Brandbook */
     --bg-secondary: #FFFFFF;
-    --bg-tertiary: #ECEEF1;
-    --bg-hover: #E8EBF0;
+    --bg-tertiary: #F5F6F8;
+    --bg-hover: #ECEEF1;
     
-    --text-primary: #1A1D23;
+    --text-primary: #1A1A1A;         /* Near Black - Brandbook */
     --text-secondary: #6C7380;
-    --text-muted: #9CA3AF;
+    --text-muted: #ABB2BF;           /* Neutral Gray - Brandbook */
     
     --border-color: #E0E3E8;
     --border-light: #ECEEF1;
     
-    /* Trading Colors - HIGH CONTRAST */
-    --buy-color: #008A00;
-    --buy-bg: rgba(0, 138, 0, 0.08);
-    --buy-bg-intense: rgba(0, 138, 0, 0.15);
-    --sell-color: #CC0000;
-    --sell-bg: rgba(204, 0, 0, 0.08);
-    --sell-bg-intense: rgba(204, 0, 0, 0.15);
+    /* Trading Colors - CRE Brandbook Semantic Colors */
+    --buy-color: #98C379;            /* Profit Green - Brandbook */
+    --buy-bg: rgba(152, 195, 121, 0.08);
+    --buy-bg-intense: rgba(152, 195, 121, 0.20);
+    --sell-color: #E06C75;           /* Loss Red - Brandbook */
+    --sell-bg: rgba(224, 108, 117, 0.08);
+    --sell-bg-intense: rgba(224, 108, 117, 0.20);
     
-    /* Accent */
-    --accent-color: #0066CC;
-    --accent-bg: rgba(0, 102, 204, 0.08);
+    /* Accent - CRE Gold */
+    --accent-color: #E5C07B;         /* CRE Gold - Brandbook */
+    --accent-bg: rgba(229, 192, 123, 0.12);
+    --info-color: #61AFEF;           /* Info Blue - Brandbook */
     
     /* Header */
-    --header-bg: #1F2937;
+    --header-bg: #282C34;            /* CRE Charcoal - Brandbook */
     --header-text: #FFFFFF;
     
     /* Panel sizing */
@@ -40,25 +42,33 @@
     --right-width: 280px;
     --bottom-height: 180px;
     
-    /* Font families */
-    --font-mono: 'JetBrains Mono', monospace;
+    /* Font families - Brandbook: Inter for all, tabular nums for data */
+    --font-mono: 'Inter', -apple-system, sans-serif;
     --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    
+    /* Shadows - Brandbook */
+    --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.15);
+    --shadow-elevated: 0 4px 16px rgba(0, 0, 0, 0.2);
+    
+    /* Border radius - Brandbook */
+    --radius-sm: 4px;
+    --radius-md: 6px;
 }
 
 [data-theme="dark"] {
-    --bg-primary: #0D1117;
-    --bg-secondary: #161B22;
+    --bg-primary: #282C34;           /* CRE Charcoal - Brandbook */
+    --bg-secondary: #2C313C;         /* Surface - Brandbook */
     --bg-tertiary: #21262D;
-    --bg-hover: #30363D;
+    --bg-hover: #3E4451;             /* Border color as hover - Brandbook */
     
     --text-primary: #E6EDF3;
-    --text-secondary: #8B949E;
+    --text-secondary: #ABB2BF;       /* Neutral Gray - Brandbook */
     --text-muted: #6E7681;
     
-    --border-color: #30363D;
-    --border-light: #21262D;
+    --border-color: #3E4451;         /* Border - Brandbook */
+    --border-light: #2C313C;
     
-    --header-bg: #010409;
+    --header-bg: #1A1A1A;            /* Near Black - Brandbook */
 }
 
 /* ============================================
@@ -220,11 +230,13 @@ html, body {
 .header-btn.primary {
     background: var(--accent-color);
     border-color: var(--accent-color);
-    color: #FFFFFF;
+    color: #282C34;  /* Dark text on gold - Brandbook */
+    font-weight: 600;
 }
 
 .header-btn.primary:hover {
-    background: #0055AA;
+    background: #D4A84C;  /* Darker gold on hover */
+    border-color: #D4A84C;
 }
 
 /* ============================================
@@ -434,7 +446,10 @@ html, body {
 .skeleton-cell.long { width: 80px; }
 
 /* Number transitions for smooth updates */
+/* Brandbook: Use tabular figures for aligned columns */
 .num {
+    font-feature-settings: 'tnum' 1;  /* Tabular numbers for alignment */
+    font-weight: 500;                  /* Medium weight per brandbook */
     transition: color 0.15s ease-out;
 }
 
@@ -880,9 +895,10 @@ html, body {
     align-items: center;
     padding: 10px;
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     cursor: pointer;
     transition: all 0.15s;
+    box-shadow: var(--shadow-card);
 }
 
 .trade-btn.buy {
