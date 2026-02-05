@@ -854,12 +854,12 @@
         // Search
         $('#searchMarket')?.addEventListener('input', () => renderMarketList());
 
-        // Theme toggle
+        // Theme toggle - use documentElement for CSS variable scope
         dom.themeToggle?.addEventListener('click', () => {
-            const body = document.body;
-            const current = body.dataset.theme;
-            body.dataset.theme = current === 'light' ? 'dark' : 'light';
-            localStorage.setItem('cre_theme', body.dataset.theme);
+            const html = document.documentElement;
+            const current = html.dataset.theme || 'light';
+            html.dataset.theme = current === 'light' ? 'dark' : 'light';
+            localStorage.setItem('cre_theme', html.dataset.theme);
         });
 
         // Modal
@@ -906,11 +906,12 @@
             return;
         }
 
-        // T: Toggle theme
+        // T: Toggle theme - use documentElement for CSS variable scope
         if (e.key === 't' || e.key === 'T') {
-            const body = document.body;
-            body.dataset.theme = body.dataset.theme === 'light' ? 'dark' : 'light';
-            localStorage.setItem('cre_theme', body.dataset.theme);
+            const html = document.documentElement;
+            const current = html.dataset.theme || 'light';
+            html.dataset.theme = current === 'light' ? 'dark' : 'light';
+            localStorage.setItem('cre_theme', html.dataset.theme);
             return;
         }
 
@@ -937,10 +938,10 @@
     // INITIALIZE
     // ===========================================
     function init() {
-        // Load saved theme
+        // Load saved theme - apply to documentElement for CSS variable scope
         const savedTheme = localStorage.getItem('cre_theme');
         if (savedTheme) {
-            document.body.dataset.theme = savedTheme;
+            document.documentElement.dataset.theme = savedTheme;
         }
 
         // Load saved token
