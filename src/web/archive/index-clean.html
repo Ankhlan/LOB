@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRE.mn - Mongolian Derivatives Exchange</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style-clean.css">
+</head>
+<body data-theme="light">
+    <!-- HEADER - Compact, Functional -->
+    <header class="header">
+        <div class="header-left">
+            <span class="logo">CRE<span class="logo-suffix">.mn</span></span>
+            <span class="logo-tag">Mongolian Derivatives Exchange</span>
+        </div>
+        <div class="header-center">
+            <div class="rate-display">
+                <span class="rate-label">BoM Rate</span>
+                <span class="rate-value" id="bomRate">3,564.00</span>
+            </div>
+            <div class="status-indicator connected" id="status">
+                <span class="status-dot"></span>
+                <span class="status-text">Connected</span>
+            </div>
+        </div>
+        <div class="header-right">
+            <button class="header-btn" id="themeToggle" title="Toggle Theme">Theme</button>
+            <button class="header-btn" id="langToggle">EN</button>
+            <button class="header-btn primary" id="loginBtn">Connect</button>
+        </div>
+    </header>
+
+    <!-- MAIN LAYOUT - Three Column Grid -->
+    <main class="main-grid">
+        <!-- LEFT: Market Watch -->
+        <aside class="panel panel-left">
+            <div class="panel-header">
+                <span class="panel-title">Markets</span>
+                <input type="text" class="search-input" id="searchMarket" placeholder="Search...">
+            </div>
+            <div class="market-grid">
+                <table class="data-table market-table">
+                    <thead>
+                        <tr>
+                            <th class="col-symbol">Symbol</th>
+                            <th class="col-bid num">Bid</th>
+                            <th class="col-ask num">Ask</th>
+                            <th class="col-chg num">Chg%</th>
+                        </tr>
+                    </thead>
+                    <tbody id="marketList">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </aside>
+
+        <!-- CENTER: Chart + Bottom Panel -->
+        <section class="panel panel-center">
+            <!-- Chart Area -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <div class="selected-market">
+                        <span class="market-symbol" id="selectedSymbol">XAU-MNT-PERP</span>
+                        <span class="market-price" id="selectedPrice">10,235,400</span>
+                        <span class="market-change positive" id="selectedChange">+0.52%</span>
+                    </div>
+                    <div class="chart-controls">
+                        <div class="timeframe-selector">
+                            <button class="tf-btn" data-tf="1">1m</button>
+                            <button class="tf-btn" data-tf="5">5m</button>
+                            <button class="tf-btn active" data-tf="15">15m</button>
+                            <button class="tf-btn" data-tf="60">1H</button>
+                            <button class="tf-btn" data-tf="240">4H</button>
+                            <button class="tf-btn" data-tf="D">1D</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-canvas" id="chartCanvas"></div>
+            </div>
+
+            <!-- Bottom: Positions/Orders -->
+            <div class="bottom-panel">
+                <div class="tab-bar">
+                    <button class="tab active" data-tab="positions">Positions <span class="badge" id="posCount">0</span></button>
+                    <button class="tab" data-tab="orders">Orders <span class="badge" id="orderCount">0</span></button>
+                    <button class="tab" data-tab="history">History</button>
+                </div>
+                <div class="tab-content">
+                    <div class="tab-pane active" id="positionsPane">
+                        <table class="data-table positions-table">
+                            <thead>
+                                <tr>
+                                    <th>Symbol</th>
+                                    <th>Side</th>
+                                    <th class="num">Size</th>
+                                    <th class="num">Entry</th>
+                                    <th class="num">Mark</th>
+                                    <th class="num">uPnL</th>
+                                    <th class="num">ROE%</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="positionsGrid">
+                                <tr class="empty-row"><td colspan="8">No open positions</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="tab-pane" id="ordersPane">
+                        <table class="data-table orders-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Symbol</th>
+                                    <th>Side</th>
+                                    <th>Type</th>
+                                    <th class="num">Price</th>
+                                    <th class="num">Qty</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ordersGrid">
+                                <tr class="empty-row"><td colspan="8">No open orders</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="tab-pane" id="historyPane">
+                        <table class="data-table history-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Symbol</th>
+                                    <th>Side</th>
+                                    <th class="num">Price</th>
+                                    <th class="num">Qty</th>
+                                    <th class="num">rPnL</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyGrid">
+                                <tr class="empty-row"><td colspan="6">No trade history</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- RIGHT: Order Book + Trade Entry -->
+        <aside class="panel panel-right">
+            <!-- Order Book -->
+            <div class="orderbook">
+                <div class="panel-header">
+                    <span class="panel-title">Order Book</span>
+                </div>
+                <div class="orderbook-grid">
+                    <div class="ob-header-row">
+                        <span>Price</span>
+                        <span class="num">Size</span>
+                        <span class="num">Total</span>
+                    </div>
+                    <div class="ob-asks" id="obAsks">
+                        <!-- Ask rows populated by JS -->
+                    </div>
+                    <div class="ob-spread">
+                        <span class="spread-label">Spread</span>
+                        <span class="spread-value" id="spreadValue">1.50</span>
+                    </div>
+                    <div class="ob-bids" id="obBids">
+                        <!-- Bid rows populated by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trade Entry -->
+            <div class="trade-form">
+                <div class="panel-header">
+                    <span class="panel-title">Order Entry</span>
+                </div>
+                <div class="side-selector">
+                    <button class="side-btn buy active" data-side="buy">Buy / Long</button>
+                    <button class="side-btn sell" data-side="sell">Sell / Short</button>
+                </div>
+                <div class="form-group">
+                    <label>Order Type</label>
+                    <div class="order-type-selector">
+                        <button class="ot-btn active" data-type="limit">Limit</button>
+                        <button class="ot-btn" data-type="market">Market</button>
+                    </div>
+                </div>
+                <div class="form-group" id="priceGroup">
+                    <label>Price</label>
+                    <input type="text" class="form-input num" id="orderPrice" value="">
+                </div>
+                <div class="form-group">
+                    <label>Quantity</label>
+                    <input type="text" class="form-input num" id="orderQty" value="1">
+                    <div class="qty-presets">
+                        <button class="preset-btn" data-pct="25">25%</button>
+                        <button class="preset-btn" data-pct="50">50%</button>
+                        <button class="preset-btn" data-pct="75">75%</button>
+                        <button class="preset-btn" data-pct="100">Max</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Leverage</label>
+                    <div class="leverage-display">
+                        <input type="range" class="leverage-slider" id="leverageSlider" min="1" max="100" value="10">
+                        <span class="leverage-value" id="leverageValue">10x</span>
+                    </div>
+                </div>
+                <div class="order-summary">
+                    <div class="summary-row">
+                        <span>Order Value</span>
+                        <span class="num" id="sumValue">-</span>
+                    </div>
+                    <div class="summary-row">
+                        <span>Margin Req.</span>
+                        <span class="num" id="sumMargin">-</span>
+                    </div>
+                    <div class="summary-row">
+                        <span>Est. Fee</span>
+                        <span class="num" id="sumFee">-</span>
+                    </div>
+                </div>
+                <button class="submit-btn buy" id="submitOrder">Buy XAU-MNT-PERP</button>
+            </div>
+
+            <!-- Account Summary -->
+            <div class="account-summary">
+                <div class="panel-header">
+                    <span class="panel-title">Account</span>
+                </div>
+                <div class="account-grid">
+                    <div class="account-row">
+                        <span>Equity</span>
+                        <span class="num" id="accountEquity">-</span>
+                    </div>
+                    <div class="account-row">
+                        <span>Available</span>
+                        <span class="num" id="accountAvailable">-</span>
+                    </div>
+                    <div class="account-row">
+                        <span>Margin Used</span>
+                        <span class="num" id="accountMargin">-</span>
+                    </div>
+                    <div class="account-row">
+                        <span>Unrealized PnL</span>
+                        <span class="num" id="accountPnl">-</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Login Modal -->
+    <div class="modal-overlay" id="loginModal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Connect to CRE.mn</h3>
+                <button class="modal-close" id="closeModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Phone Number</label>
+                    <div class="phone-input">
+                        <span class="country-code">+976</span>
+                        <input type="tel" class="form-input" id="phoneInput" placeholder="99001234" maxlength="8">
+                    </div>
+                </div>
+                <button class="btn-primary" id="sendOtp">Send Code</button>
+                <div class="otp-section hidden" id="otpSection">
+                    <div class="form-group">
+                        <label>Verification Code</label>
+                        <input type="text" class="form-input" id="otpInput" placeholder="Enter 6-digit code" maxlength="6">
+                    </div>
+                    <button class="btn-primary" id="verifyOtp">Verify</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="cre-chart.js"></script>
+    <script src="app-clean.js"></script>
+</body>
+</html>
