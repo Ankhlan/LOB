@@ -534,13 +534,19 @@
             const res = await fetch(`${API}/orderbook/${sym}`);
             const ob = await res.json();
             if (ob && ob.bids && ob.asks) {
-                onBookMsg({ symbol: sym, bids: ob.bids, asks: ob.asks });
+                // Normalize: API returns 'quantity', renderer uses 'size'
+                const normBids = ob.bids.map(b => ({ price: b.price, size: b.quantity || b.size || 0 }));
+                const normAsks = ob.asks.map(a => ({ price: a.price, size: a.quantity || a.size || 0 }));
+                onBookMsg({ symbol: sym, bids: normBids, asks: normAsks });
             }
         } catch (_) {}
     }
 
     function onBookMsg(ob) {
         if (ob.symbol !== S.selected) return;
+        // Normalize: API/SSE may use 'quantity' instead of 'size'
+        if (ob.bids) ob.bids = ob.bids.map(b => ({ price: b.price, size: b.size || b.quantity || 0 }));
+        if (ob.asks) ob.asks = ob.asks.map(a => ({ price: a.price, size: a.size || a.quantity || 0 }));
         S.orderbook = ob;
         renderBook();
     }
