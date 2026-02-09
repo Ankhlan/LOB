@@ -163,6 +163,15 @@
         confirmCancel: $('confirmCancel'),
         confirmOk: $('confirmOk'),
 
+        // Edit Order
+        editBackdrop: $('editBackdrop'),
+        editSymbol: $('editSymbol'),
+        editSide: $('editSide'),
+        editPrice: $('editPrice'),
+        editQty: $('editQty'),
+        editSubmitBtn: $('editSubmitBtn'),
+        editCancelBtn: $('editCancelBtn'),
+
         // Deposit
         depositBackdrop: $('depositBackdrop'),
         depositTitle: $('depositTitle'),
@@ -261,7 +270,8 @@
             if (ms < 100) D.latencyPill.classList.add('fast');
             else if (ms < 300) D.latencyPill.classList.add('mid');
             else D.latencyPill.classList.add('slow');
-        } catch (_) {
+        } catch (err) {
+            console.error('[CRE] Latency measurement failed:', err);
             D.latencyVal.textContent = '—';
             D.latencyPill.classList.remove('fast', 'mid', 'slow');
         }
@@ -282,28 +292,28 @@
         };
 
         es.addEventListener('market', (e) => {
-            try { onMarketsMsg(JSON.parse(e.data)); } catch (_) {}
+            try { onMarketsMsg(JSON.parse(e.data)); } catch (err) { console.error('[CRE][SSE] market parse error:', err); }
         });
         es.addEventListener('ticker', (e) => {
-            try { onTickMsg(JSON.parse(e.data)); } catch (_) {}
+            try { onTickMsg(JSON.parse(e.data)); } catch (err) { console.error('[CRE][SSE] ticker parse error:', err); }
         });
         es.addEventListener('orderbook', (e) => {
-            try { onBookMsg(JSON.parse(e.data)); } catch (_) {}
+            try { onBookMsg(JSON.parse(e.data)); } catch (err) { console.error('[CRE][SSE] orderbook parse error:', err); }
         });
         es.addEventListener('positions', (e) => {
-            try { onPositionsMsg(JSON.parse(e.data)); } catch (_) {}
+            try { onPositionsMsg(JSON.parse(e.data)); } catch (err) { console.error('[CRE][SSE] positions parse error:', err); }
         });
         es.addEventListener('orders', (e) => {
-            try { onOrdersMsg(JSON.parse(e.data)); } catch (_) {}
+            try { onOrdersMsg(JSON.parse(e.data)); } catch (err) { console.error('[CRE][SSE] orders parse error:', err); }
         });
         es.addEventListener('trade', (e) => {
-            try { onTradeMsg(JSON.parse(e.data)); } catch (_) {}
+            try { onTradeMsg(JSON.parse(e.data)); } catch (err) { console.error('[CRE][SSE] trade parse error:', err); }
         });
         es.addEventListener('fill', (e) => {
-            try { onFillMsg(JSON.parse(e.data)); } catch (_) {}
+            try { onFillMsg(JSON.parse(e.data)); } catch (err) { console.error('[CRE][SSE] fill parse error:', err); }
         });
         es.addEventListener('account', (e) => {
-            try { onAccountMsg(JSON.parse(e.data)); } catch (_) {}
+            try { onAccountMsg(JSON.parse(e.data)); } catch (err) { console.error('[CRE][SSE] account parse error:', err); }
         });
 
         es.onerror = () => {
@@ -349,7 +359,7 @@
             if (t.volume_24h != null) m.volume24h = t.volume_24h;
             updateSelectedDisplay(m);
             renderMarkets();
-        } catch (_) {}
+        } catch (err) { console.error('[CRE] onTickMsg error:', err); }
     }
 
     function renderMarkets(cat) {
@@ -498,7 +508,7 @@
                 D.infoOI.textContent = fmtAbbrev(oiVal);
                 D.stat24hOI.textContent = fmtAbbrev(oiVal);
             }
-        } catch (_) {}
+        } catch (err) { console.error('[CRE] fetchOpenInterest error:', err); }
     }
 
     function updateInfoPanel(m) {
@@ -523,7 +533,7 @@
             });
             renderMarkets();
             if (S.selected) updateSelectedDisplay();
-        } catch (_) {}
+        } catch (err) { console.error('[CRE] refreshAllTickers error:', err); }
     }
 
     // =========================================================================
@@ -539,7 +549,7 @@
                 const normAsks = ob.asks.map(a => ({ price: a.price, size: a.quantity || a.size || 0 }));
                 onBookMsg({ symbol: sym, bids: normBids, asks: normAsks });
             }
-        } catch (_) {}
+        } catch (err) { console.error('[CRE] fetchBook error:', err); }
     }
 
     function onBookMsg(ob) {
@@ -666,7 +676,7 @@
         D.positionsBody.querySelectorAll('.close-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                closePosition(btn.dataset.sym, btn.dataset.id);
+                closePosition(btn.dataset.sym, btn.dataset.id, btn);
             });
         });
     }
@@ -688,14 +698,24 @@
                 <td class="col-num">${fmt(o.qty, 2)}</td>
                 <td class="col-num">${fmt(o.filled || 0, 2)}</td>
                 <td>${o.status || 'OPEN'}</td>
-                <td class="col-act"><button class="cancel-btn" data-id="${o.id}" data-sym="${o.symbol}">Cancel</button></td>
+                <td class="col-act">
+                    <button class="edit-btn" data-id="${o.id}" data-sym="${o.symbol}" data-price="${o.price}" data-qty="${o.qty}" data-side="${o.side}">Edit</button>
+                    <button class="cancel-btn" data-id="${o.id}" data-sym="${o.symbol}">Cancel</button>
+                </td>
             </tr>
         `).join('');
 
         D.ordersBody.querySelectorAll('.cancel-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                cancelOrder(btn.dataset.sym, btn.dataset.id);
+                cancelOrder(btn.dataset.sym, btn.dataset.id, btn);
+            });
+        });
+        
+        D.ordersBody.querySelectorAll('.edit-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openEditOrder(btn.dataset.sym, btn.dataset.id, btn.dataset.price, btn.dataset.qty, btn.dataset.side);
             });
         });
     }
@@ -772,7 +792,7 @@
                 S.account = data;
                 updateAccountDisplay(data);
             }
-        } catch (_) {}
+        } catch (err) { console.error('[CRE] fetchAccount error:', err); }
     }
 
     async function fetchTransactions() {
@@ -792,7 +812,7 @@
                     </div>`;
                 }).join('');
             }
-        } catch (_) {}
+        } catch (err) { console.error('[CRE] fetchTransactions error:', err); }
     }
 
     // =========================================================================
@@ -873,7 +893,12 @@
         if (!S.pendingConfirm) return;
         const { side, qty, price, isLimit } = S.pendingConfirm;
         S.pendingConfirm = null;
-        D.confirmBackdrop.classList.add('hidden');
+
+        // Show loading state
+        const originalText = D.confirmOk.textContent;
+        D.confirmOk.disabled = true;
+        D.confirmOk.textContent = 'Submitting…';
+        D.confirmOk.classList.add('loading');
 
         const body = {
             symbol: S.selected,
@@ -903,11 +928,18 @@
             const data = await res.json();
             if (data.success || data.order_id) {
                 toast(`Order placed: ${side.toUpperCase()} ${qty} ${S.selected}`, 'success');
+                D.confirmBackdrop.classList.add('hidden');
             } else {
                 toast('Order rejected: ' + (data.error || 'Unknown'), 'error');
             }
         } catch (e) {
+            console.error('[CRE] executeOrder error:', e);
             toast('Order failed: network error', 'error');
+        } finally {
+            // Reset button state
+            D.confirmOk.disabled = false;
+            D.confirmOk.textContent = originalText;
+            D.confirmOk.classList.remove('loading');
         }
     }
 
@@ -919,8 +951,16 @@
         showConfirmOrder(side);
     }
 
-    async function closePosition(sym, id) {
+    async function closePosition(sym, id, btn) {
         if (!S.token) return;
+        
+        // Loading state
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '…';
+            btn.classList.add('loading');
+        }
+        
         try {
             const res = await fetch(`${API}/position/close`, {
                 method: 'POST',
@@ -933,13 +973,28 @@
             const data = await res.json();
             if (data.success) toast(`Closed ${sym}`, 'success');
             else toast('Close failed: ' + (data.error || ''), 'error');
-        } catch (_) {
+        } catch (err) {
+            console.error('[CRE] closePosition error:', err);
             toast('Close failed', 'error');
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Close';
+                btn.classList.remove('loading');
+            }
         }
     }
 
-    async function cancelOrder(sym, id) {
+    async function cancelOrder(sym, id, btn) {
         if (!S.token) return;
+        
+        // Loading state
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '…';
+            btn.classList.add('loading');
+        }
+        
         try {
             const res = await fetch(`${API}/order/${sym}/${id}`, {
                 method: 'DELETE',
@@ -948,8 +1003,73 @@
             const data = await res.json();
             if (data.success) toast(`Cancelled order`, 'success');
             else toast('Cancel failed: ' + (data.error || ''), 'error');
-        } catch (_) {
+        } catch (err) {
+            console.error('[CRE] cancelOrder error:', err);
             toast('Cancel failed', 'error');
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Cancel';
+                btn.classList.remove('loading');
+            }
+        }
+    }
+
+    // =========================================================================
+    // ORDER MODIFICATION
+    // =========================================================================
+    let editingOrder = null;
+
+    function openEditOrder(symbol, orderId, price, qty, side) {
+        editingOrder = { symbol, orderId, price: parseFloat(price), qty: parseFloat(qty), side };
+        
+        // Create or update edit modal content
+        D.editSymbol.textContent = symbol;
+        D.editSide.textContent = side.toUpperCase();
+        D.editSide.className = side === 'buy' ? 'green' : 'red';
+        D.editPrice.value = price;
+        D.editQty.value = qty;
+        D.editBackdrop.classList.remove('hidden');
+    }
+
+    async function submitEditOrder() {
+        if (!editingOrder || !S.token) return;
+        
+        const newPrice = parseFloat(D.editPrice.value);
+        const newQty = parseFloat(D.editQty.value);
+        
+        if (!newPrice || newPrice <= 0) { toast('Enter valid price', 'error'); return; }
+        if (!newQty || newQty <= 0) { toast('Enter valid quantity', 'error'); return; }
+        
+        // Show loading state
+        D.editSubmitBtn.disabled = true;
+        D.editSubmitBtn.textContent = 'Modifying…';
+        D.editSubmitBtn.classList.add('loading');
+        
+        try {
+            const res = await fetch(`${API}/order/${editingOrder.symbol}/${editingOrder.orderId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${S.token}`,
+                },
+                body: JSON.stringify({ price: newPrice, quantity: newQty }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast(`Order modified: ${editingOrder.symbol}`, 'success');
+                D.editBackdrop.classList.add('hidden');
+                editingOrder = null;
+            } else {
+                toast('Modify failed: ' + (data.error || ''), 'error');
+            }
+        } catch (err) {
+            console.error('[CRE] submitEditOrder error:', err);
+            toast('Modify failed', 'error');
+        } finally {
+            D.editSubmitBtn.disabled = false;
+            D.editSubmitBtn.textContent = 'Modify Order';
+            D.editSubmitBtn.classList.remove('loading');
         }
     }
 
@@ -991,7 +1111,8 @@
             } else {
                 toast('Deposit failed: ' + (data.error || ''), 'error');
             }
-        } catch (_) {
+        } catch (err) {
+            console.error('[CRE] handleDeposit error:', err);
             toast('Deposit failed', 'error');
         }
     }
@@ -1019,7 +1140,8 @@
             } else {
                 toast('Withdrawal failed: ' + (data.error || ''), 'error');
             }
-        } catch (_) {
+        } catch (err) {
+            console.error('[CRE] handleWithdraw error:', err);
             toast('Withdrawal failed', 'error');
         }
     }
@@ -1071,7 +1193,8 @@
             if (data.candles && S.chart) {
                 S.chart.setData(data.candles);
             }
-        } catch (_) {
+        } catch (err) {
+            console.error('[CRE] loadChart error (using synthetic data):', err);
             if (S.chart) {
                 const m = S.markets.find(x => x.symbol === sym);
                 const base = m?.last || 1000;
@@ -1118,7 +1241,8 @@
             } else {
                 toast('Failed: ' + (data.error || ''), 'error');
             }
-        } catch (_) {
+        } catch (err) {
+            console.error('[CRE] sendCode error:', err);
             toast('Failed to send code', 'error');
         }
         D.sendCodeBtn.disabled = false;
@@ -1153,7 +1277,8 @@
             } else {
                 toast('Invalid code', 'error');
             }
-        } catch (_) {
+        } catch (err) {
+            console.error('[CRE] verifyCode error:', err);
             toast('Verification failed', 'error');
         }
         D.verifyBtn.disabled = false;
@@ -1162,6 +1287,19 @@
     // =========================================================================
     // INITIAL DATA LOAD
     // =========================================================================
+    async function fetchBomRate() {
+        try {
+            const res = await fetch(`${API}/rate`);
+            const data = await res.json();
+            if (data && data.rate) {
+                const rate = parseFloat(data.rate);
+                D.bomRate.textContent = rate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+        } catch (err) {
+            console.error('[CRE] fetchBomRate error:', err);
+        }
+    }
+
     async function loadProducts() {
         try {
             const [prodRes, tickRes] = await Promise.all([
@@ -1359,6 +1497,19 @@
         });
         D.confirmOk.addEventListener('click', executeOrder);
 
+        // Edit order modal
+        if (D.editSubmitBtn) D.editSubmitBtn.addEventListener('click', submitEditOrder);
+        if (D.editCancelBtn) D.editCancelBtn.addEventListener('click', () => {
+            D.editBackdrop.classList.add('hidden');
+            editingOrder = null;
+        });
+        if (D.editBackdrop) D.editBackdrop.addEventListener('click', (e) => {
+            if (e.target === D.editBackdrop) {
+                D.editBackdrop.classList.add('hidden');
+                editingOrder = null;
+            }
+        });
+
         // Deposit modal
         D.depositBtn.addEventListener('click', () => openDeposit('deposit'));
         D.withdrawBtn.addEventListener('click', () => openDeposit('withdraw'));
@@ -1436,13 +1587,11 @@
         }
     }
 
-    let langs = ['en', 'mn'];
-    let langIdx = 0;
     function toggleLang() {
-        langIdx = (langIdx + 1) % langs.length;
-        D.langToggle.textContent = langs[langIdx].toUpperCase();
-        document.documentElement.lang = langs[langIdx];
-        toast('Language: ' + langs[langIdx].toUpperCase(), 'info');
+        const newLang = CRE_I18N.getLang() === 'en' ? 'mn' : 'en';
+        CRE_I18N.setLang(newLang);
+        D.langToggle.textContent = newLang.toUpperCase();
+        toast(CRE_I18N.t('toast.lang_changed') + ': ' + newLang.toUpperCase(), 'info');
     }
 
     function onKeyDown(e) {
@@ -1511,11 +1660,17 @@
         renderMarkets(); // show skeleton
         connectSSE();
         loadProducts();
+        fetchBomRate(); // Load BoM rate
+
+        // Initialize i18n and sync lang toggle button
+        CRE_I18N.init();
+        D.langToggle.textContent = CRE_I18N.getLang().toUpperCase();
 
         // Periodic refreshes
         setInterval(refreshAllTickers, REFRESH_INTERVAL);
         setInterval(measureLatency, 10000);
         setInterval(() => { if (S.token) fetchAccount(); }, 15000);
+        setInterval(fetchBomRate, 60000); // Refresh BoM rate every minute
 
         // Initial latency measurement
         measureLatency();
