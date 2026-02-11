@@ -1,0 +1,38 @@
+; ═══════════════════════════════════════════════════════════════════════════
+; CRE.mn - LIQUIDATION / MARGIN CALL JOURNAL TEMPLATE
+; Force-closure of positions when margin ratio < 1.0
+; Created: 2026-02-10 by LEDGER
+; ═══════════════════════════════════════════════════════════════════════════
+;
+; LIQUIDATION MECHANISM:
+;   Trigger: account.margin_ratio() < 1.0 (equity < margin used)
+;   Action: Force-close ALL positions at mark price
+;   PnL settlement: applied to user balance
+;   Negative balance: absorbed by Insurance Fund
+;
+; ACCOUNTING RULES:
+;   1. Settle PnL: Debit/Credit user balance vs trading exposure
+;   2. If user balance < 0: Insurance Fund absorbs the loss
+;      Debit Expenses:Insurance:Liquidation, Credit Assets:Exchange:InsuranceFund
+;   3. Zero out user balance (socialized loss if fund insufficient)
+;
+; ═══════════════════════════════════════════════════════════════════════════
+
+; --- EXAMPLE: Liquidation with profitable close ---
+; YYYY/MM/DD * Liquidation XAUUSD - User USER_PHONE
+;     ; Position: 0.5 units @ 2800.00, closed @ 2850.00
+;     ; PnL: +25.00 USD equivalent
+;     Liabilities:Customer:USER_PHONE:Balance      85000.00 MNT
+;     Revenue:Trading:Liquidation                  -85000.00 MNT
+
+; --- EXAMPLE: Liquidation with loss, covered by insurance ---
+; YYYY/MM/DD * Liquidation USDMNT - User USER_PHONE
+;     ; Position force-closed at loss, balance went negative
+;     ; Insurance fund absorbs -50000 MNT deficit
+;     Expenses:Insurance:Liquidation                50000.00 MNT
+;     Assets:Exchange:InsuranceFund                -50000.00 MNT
+
+; --- EXAMPLE: Liquidation margin release ---
+; YYYY/MM/DD * Margin release - Liquidation USER_PHONE
+;     Assets:Margin:Customers                     -100000.00 MNT
+;     Liabilities:Customer:USER_PHONE:Balance      100000.00 MNT

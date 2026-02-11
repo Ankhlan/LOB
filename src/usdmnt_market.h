@@ -174,7 +174,7 @@ public:
         cb.set_reference_price("USD-MNT-PERP", static_cast<PriceMicromnt>(bom_reference_rate_ * 1'000'000));
         
         // Update global rate - ALL *-MNT pairs depend on this
-        USD_MNT_RATE = rate.rate;
+        RateProvider::instance().update_rate("USD/MNT", rate.rate);
         
         // Update USD-MNT-PERP mark price
         ProductCatalog::instance().update_mark_price("USD-MNT-PERP", rate.rate);
@@ -321,7 +321,7 @@ public:
         upper_limit_ = rate * (1.0 + config_.level2_pct);
         
         // Update global rate
-        USD_MNT_RATE = rate;
+        RateProvider::instance().update_rate("USD/MNT", rate);
         ProductCatalog::instance().update_mark_price("USD-MNT-PERP", rate);
         
         if (alert_callback_) {

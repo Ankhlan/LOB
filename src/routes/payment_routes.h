@@ -11,6 +11,9 @@
 #include "../position_manager.h"
 #include "../qpay_handler.h"
 #include "../kyc_service.h"
+#include "../event_journal.h"
+#include "../database.h"
+#include <cmath>
 
 namespace cre {
 
@@ -51,8 +54,13 @@ private:
                 auto body = json::parse(req.body);
                 double amount = body["amount"];
                 
-                if (amount <= 0) {
-                    send_error(res, 400, "Amount must be positive");
+                if (amount <= 0 || !std::isfinite(amount)) {
+                    send_error(res, 400, "Amount must be a positive finite number");
+                    return;
+                }
+                
+                if (amount > 1e12) {
+                    send_error(res, 400, "Amount exceeds maximum limit");
                     return;
                 }
                 
@@ -64,6 +72,11 @@ private:
                 }
                 
                 PositionManager::instance().deposit(user_id, amount);
+                
+                // Journal the deposit event
+                central_exchange::EventJournal::instance().log_deposit(user_id, "MNT", amount);
+                central_exchange::Database::instance().log_event("deposit", user_id,
+                    "{\"amount\":" + std::to_string(amount) + ",\"currency\":\"MNT\"}");
                 
                 send_success(res, {
                     {"success", true},
@@ -126,8 +139,13 @@ private:
                 double amount = body["amount"];
                 std::string bank_account = body.value("bank_account", "");
                 
-                if (amount <= 0) {
-                    send_error(res, 400, "Amount must be positive");
+                if (amount <= 0 || !std::isfinite(amount)) {
+                    send_error(res, 400, "Amount must be a positive finite number");
+                    return;
+                }
+                
+                if (amount > 1e12) {
+                    send_error(res, 400, "Amount exceeds maximum withdrawal limit");
                     return;
                 }
                 
@@ -145,9 +163,14 @@ private:
                     return;
                 }
                 
-                // Deduct from balance and create pending withdrawal
-                PositionManager::instance().withdraw(auth.user_id, amount);
+                // Create withdrawal via QPay FIRST, then deduct balance only on success
                 auto tx = QPay::instance().create_withdrawal(auth.user_id, amount, bank_account);
+                PositionManager::instance().withdraw(auth.user_id, amount);
+                
+                // Journal the withdrawal event
+                central_exchange::EventJournal::instance().log_withdrawal(auth.user_id, "MNT", amount);
+                central_exchange::Database::instance().log_event("withdrawal", auth.user_id,
+                    "{\"amount\":" + std::to_string(amount) + ",\"currency\":\"MNT\",\"tx_id\":\"" + tx.id + "\"}");
                 
                 send_success(res, {
                     {"success", true},
@@ -166,6 +189,12 @@ private:
     void register_transaction_routes(httplib::Server& server) {
         // Get single transaction
         server.Get("/api/transaction/:id", [](const httplib::Request& req, httplib::Response& res) {
+            auto auth = authenticate(req);
+            if (!auth.success) {
+                send_error(res, auth.error_code, auth.error);
+                return;
+            }
+            
             auto id = req.path_params.at("id");
             auto tx = QPay::instance().get_transaction(id);
             
@@ -174,12 +203,18 @@ private:
                 return;
             }
             
+            // Users can only view their own transactions
+            if (tx->user_id != auth.user_id) {
+                send_error(res, 403, "Access denied");
+                return;
+            }
+            
             send_success(res, {
                 {"id", tx->id},
                 {"user_id", tx->user_id},
-                {"type", tx->type},
-                {"amount", tx->amount},
-                {"status", tx->status},
+                {"type", tx->type_str()},
+                {"amount", tx->amount_mnt},
+                {"status", tx->status_str()},
                 {"created_at", tx->created_at},
                 {"updated_at", tx->updated_at}
             });
@@ -196,9 +231,9 @@ private:
             for (const auto& tx : transactions) {
                 arr.push_back({
                     {"id", tx.id},
-                    {"type", tx.type},
-                    {"amount", tx.amount},
-                    {"status", tx.status},
+                    {"type", tx.type_str()},
+                    {"amount", tx.amount_mnt},
+                    {"status", tx.status_str()},
                     {"created_at", tx.created_at}
                 });
             }
@@ -211,17 +246,34 @@ private:
         // QPay payment webhook
         server.Post("/api/webhook/qpay", [](const httplib::Request& req, httplib::Response& res) {
             try {
+                // Verify webhook signature (CRITICAL - prevents forged deposits)
+                auto sig_header = req.get_header_value("X-QPay-Signature");
+                if (sig_header.empty()) {
+                    send_error(res, 401, "Missing webhook signature");
+                    return;
+                }
+                
+                if (!QPay::instance().verify_signature(req.body, sig_header)) {
+                    std::cerr << "[QPay] SECURITY: Invalid webhook signature rejected" << std::endl;
+                    send_error(res, 403, "Invalid webhook signature");
+                    return;
+                }
+                
                 auto body = json::parse(req.body);
                 
                 std::string invoice_id = body["invoice_id"];
                 std::string status = body["payment_status"];
-                double amount = body.value("amount", 0.0);
                 
                 if (status == "PAID") {
                     // Find the invoice and credit the user
                     auto tx = QPay::instance().get_transaction(invoice_id);
-                    if (tx && tx->status == "pending") {
+                    if (tx && tx->status == central_exchange::TxnStatus::PENDING) {
+                        // Use stored transaction amount, NOT webhook amount (prevents amount tampering)
+                        double amount = tx->amount_mnt;
                         PositionManager::instance().deposit(tx->user_id, amount);
+                        central_exchange::EventJournal::instance().log_deposit(tx->user_id, "MNT", amount);
+                        central_exchange::Database::instance().log_event("deposit_qpay", tx->user_id,
+                            "{\"amount\":" + std::to_string(amount) + ",\"invoice\":\"" + invoice_id + "\"}");
                         QPay::instance().update_transaction_status(invoice_id, "completed");
                     }
                 }
@@ -235,14 +287,11 @@ private:
     }
     
     void register_rate_routes(httplib::Server& server) {
-        // Get USD/MNT exchange rate
+        // Get USD/MNT exchange rate (uses centralized rate from product_catalog)
         server.Get("/api/rate", [](const httplib::Request&, httplib::Response& res) {
-            // In production, fetch from Central Bank or FX provider
-            static double usd_mnt_rate = 3450.0;
-            
             send_success(res, {
                 {"pair", "USD/MNT"},
-                {"rate", usd_mnt_rate},
+                {"rate", USD_MNT_RATE},
                 {"timestamp", std::chrono::duration_cast<std::chrono::seconds>(
                     std::chrono::system_clock::now().time_since_epoch()).count()}
             });
@@ -250,20 +299,20 @@ private:
         
         // Update rate (admin only)
         server.Post("/api/rate", [](const httplib::Request& req, httplib::Response& res) {
-            auto auth = authenticate(req);
-            if (!auth.success) {
-                send_error(res, auth.error_code, auth.error);
+            auto admin = central_exchange::require_admin(req);
+            if (!admin.success) {
+                send_error(res, 403, admin.error);
                 return;
             }
             
             try {
                 auto body = json::parse(req.body);
-                static double usd_mnt_rate = 3450.0;
-                usd_mnt_rate = body["rate"];
+                double new_rate = body["rate"];
+                central_exchange::ProductCatalog::instance().update_usd_mnt_rate(new_rate);
                 
                 send_success(res, {
                     {"success", true},
-                    {"rate", usd_mnt_rate}
+                    {"rate", USD_MNT_RATE}
                 });
                 
             } catch (const std::exception& e) {

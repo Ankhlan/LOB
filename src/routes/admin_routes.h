@@ -9,6 +9,7 @@
 
 #include "route_base.h"
 #include "../position_manager.h"
+#include "../matching_engine.h"
 #include "../hedging_engine.h"
 #include "../product_catalog.h"
 #include "../qpay_handler.h"
@@ -16,6 +17,7 @@
 
 #include <memory>
 #include <cstdio>
+#include <cmath>
 
 namespace cre {
 
@@ -40,17 +42,24 @@ public:
     const char* name() const override { return "AdminRoutes"; }
 
 private:
+    // Admin authentication helper - requires X-Admin-Key header
+    static bool require_admin_auth(const httplib::Request& req, httplib::Response& res) {
+        auto admin = central_exchange::require_admin(req, res);
+        return admin.success;
+    }
+
     void register_withdrawal_routes(httplib::Server& server) {
         // Get pending withdrawals
         server.Get("/api/admin/withdrawals/pending", [](const httplib::Request& req, httplib::Response& res) {
+            if (!require_admin_auth(req, res)) return;
             auto pending = QPay::instance().get_all_transactions();
             json arr = json::array();
             for (const auto& t : pending) {
-                if (t.type == "withdraw" && t.status == "pending") {
+                if (t.type == central_exchange::TxnType::WITHDRAWAL && t.status == central_exchange::TxnStatus::PENDING) {
                     arr.push_back({
                         {"id", t.id},
                         {"user_id", t.user_id},
-                        {"amount", t.amount},
+                        {"amount", t.amount_mnt},
                         {"created_at", t.created_at}
                     });
                 }
@@ -60,10 +69,11 @@ private:
         
         // Approve withdrawal
         server.Post("/api/admin/withdraw/approve/:id", [](const httplib::Request& req, httplib::Response& res) {
+            if (!require_admin_auth(req, res)) return;
             auto id = req.path_params.at("id");
             // In production, execute the bank transfer here
             auto tx = QPay::instance().get_transaction(id);
-            if (!tx || tx->status != "pending") {
+            if (!tx || tx->status != central_exchange::TxnStatus::PENDING) {
                 send_error(res, 404, "Transaction not found or not pending");
                 return;
             }
@@ -74,14 +84,15 @@ private:
         
         // Reject withdrawal
         server.Post("/api/admin/withdraw/reject/:id", [](const httplib::Request& req, httplib::Response& res) {
+            if (!require_admin_auth(req, res)) return;
             auto id = req.path_params.at("id");
             auto tx = QPay::instance().get_transaction(id);
-            if (!tx || tx->status != "pending") {
+            if (!tx || tx->status != central_exchange::TxnStatus::PENDING) {
                 send_error(res, 404, "Transaction not found or not pending");
                 return;
             }
             // Refund to balance
-            PositionManager::instance().deposit(tx->user_id, tx->amount);
+            PositionManager::instance().deposit(tx->user_id, tx->amount_mnt);
             QPay::instance().update_transaction_status(id, "rejected");
             send_success(res, {{"success", true}, {"status", "rejected"}});
         });
@@ -90,6 +101,7 @@ private:
     void register_trading_control_routes(httplib::Server& server) {
         // Admin stats
         server.Get("/api/admin/stats", [](const httplib::Request& req, httplib::Response& res) {
+            if (!require_admin_auth(req, res)) return;
             send_success(res, {
                 {"active_users", 0}, // TODO: implement
                 {"total_volume_24h", 0.0},
@@ -99,12 +111,14 @@ private:
         
         // User list (simplified)
         server.Get("/api/admin/users", [](const httplib::Request& req, httplib::Response& res) {
+            if (!require_admin_auth(req, res)) return;
             // In production, query user database
             send_success(res, json::array());
         });
         
         // Halt trading on symbol
         server.Post("/api/admin/halt/:symbol", [](const httplib::Request& req, httplib::Response& res) {
+            if (!require_admin_auth(req, res)) return;
             auto symbol = req.path_params.at("symbol");
             auto* product = ProductCatalog::instance().get(symbol);
             if (!product) {
@@ -121,6 +135,7 @@ private:
         
         // Resume trading on symbol
         server.Post("/api/admin/resume/:symbol", [](const httplib::Request& req, httplib::Response& res) {
+            if (!require_admin_auth(req, res)) return;
             auto symbol = req.path_params.at("symbol");
             auto* product = ProductCatalog::instance().get(symbol);
             if (!product) {
@@ -137,6 +152,7 @@ private:
         
         // Get circuit breaker status
         server.Get("/api/admin/circuit-breakers", [](const httplib::Request& req, httplib::Response& res) {
+            if (!require_admin_auth(req, res)) return;
             json breakers = json::array();
             ProductCatalog::instance().for_each([&](const Product& p) {
                 breakers.push_back({
@@ -150,6 +166,7 @@ private:
         
         // Emergency market halt
         server.Post("/api/admin/halt-market", [](const httplib::Request& req, httplib::Response& res) {
+            if (!require_admin_auth(req, res)) return;
             ProductCatalog::instance().for_each([](Product& p) {
                 p.is_active = false;
             });
@@ -161,6 +178,7 @@ private:
         
         // Resume all markets
         server.Post("/api/admin/resume-market", [](const httplib::Request& req, httplib::Response& res) {
+            if (!require_admin_auth(req, res)) return;
             ProductCatalog::instance().for_each([](Product& p) {
                 p.is_active = true;
             });
@@ -173,7 +191,8 @@ private:
     
     void register_risk_routes(httplib::Server& server) {
         // Get current exposure
-        server.Get("/api/risk/exposure", [](const httplib::Request&, httplib::Response& res) {
+        server.Get("/api/risk/exposure", [](const httplib::Request& req, httplib::Response& res) {
+            if (!require_admin_auth(req, res)) return;
             auto exposure = HedgingEngine::instance().get_total_exposure();
             json exp_json = json::object();
             for (const auto& [symbol, delta] : exposure) {
@@ -190,7 +209,8 @@ private:
         });
         
         // Get hedge history
-        server.Get("/api/risk/hedges", [](const httplib::Request&, httplib::Response& res) {
+        server.Get("/api/risk/hedges", [](const httplib::Request& req, httplib::Response& res) {
+            if (!require_admin_auth(req, res)) return;
             auto hedges = HedgingEngine::instance().get_hedge_history();
             json arr = json::array();
             for (const auto& h : hedges) {
@@ -205,7 +225,8 @@ private:
         });
         
         // Get house P&L
-        server.Get("/api/risk/pnl", [](const httplib::Request&, httplib::Response& res) {
+        server.Get("/api/risk/pnl", [](const httplib::Request& req, httplib::Response& res) {
+            if (!require_admin_auth(req, res)) return;
             // Calculate house P&L from positions
             double total_pnl = 0.0;
             double realized = 0.0;
@@ -220,8 +241,9 @@ private:
             });
         });
         
-        // Legacy exposures endpoint
-        server.Get("/api/exposures", [](const httplib::Request&, httplib::Response& res) {
+        // Legacy exposures endpoint (admin-only)
+        server.Get("/api/exposures", [](const httplib::Request& req, httplib::Response& res) {
+            if (!require_admin_auth(req, res)) return;
             auto exposure = HedgingEngine::instance().get_total_exposure();
             json result;
             for (const auto& [sym, delta] : exposure) {
@@ -268,11 +290,7 @@ private:
         
         // Admin: Balance sheet (using SafeLedger)
         server.Get("/api/admin/balance-sheet", [](const httplib::Request& req, httplib::Response& res) {
-            std::string auth_header = req.get_header_value("Authorization");
-            if (auth_header.empty()) {
-                send_unauthorized(res);
-                return;
-            }
+            if (!require_admin_auth(req, res)) return;
             
             std::string result = SafeLedger::instance().get_balance_sheet();
             
@@ -284,11 +302,7 @@ private:
         
         // Admin: Income statement (using SafeLedger)
         server.Get("/api/admin/income-statement", [](const httplib::Request& req, httplib::Response& res) {
-            std::string auth_header = req.get_header_value("Authorization");
-            if (auth_header.empty()) {
-                send_unauthorized(res);
-                return;
-            }
+            if (!require_admin_auth(req, res)) return;
             
             std::string result = SafeLedger::instance().get_income_statement();
             
@@ -296,6 +310,46 @@ private:
                 {"report", "income-statement"},
                 {"data", result}
             });
+        });
+        
+        // Admin: Insurance fund status
+        server.Get("/api/admin/insurance-fund", [](const httplib::Request& req, httplib::Response& res) {
+            if (!require_admin_auth(req, res)) return;
+            
+            auto& pm = PositionManager::instance();
+            double balance = pm.get_insurance_fund_balance();
+            
+            send_success(res, {
+                {"insurance_fund", {
+                    {"balance_mnt", balance},
+                    {"source", "20% of trading fees"},
+                    {"purpose", "Absorbs bankrupt liquidation losses"}
+                }}
+            });
+        });
+        
+        // Admin: Manually contribute to insurance fund
+        server.Post("/api/admin/insurance-fund/contribute", [](const httplib::Request& req, httplib::Response& res) {
+            if (!require_admin_auth(req, res)) return;
+            
+            try {
+                auto body = json::parse(req.body);
+                double amount = body.value("amount", 0.0);
+                if (amount <= 0.0 || !std::isfinite(amount)) {
+                    send_error(res, 400, "Amount must be positive finite number");
+                    return;
+                }
+                
+                PositionManager::instance().contribute_to_insurance_fund(amount);
+                
+                send_success(res, {
+                    {"success", true},
+                    {"contributed", amount},
+                    {"new_balance", PositionManager::instance().get_insurance_fund_balance()}
+                });
+            } catch (const std::exception& e) {
+                send_error(res, 400, e.what());
+            }
         });
     }
     
@@ -309,14 +363,29 @@ private:
             ss << "# TYPE orderbook_depth gauge\n";
             
             ProductCatalog::instance().for_each([&](const Product& p) {
-                // Add per-symbol metrics here
                 ss << "orderbook_active{symbol=\"" << p.symbol << "\"} " 
                    << (p.is_active ? 1 : 0) << "\n";
+                
+                auto* book = MatchingEngine::instance().get_book(p.symbol);
+                if (book) {
+                    ss << "orderbook_bids{symbol=\"" << p.symbol << "\"} " 
+                       << book->bid_count() << "\n";
+                    ss << "orderbook_asks{symbol=\"" << p.symbol << "\"} " 
+                       << book->ask_count() << "\n";
+                    ss << "orderbook_volume_24h{symbol=\"" << p.symbol << "\"} " 
+                       << book->volume_24h() << "\n";
+                }
             });
             
             // Position metrics
             ss << "# HELP positions_count Number of open positions\n";
             ss << "# TYPE positions_count gauge\n";
+            
+            // Insurance fund
+            ss << "# HELP insurance_fund_balance Insurance fund balance in MNT\n";
+            ss << "# TYPE insurance_fund_balance gauge\n";
+            ss << "insurance_fund_balance " 
+               << PositionManager::instance().get_insurance_fund_balance() << "\n";
             
             // Hedge metrics
             ss << "# HELP hedge_delta Net delta exposure\n";

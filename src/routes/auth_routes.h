@@ -10,6 +10,8 @@
 #include "route_base.h"
 #include "../auth.h"
 #include "../kyc_service.h"
+#include <random>
+#include <regex>
 
 namespace cre {
 
@@ -168,6 +170,8 @@ private:
         
         // Admin: Get pending KYC requests
         server.Get("/api/admin/kyc/pending", [](const httplib::Request& req, httplib::Response& res) {
+            auto admin = central_exchange::require_admin(req, res);
+            if (!admin.success) return;
             auto pending = KYCService::instance().get_pending_requests();
             json arr = json::array();
             for (const auto& r : pending) {
@@ -184,6 +188,9 @@ private:
         
         // Admin: Approve KYC
         server.Post("/api/admin/kyc/approve", [](const httplib::Request& req, httplib::Response& res) {
+            auto admin = central_exchange::require_admin(req, res);
+            if (!admin.success) return;
+            
             try {
                 auto body = json::parse(req.body);
                 std::string user_id = body["user_id"];
@@ -202,6 +209,9 @@ private:
         
         // Admin: Reject KYC
         server.Post("/api/admin/kyc/reject", [](const httplib::Request& req, httplib::Response& res) {
+            auto admin = central_exchange::require_admin(req, res);
+            if (!admin.success) return;
+            
             try {
                 auto body = json::parse(req.body);
                 std::string user_id = body["user_id"];
@@ -233,8 +243,17 @@ private:
                 auto body = json::parse(req.body);
                 std::string phone = body["phone"];
                 
-                // Generate 6-digit OTP (in production, use proper SMS gateway)
-                std::string otp = std::to_string(100000 + rand() % 900000);
+                // Validate phone format (Mongolian: 8 digits starting with 8,9,7,6)
+                static const std::regex phone_pattern("^[6-9]\\d{7}$");
+                if (!std::regex_match(phone, phone_pattern)) {
+                    send_error(res, 400, "Invalid phone number format");
+                    return;
+                }
+                
+                // Generate 6-digit OTP using cryptographic-quality RNG
+                static thread_local std::mt19937 rng(std::random_device{}());
+                std::uniform_int_distribution<int> dist(100000, 999999);
+                std::string otp = std::to_string(dist(rng));
                 
                 // Store OTP with expiry (in-memory for demo)
                 auto& otp_store = get_otp_store();
@@ -244,13 +263,16 @@ private:
                 
                 otp_store[phone] = {otp, expires};
                 
-                // In production, send via SMS gateway
-                // For demo, return in response (REMOVE IN PRODUCTION!)
-                send_success(res, {
+                // Log OTP to console for development
+                std::cout << "[SMS] OTP for " << phone << ": " << otp << std::endl;
+                json response = {
                     {"success", true},
-                    {"message", "OTP sent to " + phone},
-                    {"debug_otp", otp}  // REMOVE IN PRODUCTION!
-                });
+                    {"message", "OTP sent to " + phone}
+                };
+#ifdef DEV_MODE
+                response["debug_otp"] = otp;  // ONLY available in dev mode
+#endif
+                send_success(res, response);
                 
             } catch (const std::exception& e) {
                 send_error(res, 400, e.what());

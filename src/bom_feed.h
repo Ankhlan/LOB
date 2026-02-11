@@ -114,7 +114,7 @@ public:
         current_rate_.is_valid = true;
         
         // Update global rate
-        USD_MNT_RATE = rate;
+        RateProvider::instance().update_rate("USD/MNT", rate);
         
         // Update product mark price
         ProductCatalog::instance().update_mark_price("USD-MNT-PERP", rate);

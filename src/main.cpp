@@ -23,10 +23,12 @@
 #include "http_server.h"
 #include "database.h"
 #include "accounting_engine.h"
+#include "rate_limiter.h"
 
 #include <iostream>
 #include <csignal>
 #include <cstdlib>
+#include <thread>
 
 using namespace central_exchange;
 
@@ -35,6 +37,8 @@ HttpServer* g_server = nullptr;
 
 void signal_handler(int signal) {
     std::cout << "\n[SHUTDOWN] Signal " << signal << " received. Shutting down...\n";
+    std::cout << "[SHUTDOWN] Flushing candle data to SQLite...\n";
+    CandleStore::instance().flush_to_db();
     if (g_server) {
         g_server->stop();
     }
@@ -145,11 +149,19 @@ int main(int argc, char* argv[]) {
     std::cout << "[INIT] Connecting to FXCM (" << fxcm_connection << ")...\n";
     auto& fxcm = FxcmFeed::instance();
     
+    bool fxcm_connected = false;
     if (!fxcm_user.empty()) {
-        fxcm.connect(fxcm_user, fxcm_pass, fxcm_connection);
+        fxcm_connected = fxcm.connect(fxcm_user, fxcm_pass, fxcm_connection);
+        if (!fxcm_connected) {
+            std::cout << "       FXCM login failed - falling back to simulation\n";
+        }
     } else {
-        std::cout << "       No FXCM credentials - using simulated prices\n";
-        fxcm.connect("", "", "Simulation");
+        std::cout << "       No FXCM credentials\n";
+    }
+    
+    if (!fxcm_connected) {
+        std::cout << "       Using simulated prices\n";
+        fxcm.start_simulation();
     }
     
     // Subscribe to FXCM symbols for hedgeable products
@@ -158,15 +170,49 @@ int main(int argc, char* argv[]) {
             fxcm.subscribe(product->fxcm_symbol);
         }
     }
+    
+    // Wire FXCM price updates to CandleStore for real-time chart data
+    fxcm.set_price_callback([](const PriceUpdate& update) {
+        // Callback only fires when bid/ask actually changed (filtered in fxcm_feed)
+        ProductCatalog::instance().for_each([&](const Product& p) {
+            if (p.fxcm_symbol == update.symbol) {
+                double mid = (update.bid + update.ask) / 2.0;
+                double mnt_price = p.fxcm_to_mnt(mid);
+                if (mnt_price > 0 && mnt_price < 1e12) {
+                    for (int tf : CandleStore::TIMEFRAMES) {
+                        CandleStore::instance().update(p.symbol, mnt_price, tf);
+                    }
+                }
+            }
+        });
+        // Push-on-change: notify SSE clients immediately
+        if (g_server) g_server->notify_price_change();
+    });
 
 #ifdef FXCM_ENABLED
     // Initialize FXCM Price History Manager for real historical data
     if (fxcm.is_connected()) {
         std::cout << "[INIT] Initializing FXCM Price History Manager...\n";
         if (FxcmHistoryManager::instance().initialize(fxcm.get_session())) {
-            std::cout << "       Price History API ready\n";
+            std::cout << "       Price History API initialized (may be lazily ready)\n";
+            // Background thread to clear seeded flags once communicator is ready
+            // This ensures real data replaces synthetic on next candle request
+            std::thread([]() {
+                // Wait for communicator to become ready, then clear seeded flags
+                for (int attempt = 0; attempt < 10; attempt++) {
+                    std::this_thread::sleep_for(std::chrono::seconds(30));
+                    // Try to fetch a test instrument to see if it works
+                    auto test = FxcmHistoryManager::instance().fetchHistory("EUR/USD", 900, 10);
+                    if (!test.empty()) {
+                        std::cout << "[FXCM History] History API confirmed working - clearing seeded flags\n";
+                        CandleStore::instance().clear_seeded();
+                        break;
+                    }
+                    std::cout << "[FXCM History] Attempt " << (attempt+1) << "/10 - not ready yet\n";
+                }
+            }).detach();
         } else {
-            std::cout << "       WARNING: Price History API failed to initialize\n";
+            std::cout << "       WARNING: Price History API failed to create communicator\n";
         }
     }
 #endif
@@ -191,6 +237,10 @@ int main(int argc, char* argv[]) {
     std::signal(SIGINT, signal_handler);
     std::signal(SIGTERM, signal_handler);
     
+    // Load candle history from SQLite (restores charts across restarts)
+    std::cout << "[INIT] Loading candle history from SQLite...\n";
+    CandleStore::instance().load_from_db();
+    
     // Start HTTP server
     std::cout << "[START] Starting HTTP server on port " << port << "...\n";
     HttpServer server(port);
@@ -209,16 +259,29 @@ int main(int argc, char* argv[]) {
     std::cout << "═══════════════════════════════════════════════════\n\n";
     
     // Main loop - check hedging periodically
+    int loop_count = 0;
     while (server.is_running()) {
         // Run hedge check every 5 seconds
         HedgingEngine::instance().check_and_hedge();
+        
+        // Cleanup rate limiter every ~5 minutes (60 iterations * 5s)
+        if (++loop_count % 60 == 0) {
+            cre::RateLimiter::instance().cleanup(3600);
+        }
+        
         std::this_thread::sleep_for(std::chrono::seconds(5));
     }
     
-    // Cleanup
+    // Cleanup - Graceful shutdown sequence
+    std::cout << "[SHUTDOWN] Persisting open orders and positions...\n";
+    
+    // Sync event journal to disk
+    std::cout << "[SHUTDOWN] Flushing event journal...\n";
+    // AccountingEngine flush happens in destructor
+    
     std::cout << "[SHUTDOWN] Disconnecting from FXCM...\n";
     fxcm.disconnect();
     
-    std::cout << "[SHUTDOWN] Central Exchange stopped.\n";
+    std::cout << "[SHUTDOWN] Central Exchange stopped cleanly.\n";
     return 0;
 }

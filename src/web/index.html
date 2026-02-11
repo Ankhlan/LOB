@@ -9,7 +9,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23282C34'/><text x='16' y='22' text-anchor='middle' font-family='Inter' font-weight='700' font-size='14' fill='%23E5C07B'>CRE</text></svg>">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#E5C07B">
 </head>
 <body>
     <!-- ==================== HEADER BAR ==================== -->
@@ -61,6 +63,106 @@
         </div>
     </header>
 
+    <!-- Connection / Circuit Breaker Banners -->
+    <div class="conn-banner hidden" id="connBanner"><span id="connBannerText">Connection lost</span></div>
+    <div class="cb-banner hidden" id="cbBanner"><span id="cbBannerIcon">⚠</span> <span id="cbBannerText"></span></div>
+
+    <!-- ==================== MENU BAR ==================== -->
+    <nav class="menubar" id="menuBar">
+        <button class="menu-hamburger" id="menuHamburger">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+        </button>
+        
+        <div class="menu-item">
+            <span class="menu-label" data-i18n="menu.file">File</span>
+            <div class="menu-dropdown">
+                <div class="menu-action" id="menuConnect">Connect</div>
+                <div class="menu-action" id="menuDisconnect">Disconnect</div>
+                <div class="menu-divider"></div>
+                <div class="menu-action" id="menuExportCSV">Export Data...</div>
+                <div class="menu-divider"></div>
+                <div class="menu-action" id="menuSaveWorkspace">Save Workspace...</div>
+                <div class="menu-action" id="menuLoadWorkspace">Load Workspace</div>
+                <div class="menu-divider"></div>
+                <div class="menu-action" id="menuPrefs">Preferences</div>
+            </div>
+        </div>
+        
+        <div class="menu-item">
+            <span class="menu-label" data-i18n="menu.view">View</span>
+            <div class="menu-dropdown">
+                <div class="menu-action checkable" id="menuShowLeft" data-checked="true">Left Panel</div>
+                <div class="menu-action checkable" id="menuShowBook" data-checked="true">Order Book</div>
+                <div class="menu-action checkable" id="menuShowChart" data-checked="true">Chart</div>
+                <div class="menu-action checkable" id="menuShowTrade" data-checked="true">Trade Panel</div>
+                <div class="menu-action checkable" id="menuShowBottom" data-checked="true">Bottom Panel</div>
+                <div class="menu-divider"></div>
+                <div class="menu-action" id="menuResetLayout">Reset Layout</div>
+                <div class="menu-divider"></div>
+                <div class="menu-action" id="menuMarketInfo">Market Info</div>
+                <div class="menu-action" id="menuBankRates">Bank Rates</div>
+                <div class="menu-action" id="menuTransparency">Transparency</div>
+            </div>
+        </div>
+        
+        <div class="menu-item">
+            <span class="menu-label" data-i18n="menu.trade">Trade</span>
+            <div class="menu-dropdown">
+                <div class="menu-action" id="menuBuyLong">Buy/Long <span class="menu-shortcut">B</span></div>
+                <div class="menu-action" id="menuSellShort">Sell/Short <span class="menu-shortcut">S</span></div>
+                <div class="menu-divider"></div>
+                <div class="menu-action" id="menuOrderMarket">Market Order <span class="menu-shortcut">M</span></div>
+                <div class="menu-action" id="menuOrderLimit">Limit Order <span class="menu-shortcut">L</span></div>
+                <div class="menu-divider"></div>
+                <div class="menu-action" id="menuCloseAll">Close All Positions</div>
+                <div class="menu-action" id="menuCancelAll">Cancel All Orders <span class="menu-shortcut">Esc</span></div>
+            </div>
+        </div>
+        
+        <div class="menu-item">
+            <span class="menu-label" data-i18n="menu.market">Market</span>
+            <div class="menu-dropdown">
+                <div class="menu-action" id="menuUSDMNT">USD-MNT-PERP</div>
+                <div class="menu-divider"></div>
+                <div class="menu-action" id="menuFX">FX</div>
+                <div class="menu-action" id="menuCmdty">Commodities</div>
+                <div class="menu-action" id="menuCrypto">Crypto</div>
+                <div class="menu-action" id="menuMN">Mongolia</div>
+            </div>
+        </div>
+        
+        <div class="menu-item">
+            <span class="menu-label" data-i18n="menu.tools">Tools</span>
+            <div class="menu-dropdown">
+                <div class="menu-action" id="menuCalc">Position Calculator</div>
+                <div class="menu-action" id="menuPnLCalc">PnL Calculator</div>
+                <div class="menu-divider"></div>
+                <div class="menu-action" id="menuAlerts">Price Alerts</div>
+                <div class="menu-action" id="menuNotifs">Notifications</div>
+                <div class="menu-divider"></div>
+                <div class="menu-action" id="menuAPI">API Keys</div>
+                <div class="menu-action" id="menuLedgerView">Ledger</div>
+                <div class="menu-divider"></div>
+                <div class="menu-action" id="menuAdmin">Admin Panel</div>
+            </div>
+        </div>
+        
+        <div class="menu-item">
+            <span class="menu-label" data-i18n="menu.help">Help</span>
+            <div class="menu-dropdown">
+                <div class="menu-action" id="menuDocs">Documentation</div>
+                <div class="menu-action" id="menuShortcuts">Keyboard Shortcuts <span class="menu-shortcut">?</span></div>
+                <div class="menu-divider"></div>
+                <div class="menu-action" id="menuFees">Fee Schedule</div>
+                <div class="menu-action" id="menuContracts">Contract Specs</div>
+                <div class="menu-divider"></div>
+                <div class="menu-action" id="menuAbout">About</div>
+            </div>
+        </div>
+    </nav>
+
     <!-- ==================== MAIN LAYOUT ==================== -->
     <main class="workspace">
 
@@ -95,6 +197,9 @@
             </div>
         </aside>
 
+        <!-- Resize handle: left ↔ center -->
+        <div class="resize-col" id="resizeLeft"></div>
+
         <!-- CENTER: Chart + Bottom Panels -->
         <section class="panel panel-center">
             <div class="chart-bar">
@@ -104,10 +209,10 @@
                     <span class="chart-change" id="chartChange">—</span>
                 </div>
                 <div class="chart-bar-stats">
-                    <div class="stat-item"><span class="stat-label">24h H</span><span class="stat-val" id="stat24hH">—</span></div>
-                    <div class="stat-item"><span class="stat-label">24h L</span><span class="stat-val" id="stat24hL">—</span></div>
-                    <div class="stat-item"><span class="stat-label">Vol</span><span class="stat-val" id="stat24hV">—</span></div>
-                    <div class="stat-item"><span class="stat-label">OI</span><span class="stat-val" id="stat24hOI">—</span></div>
+                    <div class="stat-item"><span class="stat-label" data-i18n="chart.stat_high_24h">24h H</span><span class="stat-val" id="stat24hH">—</span></div>
+                    <div class="stat-item"><span class="stat-label" data-i18n="chart.stat_low_24h">24h L</span><span class="stat-val" id="stat24hL">—</span></div>
+                    <div class="stat-item"><span class="stat-label" data-i18n="chart.stat_vol">Vol</span><span class="stat-val" id="stat24hV">—</span></div>
+                    <div class="stat-item"><span class="stat-label" data-i18n="chart.stat_oi">OI</span><span class="stat-val" id="stat24hOI">—</span></div>
                 </div>
                 <div class="tf-group">
                     <button class="tf-btn" data-tf="1">1m</button>
@@ -129,6 +234,7 @@
                     <button class="btab" data-tab="history" data-i18n="tab.history">History</button>
                     <button class="btab" data-tab="trades" data-i18n="tab.trades">Trades <span class="btab-badge live-badge"></span></button>
                     <button class="btab" data-tab="account" data-i18n="tab.account">Account</button>
+                    <button class="btab" data-tab="insurance" data-i18n="tab.insurance">Insurance</button>
                     <div class="btab-spacer"></div>
                     <div class="pnl-row">
                         <span class="pnl-label" data-i18n="tab.total_pnl">Total PnL</span>
@@ -138,9 +244,9 @@
 
                 <div class="btab-pane active" id="pane-positions">
                     <table class="grid"><thead><tr>
-                        <th>Symbol</th><th>Side</th><th class="col-num">Size</th>
-                        <th class="col-num">Entry</th><th class="col-num">Mark</th>
-                        <th class="col-num">Liq.</th><th class="col-num">PnL</th>
+                        <th data-i18n="pos.symbol">Symbol</th><th data-i18n="pos.side">Side</th><th class="col-num" data-i18n="pos.size">Size</th>
+                        <th class="col-num" data-i18n="pos.entry">Entry</th><th class="col-num" data-i18n="pos.mark">Mark</th>
+                        <th class="col-num" data-i18n="pos.liq">Liq.</th><th class="col-num" data-i18n="pos.pnl">PnL</th>
                         <th class="col-num">PnL%</th><th class="col-act"></th>
                     </tr></thead>
                     <tbody id="positionsBody"><tr class="empty-row"><td colspan="9" data-i18n="positions.empty">No open positions</td></tr></tbody>
@@ -149,9 +255,9 @@
 
                 <div class="btab-pane" id="pane-orders">
                     <table class="grid"><thead><tr>
-                        <th>Time</th><th>Symbol</th><th>Side</th><th>Type</th>
-                        <th class="col-num">Price</th><th class="col-num">Qty</th>
-                        <th class="col-num">Filled</th><th>Status</th><th class="col-act"></th>
+                        <th data-i18n="ord.time">Time</th><th data-i18n="ord.symbol">Symbol</th><th data-i18n="ord.side">Side</th><th data-i18n="ord.type">Type</th>
+                        <th class="col-num" data-i18n="ord.price">Price</th><th class="col-num" data-i18n="ord.qty">Qty</th>
+                        <th class="col-num" data-i18n="ord.filled">Filled</th><th data-i18n="ord.status">Status</th><th class="col-act"></th>
                     </tr></thead>
                     <tbody id="ordersBody"><tr class="empty-row"><td colspan="9" data-i18n="orders.empty">No open orders</td></tr></tbody>
                     </table>
@@ -159,9 +265,9 @@
 
                 <div class="btab-pane" id="pane-history">
                     <table class="grid"><thead><tr>
-                        <th>Time</th><th>Symbol</th><th>Side</th>
-                        <th class="col-num">Price</th><th class="col-num">Qty</th>
-                        <th class="col-num">Fee</th><th class="col-num">rPnL</th>
+                        <th data-i18n="ord.time">Time</th><th data-i18n="ord.symbol">Symbol</th><th data-i18n="ord.side">Side</th>
+                        <th class="col-num" data-i18n="ord.price">Price</th><th class="col-num" data-i18n="ord.qty">Qty</th>
+                        <th class="col-num" data-i18n="hist.fee">Fee</th><th class="col-num" data-i18n="hist.rpnl">rPnL</th>
                     </tr></thead>
                     <tbody id="historyBody"><tr class="empty-row"><td colspan="7" data-i18n="history.empty">No trade history</td></tr></tbody>
                     </table>
@@ -169,7 +275,7 @@
 
                 <div class="btab-pane" id="pane-trades">
                     <table class="grid"><thead><tr>
-                        <th>Time</th><th>Price</th><th class="col-num">Size</th><th>Side</th>
+                        <th data-i18n="trades.time">Time</th><th data-i18n="trades.price">Price</th><th class="col-num" data-i18n="trades.size">Size</th><th data-i18n="trades.side">Side</th>
                     </tr></thead>
                     <tbody id="tradesBody"><tr class="empty-row"><td colspan="4" data-i18n="trades.empty">Waiting for trades…</td></tr></tbody>
                     </table>
@@ -188,11 +294,11 @@
                         <div class="acct-actions">
                             <button class="btn-deposit" id="depositBtn">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                Deposit
+                                <span data-i18n="acct.deposit">Deposit</span>
                             </button>
                             <button class="btn-withdraw" id="withdrawBtn">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                Withdraw
+                                <span data-i18n="acct.withdraw">Withdraw</span>
                             </button>
                         </div>
                         <div class="acct-history">
@@ -203,8 +309,101 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="btab-pane" id="pane-insurance">
+                    <div class="insurance-pane">
+                        <!-- Fund Overview Cards -->
+                        <div class="ins-grid">
+                            <div class="ins-card primary">
+                                <div class="ins-card-label" data-i18n="insurance.fund_balance">Insurance Fund Balance</div>
+                                <div class="ins-card-val" id="insBalance">—</div>
+                                <div class="ins-card-change" id="insChange">—</div>
+                            </div>
+                            <div class="ins-card">
+                                <div class="ins-card-label" data-i18n="insurance.fund_ratio">Fund Ratio</div>
+                                <div class="ins-card-val" id="insRatio">—</div>
+                                <div class="ins-card-desc">% of Open Interest</div>
+                            </div>
+                            <div class="ins-card">
+                                <div class="ins-card-label" data-i18n="insurance.liquidations_24h">Liquidations (24h)</div>
+                                <div class="ins-card-val" id="insLiq24h">—</div>
+                                <div class="ins-card-desc">Total Liquidated</div>
+                            </div>
+                            <div class="ins-card">
+                                <div class="ins-card-label" data-i18n="insurance.fund_status">Fund Status</div>
+                                <div class="ins-card-val status" id="insStatus">—</div>
+                                <div class="ins-card-desc">Operational</div>
+                            </div>
+                        </div>
+
+                        <!-- Recent Liquidations Section -->
+                        <div class="ins-section">
+                            <div class="ins-section-head">
+                                <h3 data-i18n="insurance.recent_liquidations">Recent Liquidations</h3>
+                                <button class="ins-refresh-btn" id="insRefreshBtn" title="Refresh">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="23 4 23 10 17 10"></polyline>
+                                        <polyline points="1 20 1 14 7 14"></polyline>
+                                        <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="ins-liquidations">
+                                <table class="grid ins-grid">
+                                    <thead>
+                                        <tr>
+                                            <th>Time</th>
+                                            <th>Symbol</th>
+                                            <th>Side</th>
+                                            <th>Size</th>
+                                            <th>Price</th>
+                                            <th>Loss Recovered</th>
+                                            <th>Fund Impact</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="insLiqBody">
+                                        <tr class="empty-row">
+                                            <td colspan="7" data-i18n="insurance.no_liquidations">No recent liquidations</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Fund Performance Chart -->
+                        <div class="ins-section">
+                            <div class="ins-section-head">
+                                <h3 data-i18n="insurance.fund_history">Fund History (30 Days)</h3>
+                                <div class="ins-timeframe-group">
+                                    <button class="ins-tf-btn active" data-tf="7d">7D</button>
+                                    <button class="ins-tf-btn" data-tf="30d">30D</button>
+                                    <button class="ins-tf-btn" data-tf="90d">90D</button>
+                                </div>
+                            </div>
+                            <div class="ins-chart-container">
+                                <canvas id="insChart" width="800" height="300"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Fund Info Footer -->
+                        <div class="ins-info">
+                            <p data-i18n="insurance.description">
+                                The Insurance Fund protects traders from losses exceeding their margin during liquidations. 
+                                It is funded by liquidation fees and trading profits. All fund movements are transparent and auditable.
+                            </p>
+                            <div class="ins-links">
+                                <a href="#" class="ins-link" data-i18n="insurance.api_docs">📊 API Documentation</a>
+                                <a href="#" class="ins-link" data-i18n="insurance.audit_reports">🔍 Audit Reports</a>
+                                <a href="#" class="ins-link" data-i18n="insurance.fund_policy">📋 Fund Policy</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
+
+        <!-- Resize handle: center ↔ right -->
+        <div class="resize-col" id="resizeRight"></div>
 
         <!-- RIGHT PANEL -->
         <aside class="panel panel-right" id="panelRight">
@@ -279,7 +478,7 @@
                 <div class="tpsl-section">
                     <label class="tpsl-check">
                         <input type="checkbox" id="tpslEnabled">
-                        <span class="tpsl-label">TP / SL</span>
+                        <span class="tpsl-label" data-i18n="trade.tp_sl">TP / SL</span>
                     </label>
                     <div class="tpsl-fields hidden" id="tpslFields">
                         <div class="tpsl-row">
@@ -296,19 +495,24 @@
                 </div>
 
                 <div class="trade-actions">
-                    <button class="trade-btn buy-btn" id="buyBtn">
+                    <button class="trade-btn buy-btn" id="buyBtn" title="Keyboard: B">
                         <span class="tb-label" data-i18n="trade.buy">BUY</span>
                         <span class="tb-price" id="buyPrice">—</span>
                     </button>
-                    <button class="trade-btn sell-btn" id="sellBtn">
+                    <button class="trade-btn sell-btn" id="sellBtn" title="Keyboard: S">
                         <span class="tb-label" data-i18n="trade.sell">SELL</span>
                         <span class="tb-price" id="sellPrice">—</span>
                     </button>
                 </div>
+                <div class="trade-hints" style="display:flex;justify-content:center;gap:12px;font-size:10px;color:var(--text-3);padding:2px 0">
+                    <span><kbd style="background:var(--bg-3);padding:0 4px;border-radius:2px;font-family:var(--font-mono);font-size:9px">B</kbd> <span data-i18n="trade.hint_buy">Buy</span></span>
+                    <span><kbd style="background:var(--bg-3);padding:0 4px;border-radius:2px;font-family:var(--font-mono);font-size:9px">S</kbd> <span data-i18n="trade.hint_sell">Sell</span></span>
+                    <span><kbd style="background:var(--bg-3);padding:0 4px;border-radius:2px;font-family:var(--font-mono);font-size:9px">?</kbd> <span data-i18n="trade.hint_shortcuts">All shortcuts</span></span>
+                </div>
                 <div class="trade-summary">
                     <div class="ts-row"><span data-i18n="trade.notional">Notional</span><span class="num" id="estCost">—</span></div>
-                    <div class="ts-row"><span>Margin (<span id="marginLevLabel">10x</span>)</span><span class="num" id="estMargin">—</span></div>
-                    <div class="ts-row"><span>Fee (0.05%)</span><span class="num" id="estFee">—</span></div>
+                    <div class="ts-row"><span><span data-i18n="trade.margin">Margin</span> (<span id="marginLevLabel">10x</span>)</span><span class="num" id="estMargin">—</span></div>
+                    <div class="ts-row"><span><span data-i18n="trade.fee">Fee</span> (0.05%)</span><span class="num" id="estFee">—</span></div>
                     <div class="ts-row ts-liq"><span data-i18n="trade.est_liq">Est. Liq. Price</span><span class="num red" id="estLiq">—</span></div>
                 </div>
             </div>
@@ -323,19 +527,66 @@
                         <div class="ctx-desc" id="prodDesc">—</div>
                     </div>
                     <div class="info-grid">
-                        <div class="ig-row"><span>Volume 24h</span><span class="num" id="infoVol">—</span></div>
-                        <div class="ig-row"><span>Open Interest</span><span class="num" id="infoOI">—</span></div>
-                        <div class="ig-row"><span>Funding Rate</span><span class="num" id="infoFunding">—</span></div>
-                        <div class="ig-row"><span>Next Funding</span><span class="num" id="infoNextFund">—</span></div>
-                        <div class="ig-row"><span>Max Leverage</span><span class="num" id="infoMaxLev">100x</span></div>
+                        <div class="ig-row"><span data-i18n="info.volume_24h">Volume 24h</span><span class="num" id="infoVol">—</span></div>
+                        <div class="ig-row"><span data-i18n="info.open_interest">Open Interest</span><span class="num" id="infoOI">—</span></div>
+                        <div class="ig-row"><span data-i18n="funding.rate">Funding Rate</span><span class="num" id="fundingRate">—</span> <span class="num" id="fundingDirection" style="margin-left:2px"></span></div>
+                        <div class="ig-row"><span data-i18n="funding.next_payment">Next Funding</span><span class="num" id="fundingCountdown">—</span></div>
+                        <div class="ig-row"><span data-i18n="info.max_leverage">Max Leverage</span><span class="num" id="infoMaxLev">100x</span></div>
                     </div>
                     <div class="info-divider"></div>
                     <div class="info-transparency">
                         <div class="it-label" data-i18n="info.source">PRICE SOURCE</div>
-                        <div class="ig-row"><span>Source Symbol</span><span class="num" id="srcSymbol">—</span></div>
-                        <div class="ig-row"><span>Source Price</span><span class="num" id="srcPrice">—</span></div>
-                        <div class="ig-row"><span>USD/MNT Rate</span><span class="num" id="srcRate">—</span></div>
-                        <div class="ig-row calc"><span>Formula</span><span class="num" id="srcFormula">—</span></div>
+                        <div class="ig-row"><span data-i18n="info.source">Source Symbol</span><span class="num" id="srcSymbol">—</span></div>
+                        <div class="ig-row"><span data-i18n="info.src_price">Source Price</span><span class="num" id="srcPrice">—</span></div>
+                        <div class="ig-row"><span data-i18n="info.usd_mnt">USD/MNT Rate</span><span class="num" id="srcRate">—</span></div>
+                        <div class="ig-row calc"><span data-i18n="info.formula">Formula</span><span class="num" id="srcFormula">—</span></div>
+                    </div>
+
+                    <!-- USD/MNT Rates Comparison -->
+                    <div class="info-divider"></div>
+                    <div class="it-label" data-i18n="info.usd_mnt">USD/MNT RATES</div>
+                    <div class="info-grid">
+                        <div class="ig-row"><span data-i18n="fx.bom_ref">BoM Reference</span><span class="num" id="bomRateInfo">—</span></div>
+                        <div class="ig-row"><span data-i18n="info.bank_mid">Bank Mid</span><span class="num" id="bankMidRate">—</span></div>
+                        <div class="ig-row"><span data-i18n="info.cre_mid">CRE Mid</span><span class="num" id="creMidPrice">—</span></div>
+                        <div class="ig-row"><span data-i18n="info.cre_spread">CRE Spread</span><span class="num" id="creSpread">—</span></div>
+                        <div class="ig-row"><span data-i18n="info.bank_spread">Bank Spread</span><span class="num" id="bankSpread">—</span></div>
+                        <div class="ig-row"><span class="green" data-i18n="info.you_save">You Save</span><span class="num green" id="youSave">—</span></div>
+                        <div class="ig-row"><span data-i18n="info.updated">Updated</span><span class="num ts" id="rateTimestamp">—</span></div>
+                    </div>
+
+                    <!-- Bank Rates Comparison Grid -->
+                    <div class="info-divider"></div>
+                    <div class="it-label" data-i18n="info.bank_rates">BANK RATES (USD/MNT)</div>
+                    <div class="bank-rates-grid">
+                        <div class="br-header">
+                            <span data-i18n="bank.bank">Bank</span><span class="num">Bid</span><span class="num">Ask</span><span class="num" data-i18n="bank.spread">Spread</span>
+                        </div>
+                        <div class="br-row"><span class="br-name">Khan</span><span class="num" id="bankKhanBid">—</span><span class="num" id="bankKhanAsk">—</span><span class="num" id="bankKhanSpread">—</span></div>
+                        <div class="br-row"><span class="br-name">Golomt</span><span class="num" id="bankGolomtBid">—</span><span class="num" id="bankGolomtAsk">—</span><span class="num" id="bankGolomtSpread">—</span></div>
+                        <div class="br-row"><span class="br-name">TDB</span><span class="num" id="bankTdbBid">—</span><span class="num" id="bankTdbAsk">—</span><span class="num" id="bankTdbSpread">—</span></div>
+                        <div class="br-row"><span class="br-name">Xac</span><span class="num" id="bankXacBid">—</span><span class="num" id="bankXacAsk">—</span><span class="num" id="bankXacSpread">—</span></div>
+                        <div class="br-row br-cre"><span class="br-name">CRE.mn</span><span class="num" id="bankCreBid">—</span><span class="num" id="bankCreAsk">—</span><span class="num" id="bankCreSpread">—</span></div>
+                    </div>
+
+                    <!-- Hidden mirror elements for bottom-panel/popup sync -->
+                    <div style="display:none">
+                        <span id="bomRateBp">—</span>
+                        <span id="bankMidRateBp">—</span>
+                        <span id="creMidPriceBp">—</span>
+                        <span id="creSpreadBp">—</span>
+                        <span id="bankSpreadBp">—</span>
+                        <span id="youSaveBp">—</span>
+                        <span id="infoVolBp">—</span>
+                        <span id="infoOIBp">—</span>
+                        <span id="fundingRateBp">—</span>
+                        <span id="fundingDirectionBp">—</span>
+                        <span id="fundingCountdownBp">—</span>
+                        <span id="bankKhanBidBp">—</span><span id="bankKhanAskBp">—</span><span id="bankKhanSpreadBp">—</span>
+                        <span id="bankGolomtBidBp">—</span><span id="bankGolomtAskBp">—</span><span id="bankGolomtSpreadBp">—</span>
+                        <span id="bankTdbBidBp">—</span><span id="bankTdbAskBp">—</span><span id="bankTdbSpreadBp">—</span>
+                        <span id="bankXacBidBp">—</span><span id="bankXacAskBp">—</span><span id="bankXacSpreadBp">—</span>
+                        <span id="bankCreBidBp">—</span><span id="bankCreAskBp">—</span><span id="bankCreSpreadBp">—</span>
                     </div>
                 </div>
             </div>
@@ -530,6 +781,8 @@
             </div>
         </div>
     </div>
+
+    <div id="popupContainer"></div>
 
     <script src="cre-chart.js"></script>
     <script src="i18n.js"></script>

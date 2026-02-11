@@ -11,6 +11,7 @@
 #include <mutex>
 #include <chrono>
 #include <vector>
+#include "exchange_config.h"
 
 // ============================================================================
 // KYC TYPES
@@ -93,8 +94,8 @@ public:
         record.submitted_at = now();
         
         // Set default limits for pending
-        record.daily_deposit_limit = 1000000000000;   // 1M MNT
-        record.daily_withdraw_limit = 500000000000;   // 500K MNT
+        record.daily_deposit_limit = central_exchange::config::kyc_pending_daily_deposit();
+        record.daily_withdraw_limit = central_exchange::config::kyc_pending_daily_withdraw();
         
         return true;
     }
@@ -128,8 +129,8 @@ public:
         it->second.reviewed_at = now();
         
         // Increase limits for approved
-        it->second.daily_deposit_limit = 100000000000000;   // 100M MNT
-        it->second.daily_withdraw_limit = 50000000000000;   // 50M MNT
+        it->second.daily_deposit_limit = central_exchange::config::kyc_approved_daily_deposit();
+        it->second.daily_withdraw_limit = central_exchange::config::kyc_approved_daily_withdraw();
         
         return true;
     }

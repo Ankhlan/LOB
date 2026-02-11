@@ -14,6 +14,8 @@
 
 #include "product_catalog.h"
 #include "position_manager.h"
+#include "event_journal.h"
+#include "database.h"
 #include <thread>
 #include <atomic>
 #include <functional>
@@ -121,6 +123,8 @@ private:
 class OffersUpdatesListener : public IO2GResponseListener
 {
 public:
+    struct BidAsk { double bid; double ask; };
+    
     OffersUpdatesListener(IO2GSession* session,
                           std::unordered_map<std::string, double>& prices,
                           std::mutex& mtx,
@@ -158,6 +162,7 @@ public:
                 {
                     std::lock_guard<std::mutex> lock(mMutex);
                     mPrices[instr] = mid;
+                    mBidAsk[instr] = {bid, ask};
                 }
                 
                 mDirtyFlag.store(true);
@@ -167,10 +172,14 @@ public:
         tur->release();
     }
     
+    // Get actual FXCM bid/ask for a symbol
+    std::unordered_map<std::string, BidAsk>& getBidAskMap() { return mBidAsk; }
+    
 private:
     std::atomic<long> mRefCount{1};
     IO2GSession* mSession;
     std::unordered_map<std::string, double>& mPrices;
+    std::unordered_map<std::string, BidAsk> mBidAsk;
     std::mutex& mMutex;
     std::atomic<bool>& mDirtyFlag;
 };
@@ -248,6 +257,15 @@ public:
     void unsubscribe(const std::string& fxcm_symbol);
     void set_price_callback(PriceCallback cb) { on_price_ = std::move(cb); }
     
+    // Start simulation mode (fallback when FXCM login fails)
+    void start_simulation() {
+        if (running_) return;
+        connected_ = true;
+        simulation_mode_ = true;
+        running_ = true;
+        price_thread_ = std::thread(&FxcmFeed::price_loop, this);
+    }
+    
     // Get last known price
     std::optional<PriceUpdate> get_price(const std::string& fxcm_symbol) const;
     
@@ -268,6 +286,7 @@ private:
     std::atomic<bool> connected_{false};
     std::atomic<bool> running_{false};
     std::atomic<bool> prices_dirty_{false};
+    std::atomic<bool> simulation_mode_{false};
     std::thread price_thread_;
     
     PriceCallback on_price_;
@@ -288,7 +307,7 @@ private:
     IO2GSession* session_{nullptr};
     IO2GTableManager* table_manager_{nullptr};
     SessionStatusListener* status_listener_{nullptr};
-    IO2GResponseListener* offers_listener_{nullptr};
+    OffersUpdatesListener* offers_listener_{nullptr};
 #else
     // REST API mode for Linux
     std::string api_token_;
@@ -792,8 +811,17 @@ inline double FxcmFeed::get_hedge_position(const std::string& fxcm_symbol) const
 
 inline void FxcmFeed::update_mark_prices() {
     auto& catalog = ProductCatalog::instance();
+    auto& rate_prov = RateProvider::instance();
     
     std::lock_guard<std::mutex> lock(price_mutex_);
+    
+    // Push raw FXCM rates into RateProvider for cross-rate calculations
+    for (const auto& [symbol, pu] : prices_) {
+        if (pu.timestamp > 0) {
+            double mid = (pu.bid + pu.ask) / 2.0;
+            rate_prov.update_rate(symbol, mid);
+        }
+    }
     
     catalog.for_each([this, &catalog](const Product& product) {
         if (product.fxcm_symbol.empty()) return;
@@ -805,29 +833,53 @@ inline void FxcmFeed::update_mark_prices() {
         double mid = (it->second.bid + it->second.ask) / 2.0;
         double mnt_price = product.fxcm_to_mnt(mid);
         
-        // Update mark price
-        ProductCatalog::instance().update_mark_price(product.symbol, mnt_price);
+        // Update composite mark price (FXCM 70% + last trade 20% + book mid 10%)
+        // Book mid = 0 falls back to FXCM price within update_composite_mark
+        ProductCatalog::instance().update_composite_mark(product.symbol, mnt_price, 0.0);
     });
 }
 
 inline void FxcmFeed::price_loop() {
     while (running_) {
 #ifdef FXCM_ENABLED
+        if (simulation_mode_) {
+            // Simulation fallback (FXCM login failed) — throttle to 2/sec
+            static auto last_sim = std::chrono::steady_clock::now();
+            auto now_sim = std::chrono::steady_clock::now();
+            if (now_sim - last_sim >= std::chrono::milliseconds(500)) {
+                last_sim = now_sim;
+                simulate_prices();
+            }
+        } else {
         // Check if prices were updated by OffersUpdatesListener
-        if (prices_dirty_.load()) {
-            // Sync fxcm_prices_ to prices_ map with PriceUpdate struct
+        if (prices_dirty_.exchange(false)) {
+            // Only callback for symbols whose bid/ask actually changed
             std::lock_guard<std::mutex> lock(fxcm_price_mutex_);
+            auto& bidask_map = offers_listener_->getBidAskMap();
+            bool any_changed = false;
             for (const auto& [symbol, mid] : fxcm_prices_) {
-                double spread = mid * 0.0005;  // Estimate spread
                 PriceUpdate update;
                 update.symbol = symbol;
-                update.bid = mid - spread/2;
-                update.ask = mid + spread/2;
+                auto ba_it = bidask_map.find(symbol);
+                if (ba_it != bidask_map.end()) {
+                    update.bid = ba_it->second.bid;
+                    update.ask = ba_it->second.ask;
+                } else {
+                    double spread = mid * 0.0005;
+                    update.bid = mid - spread/2;
+                    update.ask = mid + spread/2;
+                }
                 update.timestamp = now_micros();
-                prices_[symbol] = update;
                 
-                if (on_price_) on_price_(update);
+                // Only callback if bid or ask actually differs
+                auto prev = prices_.find(symbol);
+                if (prev == prices_.end() || prev->second.bid != update.bid || prev->second.ask != update.ask) {
+                    prices_[symbol] = update;
+                    if (on_price_) on_price_(update);
+                    any_changed = true;
+                }
             }
+        }
         }
 #else
         // Try REST API first, fall back to simulation
@@ -844,7 +896,43 @@ inline void FxcmFeed::price_loop() {
         // Update position PnL
         PositionManager::instance().update_all_pnl();
         
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        // Check for liquidations after PnL update
+        auto liquidated = PositionManager::instance().check_liquidations();
+        if (!liquidated.empty()) {
+            std::cout << "[RISK] Liquidated " << liquidated.size() << " positions" << std::endl;
+            // Journal each liquidation event
+            auto& journal = EventJournal::instance();
+            auto& db = Database::instance();
+            for (const auto& pos : liquidated) {
+                auto* product = ProductCatalog::instance().get(pos.symbol);
+                double mark = product ? product->mark_price_mnt : 0.0;
+                double pnl = pos.size * (mark - pos.entry_price);
+                journal.log_liquidation(pos.user_id, pos.symbol, pos.size, mark, pnl, 0.0);
+                db.record_liquidation(pos.user_id, pos.symbol, pos.size, mark, pnl, 0.0);
+                db.record_ledger_entry("liquidation", 
+                    "Liabilities:Customer:" + pos.user_id + ":Position",
+                    "Assets:Exchange:Clearinghouse",
+                    std::abs(pnl), pos.user_id, pos.symbol, "Forced liquidation");
+            }
+        }
+        
+        // Process funding payments every 8 hours (check every tick, execute at 00:00, 08:00, 16:00 UTC)
+        {
+            static int64_t last_funding_hour = -1;
+            auto now = std::chrono::system_clock::now();
+            auto hours = std::chrono::duration_cast<std::chrono::hours>(now.time_since_epoch()).count();
+            int64_t funding_slot = hours / 8;  // Changes every 8 hours
+            
+            if (funding_slot != last_funding_hour) {
+                last_funding_hour = funding_slot;
+                double total = PositionManager::instance().process_funding_payments();
+                if (total > 0) {
+                    std::cout << "[FUNDING] Processed funding payments: " << total << " MNT" << std::endl;
+                }
+            }
+        }
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
 
@@ -879,9 +967,12 @@ inline void FxcmFeed::simulate_prices() {
         update.ask = base + noise + spread/2;
         update.timestamp = now_micros();
         
-        prices_[symbol] = update;
-        
-        if (on_price_) on_price_(update);
+        // Only callback if bid or ask actually changed
+        auto prev = prices_.find(symbol);
+        if (prev == prices_.end() || prev->second.bid != update.bid || prev->second.ask != update.ask) {
+            prices_[symbol] = update;
+            if (on_price_) on_price_(update);
+        }
     }
 }
 
@@ -922,10 +1013,13 @@ inline bool FxcmFeed::fetch_prices_rest() {
             update.ask = ask;
             update.timestamp = now_micros();
             
-            prices_[symbol] = update;
-            fxcm_prices_[symbol] = (bid + ask) / 2.0;
-            
-            if (on_price_) on_price_(update);
+            // Only callback if bid or ask actually changed
+            auto prev = prices_.find(symbol);
+            if (prev == prices_.end() || prev->second.bid != update.bid || prev->second.ask != update.ask) {
+                prices_[symbol] = update;
+                fxcm_prices_[symbol] = (bid + ask) / 2.0;
+                if (on_price_) on_price_(update);
+            }
         }
         
         prices_dirty_ = true;

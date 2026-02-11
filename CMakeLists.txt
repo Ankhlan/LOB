@@ -172,3 +172,11 @@ if(BUILD_GUI_CLIENT)
     
     message(STATUS "GUI client will be built: cre_client")
 endif()
+
+# =============================================================================
+# TESTS (GoogleTest)
+# =============================================================================
+option(BUILD_TESTS "Build unit tests" ON)
+if(BUILD_TESTS)
+    add_subdirectory(tests)
+endif()

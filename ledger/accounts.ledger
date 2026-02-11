@@ -2,8 +2,25 @@
 ; CENTRAL RETAIL EXCHANGE (CRE) - CHART OF ACCOUNTS
 ; Mongolian FX/CFD Exchange - Double-Entry Ledger
 ; Created: 2026-01-27
+; Updated: 2026-01-29 by LEDGER — multi-currency balance-sheet model
 ; ═══════════════════════════════════════════════════════════════════════════
 ; 
+; ACCOUNTING MODEL: PLAIN MULTI-CURRENCY BALANCE SHEET
+; ─────────────────────────────────────────────────────────────────────────
+; Instead of derivatives-style notional accounting, we use a simple
+; asset-liability model where every position is recorded as real
+; commodity holdings:
+;
+;   Client buys 10K EUR @ MNT rate:
+;     DR Assets:Client:<phone>:EUR     10,000 EUR    (client holds EUR)
+;     CR Assets:Client:<phone>:MNT    -38.5M MNT    (MNT used to buy)
+;
+;   Leverage = Total Position Value / Client Equity
+;   Client Equity = Sum(all commodities) converted to MNT - Liabilities
+;
+; Revenue comes from spread (price markup), not explicit fees.
+; Exchange records spread at trade time.
+;
 ; MONGOLIAN ACCOUNT CODE REFERENCES (НББОУС):
 ; 1xxx - Assets (Хөрөнгө)
 ; 2xxx - Liabilities (Өр төлбөр)  
@@ -13,8 +30,132 @@
 ;
 ; Currency: MNT (Mongolian Tugrik) - Base currency
 ;           USD (US Dollar) - FXCM settlement
+;           All traded commodities as per declarations below
 ;
 ; ═══════════════════════════════════════════════════════════════════════════
+
+; ─────────────────────────────────────────────────────────────────────────────
+; COMMODITY DECLARATIONS (ledger-cli multi-currency support)
+; ─────────────────────────────────────────────────────────────────────────────
+
+; Base currency
+N MNT
+D 1,000 MNT
+
+commodity MNT
+    format 1,000 MNT
+    note Mongolian Tugrik (base currency)
+    default
+
+commodity USD
+    format $1,000.00
+    note US Dollar (FXCM settlement)
+
+; Precious Metals
+commodity XAU
+    format 1.000 XAU
+    note Gold (troy ounce)
+
+commodity XAG
+    format 1.000 XAG
+    note Silver (troy ounce)
+
+; FX Majors
+commodity EUR
+    format 1.00 EUR
+    note Euro
+
+commodity GBP
+    format 1.00 GBP
+    note British Pound
+
+commodity JPY
+    format 1 JPY
+    note Japanese Yen
+
+commodity CHF
+    format 1.00 CHF
+    note Swiss Franc
+
+commodity AUD
+    format 1.00 AUD
+    note Australian Dollar
+
+commodity CAD
+    format 1.00 CAD
+    note Canadian Dollar
+
+commodity NZD
+    format 1.00 NZD
+    note New Zealand Dollar
+
+commodity CNY
+    format 1.00 CNY
+    note Chinese Yuan
+
+commodity RUB
+    format 1.00 RUB
+    note Russian Ruble
+
+; Cryptocurrencies
+commodity BTC
+    format 1.00000000 BTC
+    note Bitcoin
+
+commodity ETH
+    format 1.000000 ETH
+    note Ethereum
+
+commodity SOL
+    format 1.000000 SOL
+    note Solana
+
+commodity XRP
+    format 1.000000 XRP
+    note Ripple
+
+; Energy (contract units)
+commodity USOil
+    format 1.00 USOil
+    note WTI Crude Oil (per barrel)
+
+commodity UKOil
+    format 1.00 UKOil
+    note Brent Crude Oil (per barrel)
+
+commodity NGAS
+    format 1.000 NGAS
+    note Natural Gas (per MMBtu)
+
+; Industrial Commodities
+commodity Copper
+    format 1.00 Copper
+    note Copper (per lb)
+
+; Indices (contract units)
+commodity SPX500
+    format 1.00 SPX500
+    note S&P 500 Index
+
+commodity NAS100
+    format 1.00 NAS100
+    note Nasdaq 100 Index
+
+commodity US30
+    format 1.00 US30
+    note Dow Jones Industrial
+
+commodity GER30
+    format 1.00 GER30
+    note DAX Index
+
+commodity UK100
+    format 1.00 UK100
+    note FTSE 100 Index
+
+commodity JPN225
+    format 1.00 JPN225
+    note Nikkei 225 Index
 
 ; ─────────────────────────────────────────────────────────────────────────────
 ; ASSETS (Хөрөнгө) - Account Code 1xxx
@@ -38,9 +179,9 @@ account Assets:Bank:Golomt:USD
     note Golomt Bank USD account
     alias GolomtUSD
 
-; 1300 - Customer Margin Deposits (held in trust)
+; 1300 - Customer Margin Deposits (held in trust) — DEPRECATED, use Liabilities:Customer:<phone>:Margin
 account Assets:Margin:Customers
-    note Total customer margin held
+    note Total customer margin held — DEPRECATED (margin is sub-liability, not asset)
     alias CustomerMargin
 
 account Assets:Margin:Customers:ByUser
@@ -48,11 +189,17 @@ account Assets:Margin:Customers:ByUser
 
 ; 1400 - Hedging Positions (at FXCM)
 account Assets:Hedge:FXCM:Cash
-    note FXCM account cash balance
+    note FXCM account free cash balance (not locked as margin)
     alias FXCMCash
 
+account Assets:Hedge:FXCM:Margin
+    note FXCM cash locked as margin for open CFD positions
+
+account Assets:Hedge:FXCM:Unrealized
+    note Unrealized mark-to-market P&L on open hedge positions (daily MTM)
+
 account Assets:Hedge:FXCM:Positions
-    note FXCM open positions (hedge book)
+    note FXCM open positions (hedge book) — memo/tracking
     alias FXCMPositions
 
 account Assets:Hedge:FXCM:Positions:FX
@@ -74,6 +221,11 @@ account Assets:Receivables:Customers
 account Assets:Receivables:FXCM
     note FXCM settlement receivables
 
+; 1600 - Insurance Fund
+account Assets:Exchange:InsuranceFund
+    note Exchange insurance fund for liquidation loss absorption
+    alias InsuranceFund
+
 ; ─────────────────────────────────────────────────────────────────────────────
 ; LIABILITIES (Өр төлбөр) - Account Code 2xxx
 ; ─────────────────────────────────────────────────────────────────────────────
@@ -85,6 +237,43 @@ account Liabilities:Customers:Balances
 
 account Liabilities:Customers:Balances:ByUser
     note Per-user balance (sub-accounts created per phone number)
+
+; 2110 - Client Multi-Currency Holdings
+; Each client gets sub-accounts per commodity they trade:
+;   Assets:Client:<phone>:MNT   — client's MNT cash balance
+;   Assets:Client:<phone>:EUR   — client holds EUR
+;   Assets:Client:<phone>:XAU   — client holds gold
+;   Assets:Client:<phone>:BTC   — client holds bitcoin
+; Positive = client holds the commodity; Negative = client owes/borrowed
+; Client equity = sum of all sub-accounts converted to MNT at spot rates
+
+; 2110 - Code-compatible customer balance accounts
+; NOTE: The C++ code uses Liabilities:Customer:{user}:Balance format
+; Transitioning to Assets:Client:{user}:{commodity} for multi-currency
+account Liabilities:Customer
+    note Dynamic per-user balance accounts (Liabilities:Customer:<phone>:Balance)
+
+; 2115 - Customer Margin (locked collateral, sub-liability)
+; Margin is the customer's money, just locked — still our liability to them
+; Sub-accounts: Liabilities:Customer:<phone>:Margin
+account Liabilities:Customer:Margin
+    note Locked margin collateral (per-user sub-accounts created dynamically)
+
+; New multi-currency client accounts (parent — sub-accounts created dynamically)
+account Assets:Client
+    note Client multi-currency holdings (Assets:Client:<phone>:<commodity>)
+
+; 2120 - Code-compatible customer margin accounts
+account Assets:Customer
+    note Dynamic per-user margin accounts (created by AccountingEngine)
+
+; 2130 - Exchange trading account (spread revenue accumulator)
+account Assets:Exchange:Trading
+    note Exchange spread revenue accumulator (SQLite ledger)
+
+; 2140 - Exchange bank account (MNT) — used by AccountingEngine
+account Assets:Exchange:Bank:MNT
+    note Exchange operational MNT balance (AccountingEngine deposits/withdrawals)
 
 ; 2200 - Customer Open Positions (exposure we owe)
 account Liabilities:Customers:Positions
@@ -107,7 +296,7 @@ account Liabilities:Pending:Withdrawals
 
 ; 2400 - Taxes Payable
 account Liabilities:Taxes:VAT
-    note VAT payable (10% on fees)
+    note VAT payable (10% НӨАТ on explicit service fees only, not spread)
     alias VATPayable
 
 account Liabilities:Taxes:Income
@@ -161,6 +350,18 @@ account Revenue:Financing:Swap
 account Revenue:Financing:Interest
     note Interest on customer balances (if applicable)
 
+; 4250 - Funding Revenue (collected from position holders)
+account Revenue:Funding
+    note Funding payments received from users (longs pay when rate > 0)
+
+; 4260 - Insurance Fund Revenue
+account Revenue:Insurance:Contributions
+    note Insurance fund contributions from trading revenue (20%)
+
+; 4270 - ADL (Auto-Deleveraging) Revenue
+account Revenue:Trading:ADL
+    note Clawback income from auto-deleveraging profitable positions to cover socialized losses
+
 ; 4300 - Hedging P&L
 account Revenue:Hedging:Realized
     note Realized P&L from FXCM hedges
@@ -169,6 +370,11 @@ account Revenue:Hedging:Realized
 account Revenue:Hedging:Unrealized
     note Unrealized P&L from FXCM hedges (mark-to-market)
     alias HedgeUnrealized
+
+; 4350 - Customer Trading Losses (exchange revenue when customer loses)
+account Revenue:Trading:CustomerLoss
+    note Customer realized losses (exchange revenue)
+    alias CustomerLoss
 
 ; 4400 - Other Revenue
 account Revenue:Other:Fees
@@ -192,9 +398,26 @@ account Expenses:Hedging:FXCM:Swap
     alias FXCMSwap
 
 ; 5200 - Customer Payouts (winning trades)
+account Expenses:Trading:CustomerPayout
+    note Customer winning trades / profit payouts (our loss)
+    alias CustomerPayout
+
+; Legacy alias (deprecated — use CustomerPayout)
 account Expenses:Trading:CustomerWins
-    note Customer winning trades (our loss)
+    note Customer winning trades (our loss) — DEPRECATED, use CustomerPayout
     alias CustomerWins
+
+; 5250 - Funding Payments to Users
+account Expenses:Funding
+    note Funding payments made to users (shorts receive when rate > 0)
+
+; 5260 - Insurance Fund Payouts
+account Expenses:Insurance:Liquidation
+    note Insurance fund payouts to cover bankrupt liquidations
+
+; 5270 - ADL (Auto-Deleveraging) Costs
+account Expenses:Trading:ADL:PnL
+    note Cost of settling profitable positions during auto-deleveraging
 
 ; 5300 - Operating Expenses
 account Expenses:Operations:QPay
@@ -226,6 +449,15 @@ account Expenses:Bank:Fees
 account Expenses:Bank:FX
     note Foreign exchange conversion costs
     alias FXConversionCosts
+
+; 5600 - Tax Expenses
+account Expenses:Taxes:VAT
+    note VAT expense (10% НӨАТ on explicit service fees only, not on spread)
+    alias VATExpense
+
+account Expenses:Taxes:Income
+    note Corporate income tax expense (25%)
+    alias IncomeTaxExpense
 
 ; ═══════════════════════════════════════════════════════════════════════════
 ; OPENING BALANCES - Initial Exchange Capital

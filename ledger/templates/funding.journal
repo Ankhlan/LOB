@@ -1,0 +1,32 @@
+; ═══════════════════════════════════════════════════════════════════════════
+; CRE.mn - FUNDING PAYMENT JOURNAL TEMPLATE
+; 8-hourly funding payments (00:00, 08:00, 16:00 UTC)
+; Created: 2026-02-10 by LEDGER
+; ═══════════════════════════════════════════════════════════════════════════
+;
+; FUNDING RATE MECHANISM:
+;   rate = clamp((FXCM_mid - CRE_mid) / CRE_mid, -0.05%, +0.05%)
+;   When rate > 0: Longs pay, Shorts receive
+;   When rate < 0: Shorts pay, Longs receive
+;   Payment = position_size * mark_price * funding_rate
+;
+; ACCOUNTING RULES:
+;   User PAYS funding → Debit user balance, Credit Revenue:Funding
+;   User RECEIVES funding → Debit Expenses:Funding, Credit user balance
+;
+; ═══════════════════════════════════════════════════════════════════════════
+
+; --- EXAMPLE: User pays funding (long position, positive rate) ---
+; YYYY/MM/DD * Funding payment USDMNT
+;     Liabilities:Customer:USER_PHONE:Balance    -1234.56 MNT
+;     Revenue:Funding:USDMNT                      1234.56 MNT
+
+; --- EXAMPLE: User receives funding (short position, positive rate) ---
+; YYYY/MM/DD * Funding payment USDMNT
+;     Expenses:Funding:USDMNT                     1234.56 MNT
+;     Liabilities:Customer:USER_PHONE:Balance      1234.56 MNT
+
+; --- EXAMPLE: Insurance fund contribution from funding spread ---
+; YYYY/MM/DD * Insurance fund contribution from funding
+;     Revenue:Insurance:Contributions             -100.00 MNT
+;     Assets:Exchange:InsuranceFund                 100.00 MNT

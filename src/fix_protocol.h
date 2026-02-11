@@ -172,8 +172,14 @@ private:
         auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             now.time_since_epoch()) % 1000;
         
+        std::tm tm_buf{};
+#ifdef _WIN32
+        gmtime_s(&tm_buf, &time_t);
+#else
+        gmtime_r(&time_t, &tm_buf);
+#endif
         std::ostringstream oss;
-        oss << std::put_time(std::gmtime(&time_t), "%Y%m%d-%H:%M:%S");
+        oss << std::put_time(&tm_buf, "%Y%m%d-%H:%M:%S");
         oss << "." << std::setw(3) << std::setfill('0') << ms.count();
         return oss.str();
     }
@@ -196,7 +202,12 @@ public:
             size_t eq = raw.find('=', pos);
             if (eq == std::string::npos) break;
             
-            int tag = std::stoi(raw.substr(pos, eq - pos));
+            int tag;
+            try {
+                tag = std::stoi(raw.substr(pos, eq - pos));
+            } catch (const std::exception&) {
+                return false;  // Invalid tag number
+            }
             
             // Find value (ends at SOH)
             size_t end = raw.find(SOH, eq + 1);
@@ -248,10 +259,33 @@ public:
     
     bool is_valid() const {
         // Validate required fields
-        return get_string(tag::BeginString).has_value() &&
-               get_string(tag::BodyLength).has_value() &&
-               get_char(tag::MsgType).has_value() &&
-               get_string(tag::CheckSum).has_value();
+        if (!get_string(tag::BeginString).has_value() ||
+            !get_string(tag::BodyLength).has_value() ||
+            !get_char(tag::MsgType).has_value() ||
+            !get_string(tag::CheckSum).has_value()) {
+            return false;
+        }
+        return true;
+    }
+    
+    // Validate FIX checksum (sum of all bytes modulo 256)
+    static bool validate_checksum(const std::string& raw) {
+        // Find the checksum tag (10=XXX)
+        auto cs_pos = raw.rfind("10=");
+        if (cs_pos == std::string::npos || cs_pos + 6 > raw.length()) return false;
+        
+        // Calculate sum of all bytes before checksum tag
+        unsigned int sum = 0;
+        for (size_t i = 0; i < cs_pos; ++i) {
+            sum += static_cast<unsigned char>(raw[i]);
+        }
+        sum %= 256;
+        
+        // Parse expected checksum
+        std::string expected_str = raw.substr(cs_pos + 3, 3);
+        int expected = std::stoi(expected_str);
+        
+        return static_cast<int>(sum) == expected;
     }
     
 private:

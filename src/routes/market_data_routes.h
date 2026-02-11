@@ -10,6 +10,7 @@
 #include "route_base.h"
 #include "../matching_engine.h"
 #include "../product_catalog.h"
+#include "../position_manager.h"
 
 namespace cre {
 
@@ -22,6 +23,7 @@ public:
         register_product_routes(server);
         register_quote_routes(server);
         register_orderbook_routes(server);
+        register_exchange_info_routes(server);
     }
     
     const char* name() const override { return "MarketDataRoutes"; }
@@ -131,6 +133,8 @@ private:
             auto depth_param = req.get_param_value("depth");
             if (!depth_param.empty()) {
                 depth = std::stoi(depth_param);
+                if (depth < 1) depth = 1;
+                if (depth > 100) depth = 100;
             }
             
             auto book = MatchingEngine::instance().get_depth(symbol, depth);
@@ -162,6 +166,8 @@ private:
             auto depth_param = req.get_param_value("depth");
             if (!depth_param.empty()) {
                 depth = std::stoi(depth_param);
+                if (depth < 1) depth = 1;
+                if (depth > 100) depth = 100;
             }
             
             auto book = MatchingEngine::instance().get_depth(symbol, depth);
@@ -205,6 +211,31 @@ private:
                 {"ask_liquidity", ask_liquidity},
                 {"timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::system_clock::now().time_since_epoch()).count()}
+            });
+        });
+    }
+    
+    void register_exchange_info_routes(httplib::Server& server) {
+        // Public: Exchange status and insurance fund
+        server.Get("/api/exchange/info", [](const httplib::Request&, httplib::Response& res) {
+            using namespace central_exchange;
+            
+            auto& pm = PositionManager::instance();
+            int active_products = 0;
+            ProductCatalog::instance().for_each([&](const Product& p) {
+                if (p.is_active) active_products++;
+            });
+            
+            send_success(res, {
+                {"exchange", "CRE.mn"},
+                {"name", "Central Exchange of Mongolia"},
+                {"status", "online"},
+                {"insurance_fund_mnt", pm.get_insurance_fund_balance()},
+                {"active_products", active_products},
+                {"supported_order_types", json::array({"market", "limit", "ioc", "fok", "post_only", "stop_limit"})},
+                {"settlement", "perpetual"},
+                {"margin_mode", "cross"},
+                {"funding_interval_hours", 8}
             });
         });
     }

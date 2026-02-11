@@ -96,6 +96,11 @@ public:
         
         command_queue_.push(std::move(cmd));
         
+        // Timeout after 5 seconds to prevent infinite hang
+        auto status = future.wait_for(std::chrono::seconds(5));
+        if (status == std::future_status::timeout) {
+            return {};  // Matching thread unresponsive
+        }
         return future.get();
     }
     
@@ -112,6 +117,11 @@ public:
         
         command_queue_.push(std::move(cmd));
         
+        // Timeout after 5 seconds to prevent infinite hang
+        auto status = future.wait_for(std::chrono::seconds(5));
+        if (status == std::future_status::timeout) {
+            return std::nullopt;  // Matching thread unresponsive
+        }
         return future.get();
     }
     

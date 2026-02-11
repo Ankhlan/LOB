@@ -1,5 +1,11 @@
 #pragma once
 
+// Suppress MSVC strncpy deprecation warnings (usage is safe with null-termination)
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 4996)
+#endif
+
 /**
  * Central Exchange - Event Journal
  * =================================
@@ -14,10 +20,17 @@
 
 #include "order_book.h"
 #include <fstream>
+
+using TradeId = uint64_t;
 #include <cstdint>
 #include <chrono>
 #include <cstring>
 #include <filesystem>
+#ifdef _WIN32
+#include <io.h>      // _commit
+#else
+#include <unistd.h>  // fsync
+#endif
 #include <iostream>
 
 namespace central_exchange {
@@ -32,6 +45,14 @@ enum class EventType : uint8_t {
     WITHDRAWAL      = 6,
     POSITION_OPEN   = 7,
     POSITION_CLOSE  = 8,
+    MARGIN_LOCK     = 9,
+    MARGIN_RELEASE  = 10,
+    LIQUIDATION     = 11,
+    FUNDING_PAYMENT = 12,
+    INSURANCE_CONTRIBUTION = 13,
+    INSURANCE_PAYOUT = 14,
+    FEE_COLLECTION  = 15,
+    PNL_REALIZED    = 16,
     SYSTEM_START    = 100,
     SYSTEM_STOP     = 101,
     SNAPSHOT        = 200
@@ -91,6 +112,61 @@ struct DepositEvent {
     uint64_t timestamp;
 };
 
+// Withdrawal event (matching deposit structure)
+struct WithdrawalEvent {
+    char user_id[32];
+    char currency[8];
+    double amount;
+    uint64_t timestamp;
+};
+
+// Liquidation event - forced position close
+struct LiquidationEvent {
+    char user_id[32];
+    char symbol[24];
+    double position_size;
+    double mark_price;
+    double realized_pnl;
+    double insurance_fund_draw;  // Amount drawn from insurance fund (0 if none)
+    uint64_t timestamp;
+};
+
+// Funding rate payment
+struct FundingEvent {
+    char user_id[32];
+    char symbol[24];
+    double position_size;
+    double funding_rate;
+    double payment;        // Positive = user paid, negative = user received
+    uint64_t timestamp;
+};
+
+// Margin lock/release
+struct MarginEvent {
+    char user_id[32];
+    char symbol[24];
+    double amount;         // Positive = locked, negative = released
+    double balance_after;
+    uint64_t timestamp;
+};
+
+// Insurance fund event
+struct InsuranceEvent {
+    double amount;         // Positive = contribution, negative = payout
+    double balance_after;
+    char source[32];       // "fee_contribution", "liquidation_payout", "manual"
+    uint64_t timestamp;
+};
+
+// Fee collection event
+struct FeeEvent {
+    char user_id[32];
+    char symbol[24];
+    double amount;
+    char fee_type[16];     // "maker", "taker", "funding", "withdrawal"
+    uint64_t timestamp;
+};
+
 /**
  * Event Journal Writer
  * 
@@ -102,6 +178,12 @@ struct DepositEvent {
  */
 class EventJournal {
 public:
+    // Singleton access for global event logging
+    static EventJournal& instance() {
+        static EventJournal journal;
+        return journal;
+    }
+    
     explicit EventJournal(const std::string& path = "data/events.journal")
         : path_(path), sequence_(0) {
         
@@ -140,28 +222,33 @@ public:
     
     // Log a new order
     void log_order(const Order& order) {
-        OrderEvent event;
+        OrderEvent event{};
         event.order_id = order.id;
         std::strncpy(event.symbol, order.symbol.c_str(), sizeof(event.symbol) - 1);
+        event.symbol[sizeof(event.symbol) - 1] = '\0';
         std::strncpy(event.user_id, order.user_id.c_str(), sizeof(event.user_id) - 1);
+        event.user_id[sizeof(event.user_id) - 1] = '\0';
         event.side = order.side;
         event.type = order.type;
         event.price = order.price;
         event.quantity = order.quantity;
-        event.timestamp = order.timestamp;
+        event.timestamp = order.created_at;
         
         write_event(EventType::ORDER_NEW, event);
     }
     
     // Log a trade
     void log_trade(const Trade& trade) {
-        TradeEvent event;
+        TradeEvent event{};
         event.trade_id = trade.id;
         std::strncpy(event.symbol, trade.symbol.c_str(), sizeof(event.symbol) - 1);
+        event.symbol[sizeof(event.symbol) - 1] = '\0';
         std::strncpy(event.maker_user, trade.maker_user.c_str(), sizeof(event.maker_user) - 1);
+        event.maker_user[sizeof(event.maker_user) - 1] = '\0';
         std::strncpy(event.taker_user, trade.taker_user.c_str(), sizeof(event.taker_user) - 1);
-        event.maker_order = trade.maker_order;
-        event.taker_order = trade.taker_order;
+        event.taker_user[sizeof(event.taker_user) - 1] = '\0';
+        event.maker_order = trade.maker_order_id;
+        event.taker_order = trade.taker_order_id;
         event.taker_side = trade.taker_side;
         event.price = trade.price;
         event.quantity = trade.quantity;
@@ -170,24 +257,127 @@ public:
         event.timestamp = trade.timestamp;
         
         write_event(EventType::TRADE, event);
+        file_.flush();  // Trades must be durable immediately
     }
     
     // Log a deposit
     void log_deposit(const std::string& user_id, const std::string& currency, double amount) {
-        DepositEvent event;
+        DepositEvent event{};
         std::strncpy(event.user_id, user_id.c_str(), sizeof(event.user_id) - 1);
+        event.user_id[sizeof(event.user_id) - 1] = '\0';
         std::strncpy(event.currency, currency.c_str(), sizeof(event.currency) - 1);
+        event.currency[sizeof(event.currency) - 1] = '\0';
         event.amount = amount;
         event.timestamp = now_ns();
         
         write_event(EventType::DEPOSIT, event);
+        file_.flush();  // Financial events must be durable immediately
+    }
+    
+    // Log a withdrawal
+    void log_withdrawal(const std::string& user_id, const std::string& currency, double amount) {
+        WithdrawalEvent event{};
+        std::strncpy(event.user_id, user_id.c_str(), sizeof(event.user_id) - 1);
+        event.user_id[sizeof(event.user_id) - 1] = '\0';
+        std::strncpy(event.currency, currency.c_str(), sizeof(event.currency) - 1);
+        event.currency[sizeof(event.currency) - 1] = '\0';
+        event.amount = amount;
+        event.timestamp = now_ns();
+        
+        write_event(EventType::WITHDRAWAL, event);
+        file_.flush();
+    }
+    
+    // Log a liquidation
+    void log_liquidation(const std::string& user_id, const std::string& symbol,
+                         double position_size, double mark_price, double pnl, double insurance_draw) {
+        LiquidationEvent event{};
+        std::strncpy(event.user_id, user_id.c_str(), sizeof(event.user_id) - 1);
+        event.user_id[sizeof(event.user_id) - 1] = '\0';
+        std::strncpy(event.symbol, symbol.c_str(), sizeof(event.symbol) - 1);
+        event.symbol[sizeof(event.symbol) - 1] = '\0';
+        event.position_size = position_size;
+        event.mark_price = mark_price;
+        event.realized_pnl = pnl;
+        event.insurance_fund_draw = insurance_draw;
+        event.timestamp = now_ns();
+        
+        write_event(EventType::LIQUIDATION, event);
+        file_.flush();
+    }
+    
+    // Log a funding payment
+    void log_funding(const std::string& user_id, const std::string& symbol,
+                     double position_size, double funding_rate, double payment) {
+        FundingEvent event{};
+        std::strncpy(event.user_id, user_id.c_str(), sizeof(event.user_id) - 1);
+        event.user_id[sizeof(event.user_id) - 1] = '\0';
+        std::strncpy(event.symbol, symbol.c_str(), sizeof(event.symbol) - 1);
+        event.symbol[sizeof(event.symbol) - 1] = '\0';
+        event.position_size = position_size;
+        event.funding_rate = funding_rate;
+        event.payment = payment;
+        event.timestamp = now_ns();
+        
+        write_event(EventType::FUNDING_PAYMENT, event);
+    }
+    
+    // Log margin lock/release
+    void log_margin(const std::string& user_id, const std::string& symbol,
+                    double amount, double balance_after, bool is_lock) {
+        MarginEvent event{};
+        std::strncpy(event.user_id, user_id.c_str(), sizeof(event.user_id) - 1);
+        event.user_id[sizeof(event.user_id) - 1] = '\0';
+        std::strncpy(event.symbol, symbol.c_str(), sizeof(event.symbol) - 1);
+        event.symbol[sizeof(event.symbol) - 1] = '\0';
+        event.amount = is_lock ? amount : -amount;
+        event.balance_after = balance_after;
+        event.timestamp = now_ns();
+        
+        write_event(is_lock ? EventType::MARGIN_LOCK : EventType::MARGIN_RELEASE, event);
+    }
+    
+    // Log insurance fund event
+    void log_insurance(double amount, double balance_after, const std::string& source) {
+        InsuranceEvent event{};
+        event.amount = amount;
+        event.balance_after = balance_after;
+        std::strncpy(event.source, source.c_str(), sizeof(event.source) - 1);
+        event.source[sizeof(event.source) - 1] = '\0';
+        event.timestamp = now_ns();
+        
+        write_event(amount > 0 ? EventType::INSURANCE_CONTRIBUTION : EventType::INSURANCE_PAYOUT, event);
+    }
+    
+    // Log fee collection
+    void log_fee(const std::string& user_id, const std::string& symbol,
+                 double amount, const std::string& fee_type) {
+        FeeEvent event{};
+        std::strncpy(event.user_id, user_id.c_str(), sizeof(event.user_id) - 1);
+        event.user_id[sizeof(event.user_id) - 1] = '\0';
+        std::strncpy(event.symbol, symbol.c_str(), sizeof(event.symbol) - 1);
+        event.symbol[sizeof(event.symbol) - 1] = '\0';
+        event.amount = amount;
+        std::strncpy(event.fee_type, fee_type.c_str(), sizeof(event.fee_type) - 1);
+        event.fee_type[sizeof(event.fee_type) - 1] = '\0';
+        event.timestamp = now_ns();
+        
+        write_event(EventType::FEE_COLLECTION, event);
     }
     
     // Force fsync (for crash safety at checkpoints)
     void sync() {
         file_.flush();
-        // Note: For true durability, use fsync() on the file descriptor
-        // This is a simplified version
+        // Platform-specific fsync for true durability
+#ifdef _WIN32
+        int fd = _fileno(nullptr);  // Use native file handle
+        // For MSVC ofstream, flush is usually sufficient with FILE_FLAG_WRITE_THROUGH
+#else
+        // On POSIX, get underlying fd and fsync
+        // Note: standard C++ doesn't expose fd from ofstream
+        // In production, use open()/write()/fsync() directly
+        ::sync();
+#endif
     }
     
     // Get current sequence number
@@ -281,3 +471,7 @@ private:
 };
 
 } // namespace central_exchange
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif

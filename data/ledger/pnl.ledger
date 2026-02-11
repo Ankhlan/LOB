@@ -1,0 +1,9 @@
+; Realized P&L settlement transactions
+; Written by LedgerWriter::record_pnl()
+; Format: Date * Description
+;     Liabilities:Customer:<phone>:Balance    pnl MNT      ; credit customer
+;     Revenue:Trading:CustomerLoss    -pnl MNT              ; customer loss = exchange revenue
+;     OR
+;     Expenses:Trading:CustomerPayout    pnl MNT            ; customer win = exchange expense
+;     Liabilities:Customer:<phone>:Balance    pnl MNT
+

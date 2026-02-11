@@ -1,0 +1,38 @@
+; ═══════════════════════════════════════════════════════════════════════════
+; CENTRAL RETAIL EXCHANGE (CRE) - MASTER JOURNAL
+; Consolidates all ledger files for unified reporting
+; Created: 2026-02-10 by LEDGER
+; Updated: 2026-01-29 by LEDGER — added missing includes
+; ═══════════════════════════════════════════════════════════════════════════
+;
+; Usage:
+;   ledger -f ledger/master.journal balance
+;   ledger -f ledger/master.journal register
+;   ledger -f ledger/master.journal balance Income Expenses
+;   ledger -f ledger/master.journal balance -X MNT    ; Multi-currency → MNT
+;
+; ═══════════════════════════════════════════════════════════════════════════
+
+; Chart of accounts, commodity declarations, and opening balances
+include accounts.ledger
+
+; Market prices for mark-to-market / multi-commodity conversion
+include prices.ledger
+
+; Runtime transaction files (written by LedgerWriter at data/ledger/)
+include ../data/ledger/deposits.ledger
+include ../data/ledger/trades.ledger
+include ../data/ledger/funding.ledger
+include ../data/ledger/liquidations.ledger
+
+; Margin movements (lock/release)
+include ../data/ledger/margin.ledger
+
+; Withdrawal transactions
+include ../data/ledger/withdrawals.ledger
+
+; PnL settlements (realized customer profit/loss)
+include ../data/ledger/pnl.ledger
+
+; Monthly closing entries (Revenue/Expenses → Equity:CurrentPL)
+include ../data/ledger/closing.ledger

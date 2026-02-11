@@ -22,3 +22,10 @@ ForexConnectAPI-*
 # Local startup scripts
 start_*.bat
 start_*.ps1
+
+# Build directories
+build_win/
+
+# Backup files
+*.bak
+*.bak2

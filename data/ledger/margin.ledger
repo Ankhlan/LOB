@@ -1,0 +1,6 @@
+; Margin lock/release transactions
+; Written by LedgerWriter::record_margin()
+; Format: Date * Description
+;     Assets:Customer:<phone>:Margin    amount MNT
+;     Liabilities:Customer:<phone>:Balance    -amount MNT
+

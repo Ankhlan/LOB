@@ -24,6 +24,7 @@
 #include "kyc_service.h"
 #include "safe_ledger.h"
 #include "usdmnt_market.h"
+#include "rate_limiter.h"
 
 #include <httplib.h>
 #include <array>
@@ -39,6 +40,7 @@
 #include <set>
 #include <sstream>
 #include <algorithm>
+#include <fstream>
 
 namespace central_exchange {
 
@@ -83,10 +85,17 @@ public:
         
         auto& candles = data_[symbol][timeframe_seconds];
         
+        bool new_candle = false;
         // Find or create candle for this period
         if (candles.empty() || candles.back().time != candle_time) {
-            // New candle
+            // New candle - persist previous completed candle to SQLite
+            if (!candles.empty()) {
+                auto& prev = candles.back();
+                Database::instance().upsert_candle(symbol, timeframe_seconds, prev.time,
+                    prev.open, prev.high, prev.low, prev.close, prev.volume);
+            }
             candles.push_back({candle_time, price, price, price, price, 1.0});
+            new_candle = true;
             // Keep max 500 candles per timeframe
             if (candles.size() > 500) {
                 candles.erase(candles.begin());
@@ -108,24 +117,27 @@ public:
             return;
         }
 
-        std::lock_guard<std::mutex> lock(mutex_);
-        auto& candles = data_[symbol][timeframe_seconds];
+        // Quick check: already seeded or in progress?
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (seeded_[symbol][timeframe_seconds]) return;
+            auto& candles = data_[symbol][timeframe_seconds];
+            if (candles.size() >= 50) return;
+            // Mark as seeded NOW to prevent concurrent seed attempts
+            seeded_[symbol][timeframe_seconds] = true;
+        }
 
-        // Only seed if fewer than 50 candles
-        if (candles.size() >= 50) return;
-
+        // Fetch FXCM data OUTSIDE the lock (may take 60s+)
         std::vector<Candle> historical;
         bool got_fxcm = false;
 
 #ifdef FXCM_ENABLED
-        // Try FXCM real history first for FXCM-backed symbols
         auto* product = ProductCatalog::instance().get(symbol);
         if (product && !product->fxcm_symbol.empty()) {
             auto fxcm_candles = FxcmHistoryManager::instance().fetchHistory(
                 product->fxcm_symbol, timeframe_seconds, count);
 
             if (!fxcm_candles.empty()) {
-                // Convert USD prices to MNT using current rate
                 double usd_mnt = USD_MNT_RATE;
                 if (usd_mnt <= 0) usd_mnt = 3564.0;
 
@@ -180,22 +192,35 @@ public:
                       << " SYNTHETIC candles for " << symbol << std::endl;
         }
 
-        // Append existing real candles
-        for (const auto& c : candles) {
-            if (c.open > 0 && c.open < 1e12 &&
-                c.high > 0 && c.high < 1e12 &&
-                c.low > 0 && c.low < 1e12 &&
-                c.close > 0 && c.close < 1e12) {
-                historical.push_back(c);
+        // Re-acquire lock, merge historical with any live candles that arrived
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            auto& candles = data_[symbol][timeframe_seconds];
+            // Append existing real candles
+            for (const auto& c : candles) {
+                if (c.open > 0 && c.open < 1e12 &&
+                    c.high > 0 && c.high < 1e12 &&
+                    c.low > 0 && c.low < 1e12 &&
+                    c.close > 0 && c.close < 1e12) {
+                    historical.push_back(c);
+                }
             }
+            candles = std::move(historical);
+
+            // Sort by time and deduplicate
+            std::sort(candles.begin(), candles.end(),
+                [](const Candle& a, const Candle& b) { return a.time < b.time; });
+            candles.erase(std::unique(candles.begin(), candles.end(),
+                [](const Candle& a, const Candle& b) { return a.time == b.time; }), candles.end());
         }
-        candles = std::move(historical);
+    }
 
-        // Sort by time
-        std::sort(candles.begin(), candles.end(),
-            [](const Candle& a, const Candle& b) { return a.time < b.time; });
-
-        seeded_[symbol][timeframe_seconds] = true;
+    // Clear seeded flags (used when FXCM History becomes available after initial synthetic seed)
+    void clear_seeded() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        seeded_.clear();
+        data_.clear();  // Clear synthetic candles so real ones can be fetched
+        std::cout << "[CandleStore] Cleared seeded flags - next request will fetch fresh data\n";
     }
 
     // Check if already seeded
@@ -301,6 +326,56 @@ public:
         data_.clear();
         seeded_.clear();
     }
+    
+    // Load candles from SQLite on startup (restores history across restarts)
+    void load_from_db() {
+        auto& db = Database::instance();
+        int loaded = 0;
+        
+        // Load candles for all active products and timeframes
+        ProductCatalog::instance().for_each([&](const Product& p) {
+            if (!p.is_active) return;
+            for (int tf : TIMEFRAMES) {
+                auto rows = db.load_candles(p.symbol, tf, 500);
+                if (!rows.empty()) {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    auto& candles = data_[p.symbol][tf];
+                    for (const auto& row : rows) {
+                        candles.push_back({row.time, row.open, row.high, row.low, row.close, row.volume});
+                    }
+                    // Only mark as seeded if we have enough history to display a chart
+                    if (rows.size() >= 20) {
+                        seeded_[p.symbol][tf] = true;
+                    }
+                    loaded += static_cast<int>(rows.size());
+                }
+            }
+        });
+        
+        if (loaded > 0) {
+            std::cout << "[CandleStore] Loaded " << loaded << " candles from SQLite" << std::endl;
+        }
+    }
+    
+    // Flush all current candles to SQLite (call on shutdown)
+    void flush_to_db() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto& db = Database::instance();
+        int flushed = 0;
+        
+        for (const auto& [symbol, timeframes] : data_) {
+            for (const auto& [tf, candles] : timeframes) {
+                for (const auto& c : candles) {
+                    db.upsert_candle(symbol, tf, c.time, c.open, c.high, c.low, c.close, c.volume);
+                    flushed++;
+                }
+            }
+        }
+        
+        if (flushed > 0) {
+            std::cout << "[CandleStore] Flushed " << flushed << " candles to SQLite" << std::endl;
+        }
+    }
 
 private:
     CandleStore() = default;
@@ -329,11 +404,111 @@ public:
     void stop();
     bool is_running() const { return running_; }
     
+    // Push-on-change: signal SSE clients when prices update
+    void notify_price_change() {
+        price_changed_.store(true, std::memory_order_release);
+        price_cv_.notify_all();
+    }
+    
 private:
     int port_;
     std::atomic<bool> running_{false};
     std::unique_ptr<httplib::Server> server_;
     std::thread server_thread_;
+    
+    // Push-on-change SSE signaling
+    std::condition_variable price_cv_;
+    std::mutex price_cv_mutex_;
+    std::atomic<bool> price_changed_{false};
+    
+    // Circuit breaker SSE events
+    struct CircuitBreakerEvent {
+        std::string symbol;
+        std::string state;
+        std::string message;
+        int64_t timestamp;
+    };
+    std::mutex cb_events_mutex_;
+    std::vector<CircuitBreakerEvent> cb_events_;
+    
+    // Price alerts
+    enum class AlertDirection { ABOVE, BELOW };
+    struct PriceAlert {
+        std::string id;
+        std::string user_id;
+        std::string symbol;
+        double price;
+        AlertDirection direction;
+        std::string user_phone;
+        int64_t created_at;
+        bool triggered{false};
+    };
+    std::mutex alerts_mutex_;
+    std::vector<PriceAlert> alerts_;  // All active alerts
+    int alert_counter_{0};
+    
+    // Triggered alert SSE events
+    struct AlertEvent {
+        std::string alert_id;
+        std::string user_id;
+        std::string symbol;
+        double alert_price;
+        double current_price;
+        std::string direction;
+        std::string message;
+        int64_t timestamp;
+    };
+    std::mutex alert_events_mutex_;
+    std::vector<AlertEvent> alert_events_;
+    
+public:
+    void push_circuit_breaker_event(const std::string& symbol, const std::string& state, const std::string& msg) {
+        {
+            std::lock_guard<std::mutex> lock(cb_events_mutex_);
+            auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            cb_events_.push_back({symbol, state, msg, now});
+        }
+        notify_price_change(); // Wake SSE clients
+    }
+    
+    // Check all price alerts against current mark prices, fire SSE events for triggered ones
+    void check_price_alerts() {
+        std::lock_guard<std::mutex> lock(alerts_mutex_);
+        auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        
+        for (auto it = alerts_.begin(); it != alerts_.end(); ) {
+            if (it->triggered) { ++it; continue; }
+            
+            const auto* product = ProductCatalog::instance().get(it->symbol);
+            if (!product || product->mark_price_mnt <= 0) { ++it; continue; }
+            
+            double mark = product->mark_price_mnt;
+            bool fired = (it->direction == AlertDirection::ABOVE && mark >= it->price) ||
+                         (it->direction == AlertDirection::BELOW && mark <= it->price);
+            
+            if (fired) {
+                it->triggered = true;
+                std::string dir_str = (it->direction == AlertDirection::ABOVE) ? "ABOVE" : "BELOW";
+                std::string msg = it->symbol + " reached " + std::to_string(mark) + " MNT (" + dir_str + " " + std::to_string(it->price) + ")";
+                
+                {
+                    std::lock_guard<std::mutex> alock(alert_events_mutex_);
+                    alert_events_.push_back({it->id, it->user_id, it->symbol, it->price, mark, dir_str, msg, now});
+                }
+                
+                std::cout << "[ALERT] " << msg << " (user: " << it->user_id << ")" << std::endl;
+                
+                // Remove triggered alert
+                it = alerts_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    
+private:
     
     void setup_routes();
     
@@ -349,6 +524,25 @@ private:
 inline void HttpServer::start() {
     server_ = std::make_unique<httplib::Server>();
     setup_routes();
+    
+    // Wire circuit breaker to SSE
+    CircuitBreakerManager::instance().set_halt_callback(
+        [this](const std::string& symbol, CircuitState state) {
+            std::string state_str;
+            std::string msg;
+            switch (state) {
+                case CircuitState::HALTED: state_str = "HALTED"; msg = "Trading halted"; break;
+                case CircuitState::LIMIT_UP: state_str = "LIMIT_UP"; msg = "Limit up"; break;
+                case CircuitState::LIMIT_DOWN: state_str = "LIMIT_DOWN"; msg = "Limit down"; break;
+                default: state_str = "NORMAL"; msg = "Trading resumed"; break;
+            }
+            push_circuit_breaker_event(symbol, state_str, msg);
+        });
+    
+    // Wire trade callback for hedge exposure tracking
+    MatchingEngine::instance().set_trade_callback([](const Trade& trade) {
+        ExposureTracker::instance().check_and_log(trade.symbol);
+    });
     
     running_ = true;
     server_thread_ = std::thread([this]() {
@@ -367,9 +561,19 @@ inline void HttpServer::stop() {
 }
 
 inline void HttpServer::setup_routes() {
-    // CORS headers
+    // CORS headers + Rate limiting
     server_->set_pre_routing_handler([](const httplib::Request& req, httplib::Response& res) {
         set_secure_cors_headers(req, res);
+        
+        // Rate limit check (skip for WebSocket upgrades and health checks)
+        if (req.path != "/metrics" && req.path != "/health") {
+            if (!cre::RateLimiter::instance().allow(req.remote_addr)) {
+                res.status = 429;
+                res.set_content("{\"error\":\"Rate limit exceeded\"}", "application/json");
+                return httplib::Server::HandlerResponse::Handled;
+            }
+        }
+        
         return httplib::Server::HandlerResponse::Unhandled;
     });
     
@@ -413,6 +617,13 @@ inline void HttpServer::setup_routes() {
             auto body = json::parse(req.body);
             std::string username = body["username"];
             std::string password = body["password"];
+            
+            // Rate limit login attempts (5 per minute per username)
+            if (!cre::RateLimiter::instance().allow_login(username)) {
+                res.status = 429;
+                res.set_content(R"({"error":"Too many login attempts. Try again later."})", "application/json");
+                return;
+            }
             
             auto token = Auth::instance().login(username, password);
             if (!token) {
@@ -524,6 +735,66 @@ inline void HttpServer::setup_routes() {
         }
     });
     
+    // Upload KYC document (multipart form data)
+    server_->Post("/api/kyc/document", [](const httplib::Request& req, httplib::Response& res) {
+        std::string auth_header = req.get_header_value("Authorization");
+        std::string token = Auth::instance().extract_token(auth_header);
+        auto payload = Auth::instance().verify_token(token);
+        
+        if (!payload) {
+            res.status = 401;
+            res.set_content(R"({"error":"Unauthorized"})", "application/json");
+            return;
+        }
+        
+        // Check for multipart file
+        if (!req.has_file("document")) {
+            res.status = 400;
+            res.set_content(R"({"error":"No document file provided"})", "application/json");
+            return;
+        }
+        
+        auto file = req.get_file_value("document");
+        std::string doc_type = "national_id";
+        if (req.has_file("type")) {
+            doc_type = req.get_file_value("type").content;
+        } else if (req.has_param("type")) {
+            doc_type = req.get_param_value("type");
+        }
+        
+        // Validate file size (max 10MB)
+        if (file.content.size() > 10 * 1024 * 1024) {
+            res.status = 400;
+            res.set_content(R"({"error":"File too large, max 10MB"})", "application/json");
+            return;
+        }
+        
+        // Save to data/kyc/<user_id>/
+        std::string dir = "data/kyc/" + payload->user_id;
+        std::filesystem::create_directories(dir);
+        std::string filename = doc_type + "_" + std::to_string(
+            std::chrono::system_clock::now().time_since_epoch().count());
+        // Preserve original extension
+        auto dot = file.filename.rfind('.');
+        if (dot != std::string::npos) {
+            filename += file.filename.substr(dot);
+        }
+        std::string filepath = dir + "/" + filename;
+        
+        std::ofstream ofs(filepath, std::ios::binary);
+        ofs.write(file.content.data(), file.content.size());
+        ofs.close();
+        
+        KYCService::instance().add_document(payload->user_id, doc_type, filepath);
+        
+        res.set_content(json{
+            {"success", true},
+            {"document_type", doc_type},
+            {"filename", filename},
+            {"message", "Document uploaded successfully"}
+        }.dump(), "application/json");
+    });
+    
     // Get KYC status
     server_->Get("/api/kyc/status", [](const httplib::Request& req, httplib::Response& res) {
         std::string auth_header = req.get_header_value("Authorization");
@@ -587,6 +858,8 @@ inline void HttpServer::setup_routes() {
             bool approved = KYCService::instance().approve_kyc(user_id, "admin");
             
             if (approved) {
+                Database::instance().log_event("kyc_approved", user_id,
+                    json{{"admin", "admin"}, {"status", "approved"}}.dump());
                 res.set_content(json{
                     {"success", true},
                     {"user_id", user_id},
@@ -614,6 +887,8 @@ inline void HttpServer::setup_routes() {
             bool rejected = KYCService::instance().reject_kyc(user_id, "admin", reason);
             
             if (rejected) {
+                Database::instance().log_event("kyc_rejected", user_id,
+                    json{{"admin", "admin"}, {"reason", reason}}.dump());
                 res.set_content(json{
                     {"success", true},
                     {"user_id", user_id},
@@ -732,49 +1007,173 @@ inline void HttpServer::setup_routes() {
         res.set_chunked_content_provider("text/event-stream",
             [this, user_id](size_t offset, httplib::DataSink& sink) {
                 int tick_count = 0;
+                auto last_slow_update = std::chrono::steady_clock::now();
+                // Per-client price cache for diff detection
+                std::unordered_map<std::string, double> prev_marks;
                 
-                // Stream quotes every 500ms
+                // Push-on-change: stream quotes when prices change
                 while (true) {
                     tick_count++;
                     
-                    // ===== QUOTES EVENT (every 500ms) =====
-                    json quotes = json::array();
+                    // GATE: Wait for price change signal or 250ms heartbeat timeout
+                    bool has_price_change = false;
+                    {
+                        std::unique_lock<std::mutex> lk(price_cv_mutex_);
+                        price_cv_.wait_for(lk, std::chrono::milliseconds(250), [this] {
+                            return price_changed_.load(std::memory_order_acquire);
+                        });
+                        if (price_changed_.load(std::memory_order_acquire)) {
+                            // Debounce: wait 20ms to batch concurrent symbol updates
+                            lk.unlock();
+                            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+                            has_price_change = true;
+                            price_changed_.store(false, std::memory_order_release);
+                        }
+                    }
                     
+                    auto now = std::chrono::steady_clock::now();
+                    bool do_slow_update = (now - last_slow_update) >= std::chrono::milliseconds(1000);
+                    if (do_slow_update) last_slow_update = now;
+                    
+                    if (!has_price_change) {
+                        // Timeout with no price change — send heartbeat comment
+                        std::string heartbeat = ": heartbeat\n\n";
+                        if (!sink.write(heartbeat.data(), heartbeat.size())) {
+                            break;
+                        }
+                        // Still do slow updates (positions/orders/trades) on timeout
+                        if (!do_slow_update) continue;
+                    }
+                    
+                    // Drain circuit breaker events
+                    {
+                        std::lock_guard<std::mutex> cb_lock(cb_events_mutex_);
+                        for (const auto& evt : cb_events_) {
+                            json cb_data = {
+                                {"symbol", evt.symbol},
+                                {"state", evt.state},
+                                {"message", evt.message},
+                                {"timestamp", evt.timestamp}
+                            };
+                            std::string sse = "event: circuit_breaker\ndata: " + cb_data.dump() + "\n\n";
+                            if (!sink.write(sse.data(), sse.size())) break;
+                        }
+                        cb_events_.clear();
+                    }
+                    
+                    // Check and drain price alert events
+                    if (has_price_change) {
+                        check_price_alerts();
+                    }
+                    {
+                        std::lock_guard<std::mutex> al_lock(alert_events_mutex_);
+                        for (const auto& evt : alert_events_) {
+                            // Only send alerts to the owning user (or all if no user auth)
+                            if (!user_id.empty() && evt.user_id != user_id) continue;
+                            json alert_data = {
+                                {"alert_id", evt.alert_id},
+                                {"symbol", evt.symbol},
+                                {"alert_price", evt.alert_price},
+                                {"current_price", evt.current_price},
+                                {"direction", evt.direction},
+                                {"message", evt.message},
+                                {"timestamp", evt.timestamp}
+                            };
+                            std::string sse = "event: alert\ndata: " + alert_data.dump() + "\n\n";
+                            if (!sink.write(sse.data(), sse.size())) break;
+                        }
+                        // Clear only after all clients have had a chance — use per-user tracking
+                        // For simplicity, clear after broadcast (alerts are one-shot)
+                        alert_events_.clear();
+                    }
+                    
+                    if (has_price_change) {
+                    
+                    if (tick_count == 1) {
+                    // ===== INITIAL MARKET SNAPSHOT (first tick only) =====
+                    json markets = json::array();
                     ProductCatalog::instance().for_each([&](const Product& p) {
                         if (!p.is_active) return;
-                        
-                        auto& engine = MatchingEngine::instance();
-                        auto [bid, ask] = engine.get_bbo(p.symbol);
-                        
+                        auto [bid, ask] = MatchingEngine::instance().get_bbo(p.symbol);
                         double bid_price = get_mnt_or(bid, p.mark_price_mnt * 0.999);
                         double ask_price = get_mnt_or(ask, p.mark_price_mnt * 1.001);
                         double mid_price = (bid_price + ask_price) / 2;
-                        
-                        // Feed into candle store for all timeframes
                         for (int tf : CandleStore::TIMEFRAMES) {
                             CandleStore::instance().update(p.symbol, mid_price, tf);
                         }
-                        
-                        quotes.push_back({
+                        auto stats = CandleStore::instance().get_24h_stats(p.symbol);
+                        markets.push_back({
                             {"symbol", p.symbol},
                             {"bid", bid_price},
                             {"ask", ask_price},
-                            {"mid", mid_price},
-                            {"spread", ask_price - bid_price},
                             {"mark", p.mark_price_mnt},
-                            {"funding", p.funding_rate},
+                            {"last", p.last_price_mnt > 0 ? p.last_price_mnt : p.mark_price_mnt},
+                            {"category", (int)p.category},
+                            {"description", p.description},
+                            {"high_24h", stats.high24h > 0 ? stats.high24h : p.mark_price_mnt * 1.01},
+                            {"low_24h", stats.low24h > 0 ? stats.low24h : p.mark_price_mnt * 0.99},
+                            {"volume_24h", stats.volume24h},
+                            {"change_24h", stats.low24h > 0 ?
+                                ((p.mark_price_mnt - stats.low24h) / stats.low24h) * 100.0 : 0.0},
+                            {"funding_rate", p.funding_rate},
                             {"timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(
                                 std::chrono::system_clock::now().time_since_epoch()).count()}
                         });
+                        prev_marks[p.symbol] = p.mark_price_mnt;
                     });
-                    
-                    std::string quotes_event = "event: quotes\ndata: " + quotes.dump() + "\n\n";
-                    if (!sink.write(quotes_event.data(), quotes_event.size())) {
-                        break; // Client disconnected
+                    std::string market_event = "event: market\ndata: " + markets.dump() + "\n\n";
+                    if (!sink.write(market_event.data(), market_event.size())) {
+                        break;
+                    }
+                    } else {
+                    // ===== TICKER EVENTS (individual symbol updates) =====
+                    ProductCatalog::instance().for_each([&](const Product& p) {
+                        if (!p.is_active) return;
+                        auto [bid, ask] = MatchingEngine::instance().get_bbo(p.symbol);
+                        double bid_price = get_mnt_or(bid, p.mark_price_mnt * 0.999);
+                        double ask_price = get_mnt_or(ask, p.mark_price_mnt * 1.001);
+                        double mid_price = (bid_price + ask_price) / 2;
+                        for (int tf : CandleStore::TIMEFRAMES) {
+                            CandleStore::instance().update(p.symbol, mid_price, tf);
+                        }
+                        // Compute 24h stats periodically (every ~5s to reduce CPU)
+                        auto stats = (tick_count % 20 == 0) ? 
+                            CandleStore::instance().get_24h_stats(p.symbol) :
+                            CandleStore::Stats24h{};
+                        double change_24h = stats.low24h > 0 ?
+                            ((p.mark_price_mnt - stats.low24h) / stats.low24h) * 100.0 : 0.0;
+                        
+                        json ticker = {
+                            {"symbol", p.symbol},
+                            {"bid", bid_price},
+                            {"ask", ask_price},
+                            {"mark", p.mark_price_mnt},
+                            {"last", p.last_price_mnt > 0 ? p.last_price_mnt : p.mark_price_mnt},
+                            {"timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::system_clock::now().time_since_epoch()).count()}
+                        };
+                        // Include 24h stats when computed
+                        if (stats.high24h > 0) {
+                            ticker["high_24h"] = stats.high24h;
+                            ticker["low_24h"] = stats.low24h;
+                            ticker["volume_24h"] = stats.volume24h;
+                            ticker["change_24h"] = change_24h;
+                        }
+                        std::string ticker_event = "event: ticker\ndata: " + ticker.dump() + "\n\n";
+                        sink.write(ticker_event.data(), ticker_event.size());
+                        prev_marks[p.symbol] = p.mark_price_mnt;
+                    });
                     }
                     
-                    // ===== POSITIONS EVENT (every 1s for performance) =====
-                    if (!user_id.empty() && (tick_count % 2 == 0)) {
+                    } // end if (has_price_change)
+                    
+                    // Timer-based hedge exposure check (every 60s)
+                    if (do_slow_update) {
+                        ExposureTracker::instance().check_all();
+                    }
+                    
+                    // ===== POSITIONS EVENT (every ~1s) =====
+                    if (!user_id.empty() && do_slow_update) {
                         auto& pm = PositionManager::instance();
                         auto positions = pm.get_all_positions(user_id);
                         
@@ -790,29 +1189,30 @@ inline void HttpServer::setup_routes() {
                             auto* product = ProductCatalog::instance().get(pos.symbol);
                             
                             double exit_price = pos.is_long() ?
-                                get_mnt_or(bid, product ? product->mark_price_mnt * 0.999 : pos.entry_price) :
-                                get_mnt_or(ask, product ? product->mark_price_mnt * 1.001 : pos.entry_price);
+                                get_mnt_or(bid, product ? product->mark_price_mnt * 0.999 : from_micromnt(pos.entry_price)) :
+                                get_mnt_or(ask, product ? product->mark_price_mnt * 1.001 : from_micromnt(pos.entry_price));
                             
                             // Calculate real-time P&L
+                            double ep = from_micromnt(pos.entry_price);
                             double pnl = pos.is_long() ?
-                                (exit_price - pos.entry_price) * std::abs(pos.size) :
-                                (pos.entry_price - exit_price) * std::abs(pos.size);
+                                (exit_price - ep) * std::abs(pos.size) :
+                                (ep - exit_price) * std::abs(pos.size);
                             
-                            double pnl_pct = pos.entry_price > 0 ? 
-                                (pnl / (pos.entry_price * std::abs(pos.size))) * 100.0 : 0.0;
+                            double pnl_pct = ep > 0 ? 
+                                (pnl / (ep * std::abs(pos.size))) * 100.0 : 0.0;
                             
                             total_unrealized += pnl;
-                            total_margin += pos.margin_used;
+                            total_margin += from_micromnt(pos.margin_used);
                             
                             pos_arr.push_back({
                                 {"symbol", pos.symbol},
                                 {"side", pos.is_long() ? "long" : "short"},
                                 {"size", std::abs(pos.size)},
-                                {"entry_price", pos.entry_price},
+                                {"entry_price", ep},
                                 {"current_price", exit_price},
                                 {"unrealized_pnl", pnl},
                                 {"pnl_percent", pnl_pct},
-                                {"margin_used", pos.margin_used},
+                                {"margin_used", from_micromnt(pos.margin_used)},
                                 {"liquidation_price", product ? pos.liquidation_price(product->margin_rate) : 0.0}
                             });
                         }
@@ -863,12 +1263,28 @@ inline void HttpServer::setup_routes() {
                             if (!sink.write(orders_event.data(), orders_event.size())) {
                                 break;
                             }
+                            
+                            // ===== ACCOUNT EVENT (balance/equity summary) =====
+                            json account_data = {
+                                {"user_id", user_id},
+                                {"balance", balance},
+                                {"equity", equity},
+                                {"margin_used", total_margin},
+                                {"available", equity - total_margin},
+                                {"margin_level", total_margin > 0 ? (equity / total_margin) * 100.0 : 0.0},
+                                {"unrealized_pnl", total_unrealized},
+                                {"open_positions", static_cast<int>(pos_arr.size())}
+                            };
+                            std::string account_event = "event: account\ndata: " + account_data.dump() + "\n\n";
+                            if (!sink.write(account_event.data(), account_event.size())) {
+                                break;
+                            }
                         }
                     }
                     
 
-                    // ===== TRADES EVENT (every 1s) =====
-                    if (tick_count % 2 == 0) {
+                    // ===== TRADES EVENT (every ~1s) =====
+                    if (do_slow_update) {
                         json trades_arr = json::array();
                         
                         for (const auto& symbol : {"XAU-MNT-PERP", "BTC-MNT-PERP", "ETH-MNT-PERP"}) {
@@ -886,15 +1302,15 @@ inline void HttpServer::setup_routes() {
                         }
                         
                         if (!trades_arr.empty()) {
-                            std::string trades_event = "event: trades\ndata: " + trades_arr.dump() + "\n\n";
+                            std::string trades_event = "event: trade\ndata: " + trades_arr.dump() + "\n\n";
                             if (!sink.write(trades_event.data(), trades_event.size())) {
                                 break;
                             }
                         }
                     }
                     
-                    // ===== DEPTH EVENT (every 500ms) =====
-                    {
+                    // ===== DEPTH EVENT (on every price change) =====
+                    if (has_price_change) {
                         json depth_data = json::object();
                         
                         for (const auto& symbol : {"XAU-MNT-PERP", "BTC-MNT-PERP"}) {
@@ -917,13 +1333,12 @@ inline void HttpServer::setup_routes() {
                             };
                         }
                         
-                        std::string depth_event = "event: depth\ndata: " + depth_data.dump() + "\n\n";
+                        std::string depth_event = "event: orderbook\ndata: " + depth_data.dump() + "\n\n";
                         if (!sink.write(depth_event.data(), depth_event.size())) {
                             break;
                         }
                     }
 
-                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
                 }
                 return false; // Connection closed
             });
@@ -1020,6 +1435,74 @@ inline void HttpServer::setup_routes() {
             {"version", "1.0.0"},
             {"uptime_seconds", uptime}
         }).dump(), "application/json");
+    });
+    
+    // ==================== API DOCUMENTATION ====================
+    
+    server_->Get("/api/docs", [](const httplib::Request&, httplib::Response& res) {
+        json docs = {
+            {"name", "CRE.mn Exchange API"},
+            {"version", "1.0.0"},
+            {"base_url", "/api"},
+            {"endpoints", json::array({
+                // Public endpoints (no auth)
+                json{{"method", "GET"}, {"path", "/api/health"}, {"description", "Server health check"}, {"auth", false}},
+                json{{"method", "GET"}, {"path", "/api/docs"}, {"description", "API documentation"}, {"auth", false}},
+                json{{"method", "GET"}, {"path", "/api/products"}, {"description", "List all active products"}, {"auth", false}},
+                json{{"method", "GET"}, {"path", "/api/product/:symbol"}, {"description", "Get product details"}, {"auth", false},
+                     {"params", json::array({json{{"name", "symbol"}, {"in", "path"}, {"required", true}, {"example", "XAU-MNT-PERP"}}})}},
+                json{{"method", "GET"}, {"path", "/api/stream"}, {"description", "SSE stream (market data, trades, account)"}, {"auth", false}},
+                json{{"method", "GET"}, {"path", "/api/candles/:symbol"}, {"description", "OHLCV candle data"}, {"auth", false},
+                     {"params", json::array({
+                         json{{"name", "symbol"}, {"in", "path"}, {"required", true}},
+                         json{{"name", "timeframe"}, {"in", "query"}, {"required", false}, {"default", "60"}, {"description", "Seconds per candle"}}
+                     })}},
+                json{{"method", "GET"}, {"path", "/api/book/:symbol"}, {"description", "Order book depth"}, {"auth", false}},
+                json{{"method", "GET"}, {"path", "/api/trades/:symbol"}, {"description", "Recent trades"}, {"auth", false}},
+                json{{"method", "GET"}, {"path", "/api/fx/rates"}, {"description", "Current FX rates"}, {"auth", false}},
+                
+                // Auth endpoints
+                json{{"method", "POST"}, {"path", "/api/auth/request"}, {"description", "Request OTP login code"}, {"auth", false},
+                     {"body", json{{"phone", "+976XXXXXXXX"}}}},
+                json{{"method", "POST"}, {"path", "/api/auth/verify"}, {"description", "Verify OTP and get JWT"}, {"auth", false},
+                     {"body", json{{"phone", "+976XXXXXXXX"}, {"code", "123456"}}}},
+                
+                // Authenticated endpoints
+                json{{"method", "GET"}, {"path", "/api/account"}, {"description", "Get account balance and positions"}, {"auth", true}},
+                json{{"method", "GET"}, {"path", "/api/positions"}, {"description", "Get open positions"}, {"auth", true}},
+                json{{"method", "GET"}, {"path", "/api/orders"}, {"description", "Get open orders"}, {"auth", true}},
+                json{{"method", "GET"}, {"path", "/api/fills"}, {"description", "Get user trade fills"}, {"auth", true},
+                     {"params", json{{"limit", "Max results (default 50, max 200)"}}}},
+                json{{"method", "POST"}, {"path", "/api/order"}, {"description", "Place new order"}, {"auth", true},
+                     {"body", json{{"symbol", "XAU-MNT-PERP"}, {"side", "buy"}, {"type", "limit"}, {"quantity", 1.0}, {"price", 8500000}}}},
+                json{{"method", "DELETE"}, {"path", "/api/order/:id"}, {"description", "Cancel order"}, {"auth", true}},
+                json{{"method", "POST"}, {"path", "/api/deposit"}, {"description", "Create deposit request (QPay)"}, {"auth", true},
+                     {"body", json{{"amount", 100000}}}},
+                json{{"method", "POST"}, {"path", "/api/withdraw"}, {"description", "Request withdrawal"}, {"auth", true},
+                     {"body", json{{"amount", 50000}, {"bank_account", "XXXX"}}}},
+                json{{"method", "GET"}, {"path", "/api/insurance"}, {"description", "Insurance fund status"}, {"auth", false}},
+                
+                // Price alerts
+                json{{"method", "POST"}, {"path", "/api/alerts"}, {"description", "Create price alert"}, {"auth", true},
+                     {"body", json{{"symbol", "XAU-MNT-PERP"}, {"price", 9000000}, {"direction", "ABOVE"}, {"phone", "(optional)"}}}},
+                json{{"method", "GET"}, {"path", "/api/alerts"}, {"description", "List user's active alerts"}, {"auth", true}},
+                json{{"method", "DELETE"}, {"path", "/api/alerts/:id"}, {"description", "Delete a price alert"}, {"auth", true}},
+                
+                // Saved workspaces
+                json{{"method", "POST"}, {"path", "/api/workspaces"}, {"description", "Save workspace layout"}, {"auth", true},
+                     {"body", json{{"name", "My Layout"}, {"layout", json{{"selected_symbol", "XAU-MNT-PERP"}, {"visible_panels", json::array({"chart","orderbook","positions"})}}}}}},
+                json{{"method", "GET"}, {"path", "/api/workspaces"}, {"description", "List saved workspaces"}, {"auth", true}},
+                json{{"method", "DELETE"}, {"path", "/api/workspaces/:id"}, {"description", "Delete a workspace"}, {"auth", true}},
+                
+                // Admin endpoints
+                json{{"method", "GET"}, {"path", "/api/admin/users"}, {"description", "List all users"}, {"auth", true}, {"admin", true}},
+                json{{"method", "GET"}, {"path", "/api/admin/kyc"}, {"description", "Pending KYC applications"}, {"auth", true}, {"admin", true}},
+                json{{"method", "POST"}, {"path", "/api/admin/kyc/:id/approve"}, {"description", "Approve KYC"}, {"auth", true}, {"admin", true}},
+                json{{"method", "GET"}, {"path", "/api/health/detailed"}, {"description", "Detailed system health"}, {"auth", true}, {"admin", true}}
+            })}
+        };
+        
+        res.set_content(docs.dump(2), "application/json");
     });
     // ==================== PRODUCTS ====================
     
@@ -1349,7 +1832,13 @@ inline void HttpServer::setup_routes() {
         // Next funding time (every 8 hours: 00:00, 08:00, 16:00 UTC)
         auto now = std::chrono::system_clock::now();
         auto time = std::chrono::system_clock::to_time_t(now);
-        std::tm* utc = std::gmtime(&time);
+        std::tm utc_buf{};
+#ifdef _WIN32
+        gmtime_s(&utc_buf, &time);
+#else
+        gmtime_r(&time, &utc_buf);
+#endif
+        std::tm* utc = &utc_buf;
         
         // Calculate hours until next funding
         int current_hour = utc->tm_hour;
@@ -1380,6 +1869,31 @@ inline void HttpServer::setup_routes() {
         });
         
         res.set_content(rates.dump(), "application/json");
+    });
+
+    // GET /api/funding-rates/history - Historical funding payments
+    server_->Get("/api/funding-rates/history", [](const httplib::Request& req, httplib::Response& res) {
+        std::string symbol = req.get_param_value("symbol");
+        int limit = 50;
+        if (req.has_param("limit")) {
+            limit = std::min(200, std::max(1, std::stoi(req.get_param_value("limit"))));
+        }
+        
+        auto records = Database::instance().get_funding_history(symbol, limit);
+        
+        json result = json::array();
+        for (const auto& r : records) {
+            result.push_back({
+                {"user_id", r.user_id},
+                {"symbol", r.symbol},
+                {"position_size", r.position_size},
+                {"funding_rate", r.funding_rate},
+                {"payment", r.payment},
+                {"timestamp", r.timestamp}
+            });
+        }
+        
+        res.set_content(result.dump(), "application/json");
     });
 
     // ==================== ORDER BOOK ====================
@@ -1417,6 +1931,13 @@ inline void HttpServer::setup_routes() {
                 res.set_content(json{{"error", auth.error}}.dump(), "application/json");
                 return;
             }
+            
+            // Trading rate limit (30 req/min per IP)
+            if (!cre::RateLimiter::instance().allow_trading(req.remote_addr)) {
+                res.status = 429;
+                res.set_content(R"({"error":"Trading rate limit exceeded"})", "application/json");
+                return;
+            }
 
             auto body = json::parse(req.body);
 
@@ -1428,6 +1949,9 @@ inline void HttpServer::setup_routes() {
             double price = body.value("price", 0.0);
             double quantity = body["quantity"];
             std::string client_id = body.value("client_id", "");
+            double stop_price_val = body.value("stop_price", 0.0);
+            double stop_loss = body.value("stop_loss", 0.0);
+            double take_profit = body.value("take_profit", 0.0);
 
             // SECURITY FIX: Input validation
             auto v_symbol = validate_symbol(symbol);
@@ -1485,9 +2009,36 @@ inline void HttpServer::setup_routes() {
             else if (type_str == "FOK") type = OrderType::FOK;
             else if (type_str == "POST_ONLY") type = OrderType::POST_ONLY;
 
+            // Support STOP_LIMIT type
+            if (type_str == "STOP_LIMIT") type = OrderType::STOP_LIMIT;
+
             auto trades = MatchingEngine::instance().submit_order(
-                symbol, user_id, side, type, to_micromnt(price), quantity, client_id
+                symbol, user_id, side, type, to_micromnt(price), quantity, client_id,
+                to_micromnt(stop_price_val)
             );
+            
+            // If trades filled and SL/TP requested, place protective orders
+            json sl_order = nullptr;
+            json tp_order = nullptr;
+            if (!trades.empty()) {
+                Side opposite = (side == Side::BUY) ? Side::SELL : Side::BUY;
+                if (stop_loss > 0.0) {
+                    MatchingEngine::instance().submit_order(
+                        symbol, user_id, opposite, OrderType::STOP_LIMIT,
+                        to_micromnt(stop_loss), quantity, "SL-auto",
+                        to_micromnt(stop_loss)
+                    );
+                    sl_order = json{{"price", stop_loss}, {"side", opposite == Side::BUY ? "BUY" : "SELL"}};
+                }
+                if (take_profit > 0.0) {
+                    MatchingEngine::instance().submit_order(
+                        symbol, user_id, opposite, OrderType::STOP_LIMIT,
+                        to_micromnt(take_profit), quantity, "TP-auto",
+                        to_micromnt(take_profit)
+                    );
+                    tp_order = json{{"price", take_profit}, {"side", opposite == Side::BUY ? "BUY" : "SELL"}};
+                }
+            }
 
             json trade_arr = json::array();
             for (const auto& t : trades) {
@@ -1497,7 +2048,9 @@ inline void HttpServer::setup_routes() {
             res.set_content(json{
                 {"success", true},
                 {"user_id", user_id},
-                {"trades", trade_arr}
+                {"trades", trade_arr},
+                {"stop_loss", sl_order},
+                {"take_profit", tp_order}
             }.dump(), "application/json");
 
         } catch (const std::exception& e) {
@@ -1665,31 +2218,32 @@ inline void HttpServer::setup_routes() {
             auto [bid, ask] = MatchingEngine::instance().get_bbo(pos.symbol);
             auto* product = ProductCatalog::instance().get(pos.symbol);
             
+            double ep = from_micromnt(pos.entry_price);
             double current_price = pos.is_long() ?
-                get_mnt_or(bid, product ? product->mark_price_mnt * 0.999 : pos.entry_price) :
-                get_mnt_or(ask, product ? product->mark_price_mnt * 1.001 : pos.entry_price);
+                get_mnt_or(bid, product ? product->mark_price_mnt * 0.999 : ep) :
+                get_mnt_or(ask, product ? product->mark_price_mnt * 1.001 : ep);
             
             // Calculate real-time P&L
             double pnl = pos.is_long() ?
-                (current_price - pos.entry_price) * std::abs(pos.size) :
-                (pos.entry_price - current_price) * std::abs(pos.size);
+                (current_price - ep) * std::abs(pos.size) :
+                (ep - current_price) * std::abs(pos.size);
             
-            double pnl_pct = pos.entry_price > 0 ?
-                (pnl / (pos.entry_price * std::abs(pos.size))) * 100.0 : 0.0;
+            double pnl_pct = ep > 0 ?
+                (pnl / (ep * std::abs(pos.size))) * 100.0 : 0.0;
             
             total_unrealized += pnl;
-            total_margin += pos.margin_used;
+            total_margin += from_micromnt(pos.margin_used);
             
             pos_arr.push_back({
                 {"symbol", pos.symbol},
                 {"side", pos.is_long() ? "long" : "short"},
                 {"size", std::abs(pos.size)},
-                {"entry_price", pos.entry_price},
+                {"entry_price", ep},
                 {"current_price", current_price},
                 {"unrealized_pnl", pnl},
                 {"pnl_percent", pnl_pct},
-                {"margin_used", pos.margin_used},
-                {"realized_pnl", pos.realized_pnl},
+                {"margin_used", from_micromnt(pos.margin_used)},
+                {"realized_pnl", from_micromnt(pos.realized_pnl)},
                 {"opened_at", pos.opened_at}
             });
         }
@@ -1741,13 +2295,16 @@ inline void HttpServer::setup_routes() {
             std::string symbol = body["symbol"];
             std::string side_str = body.value("side", "long");
             double size = body["size"];
+            double stop_loss = body.value("stop_loss", 0.0);
+            double take_profit = body.value("take_profit", 0.0);
             
             // Get current quote for entry price
             auto [bid, ask] = MatchingEngine::instance().get_bbo(symbol);
             auto* product = ProductCatalog::instance().get(symbol);
             
+            bool is_long = (side_str == "long" || side_str == "buy");
             double entry_price;
-            if (side_str == "long" || side_str == "buy") {
+            if (is_long) {
                 entry_price = get_mnt_or(ask, product ? product->mark_price_mnt * 1.001 : 0);
             } else {
                 entry_price = get_mnt_or(bid, product ? product->mark_price_mnt * 0.999 : 0);
@@ -1757,6 +2314,33 @@ inline void HttpServer::setup_routes() {
             auto pos = PositionManager::instance().open_position(user_id, symbol, size, entry_price);
             
             if (pos) {
+                json sl_order = nullptr;
+                json tp_order = nullptr;
+                
+                // Place stop-loss order (sell for long, buy for short)
+                if (stop_loss > 0.0) {
+                    Side sl_side = is_long ? Side::SELL : Side::BUY;
+                    MatchingEngine::instance().submit_order(
+                        symbol, user_id, sl_side, OrderType::STOP_LIMIT,
+                        to_micromnt(stop_loss), std::abs(pos->size),
+                        "SL-" + std::to_string(pos->size > 0 ? 1 : -1),
+                        to_micromnt(stop_loss)
+                    );
+                    sl_order = json{{"price", stop_loss}, {"side", is_long ? "SELL" : "BUY"}};
+                }
+                
+                // Place take-profit order (sell for long, buy for short)
+                if (take_profit > 0.0) {
+                    Side tp_side = is_long ? Side::SELL : Side::BUY;
+                    MatchingEngine::instance().submit_order(
+                        symbol, user_id, tp_side, OrderType::STOP_LIMIT,
+                        to_micromnt(take_profit), std::abs(pos->size),
+                        "TP-" + std::to_string(pos->size > 0 ? 1 : -1),
+                        to_micromnt(take_profit)
+                    );
+                    tp_order = json{{"price", take_profit}, {"side", is_long ? "SELL" : "BUY"}};
+                }
+                
                 // Trigger auto-hedge check asynchronously
                 std::thread([]() {
                     HedgingEngine::instance().check_and_hedge();
@@ -1766,7 +2350,9 @@ inline void HttpServer::setup_routes() {
                     {"success", true},
                     {"position", position_to_json(*pos)},
                     {"balance", PositionManager::instance().get_balance(user_id)},
-                    {"hedge_triggered", product && product->requires_hedge()}
+                    {"hedge_triggered", product && product->requires_hedge()},
+                    {"stop_loss", sl_order},
+                    {"take_profit", tp_order}
                 }.dump(), "application/json");
             } else {
                 res.status = 400;
@@ -1928,8 +2514,8 @@ inline void HttpServer::setup_routes() {
         
         for (const auto& pos : positions) {
             if (std::abs(pos.size) > 0.0001) {  // Position is open
-                total_margin += pos.margin_used;
-                total_unrealized_pnl += pos.unrealized_pnl;
+                total_margin += from_micromnt(pos.margin_used);
+                total_unrealized_pnl += from_micromnt(pos.unrealized_pnl);
                 open_positions++;
             }
         }
@@ -2105,6 +2691,7 @@ inline void HttpServer::setup_routes() {
 
     // Customer: Query account balance from ledger (using SafeLedger)
     server_->Get("/api/account/balance", [](const httplib::Request& req, httplib::Response& res) {
+        auto auth = require_auth(req, res); if (!auth.success) return;
         std::string account = req.get_param_value("account");
         if (account.empty()) {
             res.status = 400;
@@ -2123,6 +2710,7 @@ inline void HttpServer::setup_routes() {
 
     // Customer: Query account transaction history from ledger (using SafeLedger)
     server_->Get("/api/account/history", [](const httplib::Request& req, httplib::Response& res) {
+        auto auth = require_auth(req, res); if (!auth.success) return;
         std::string account = req.get_param_value("account");
         if (account.empty()) {
             res.status = 400;
@@ -2177,6 +2765,133 @@ inline void HttpServer::setup_routes() {
         }.dump(), "application/json");
     });
     
+    // ==================== LEDGER-CLI REPORTING (shell out to ledger) ====================
+    
+    // GET /api/ledger/balance — Full trial balance (admin only)
+    server_->Get("/api/ledger/balance", [](const httplib::Request& req, httplib::Response& res) {
+        std::string api_key = req.get_header_value("X-Admin-Key");
+        std::string expected = get_admin_key();
+        if (expected.empty() || !constant_time_compare(api_key, expected)) {
+            res.status = 401;
+            res.set_content(R"({"error":"Unauthorized"})", "application/json");
+            return;
+        }
+        
+        std::string result = cre::SafeLedger::instance().get_full_balance();
+        res.set_content(json{
+            {"report", "balance"},
+            {"data", result}
+        }.dump(), "application/json");
+    });
+    
+    // GET /api/ledger/balance/:user_id — Customer balance (admin only)
+    server_->Get(R"(/api/ledger/balance/([^/]+))", [](const httplib::Request& req, httplib::Response& res) {
+        std::string api_key = req.get_header_value("X-Admin-Key");
+        std::string expected = get_admin_key();
+        if (expected.empty() || !constant_time_compare(api_key, expected)) {
+            res.status = 401;
+            res.set_content(R"({"error":"Unauthorized"})", "application/json");
+            return;
+        }
+        
+        std::string user_id = req.matches[1];
+        std::string result = cre::SafeLedger::instance().get_customer_balance(user_id);
+        
+        if (result.find("Error:") == 0) {
+            res.status = 400;
+            res.set_content(json{{"error", result}}.dump(), "application/json");
+            return;
+        }
+        
+        res.set_content(json{
+            {"report", "customer-balance"},
+            {"user_id", user_id},
+            {"data", result}
+        }.dump(), "application/json");
+    });
+    
+    // GET /api/ledger/register/:account — Transaction register (admin only)
+    server_->Get(R"(/api/ledger/register/(.+))", [](const httplib::Request& req, httplib::Response& res) {
+        std::string api_key = req.get_header_value("X-Admin-Key");
+        std::string expected = get_admin_key();
+        if (expected.empty() || !constant_time_compare(api_key, expected)) {
+            res.status = 401;
+            res.set_content(R"({"error":"Unauthorized"})", "application/json");
+            return;
+        }
+        
+        std::string account = req.matches[1];
+        std::string result = cre::SafeLedger::instance().get_register(account);
+        
+        if (result.find("Error:") == 0) {
+            res.status = 400;
+            res.set_content(json{{"error", result}}.dump(), "application/json");
+            return;
+        }
+        
+        res.set_content(json{
+            {"report", "register"},
+            {"account", account},
+            {"data", result}
+        }.dump(), "application/json");
+    });
+    
+    // GET /api/ledger/pnl — Profit & Loss (admin only)
+    server_->Get("/api/ledger/pnl", [](const httplib::Request& req, httplib::Response& res) {
+        std::string api_key = req.get_header_value("X-Admin-Key");
+        std::string expected = get_admin_key();
+        if (expected.empty() || !constant_time_compare(api_key, expected)) {
+            res.status = 401;
+            res.set_content(R"({"error":"Unauthorized"})", "application/json");
+            return;
+        }
+        
+        std::string result = cre::SafeLedger::instance().get_pnl();
+        res.set_content(json{
+            {"report", "pnl"},
+            {"data", result}
+        }.dump(), "application/json");
+    });
+    
+    // GET /api/ledger/equity — Equity report (admin only)
+    server_->Get("/api/ledger/equity", [](const httplib::Request& req, httplib::Response& res) {
+        std::string api_key = req.get_header_value("X-Admin-Key");
+        std::string expected = get_admin_key();
+        if (expected.empty() || !constant_time_compare(api_key, expected)) {
+            res.status = 401;
+            res.set_content(R"({"error":"Unauthorized"})", "application/json");
+            return;
+        }
+        
+        std::string result = cre::SafeLedger::instance().get_equity();
+        res.set_content(json{
+            {"report", "equity"},
+            {"data", result}
+        }.dump(), "application/json");
+    });
+    
+    // GET /api/ledger/verify — Ledger integrity check (admin only)
+    server_->Get("/api/ledger/verify", [](const httplib::Request& req, httplib::Response& res) {
+        std::string api_key = req.get_header_value("X-Admin-Key");
+        std::string expected = get_admin_key();
+        if (expected.empty() || !constant_time_compare(api_key, expected)) {
+            res.status = 401;
+            res.set_content(R"({"error":"Unauthorized"})", "application/json");
+            return;
+        }
+        
+        std::string result = cre::SafeLedger::instance().verify();
+        // If ledger can parse all journals and produce a balance, files are valid
+        // Check for error indicators in output
+        bool ok = !result.empty() && result.find("Error") == std::string::npos 
+                  && result.find("error") == std::string::npos;
+        res.set_content(json{
+            {"report", "verify"},
+            {"valid", ok},
+            {"data", result}
+        }.dump(), "application/json");
+    });
+    
     // ==================== ORDER HISTORY (Persistent) ====================
     
     // SECURITY: JWT authentication required (DEV_MODE allows demo fallback)
@@ -2219,6 +2934,261 @@ inline void HttpServer::setup_routes() {
     });
     
     // ==================== TRADE HISTORY (Persistent) ====================
+    
+    // GET /api/fills - Get user's personal trade fills
+    server_->Get("/api/fills", [](const httplib::Request& req, httplib::Response& res) {
+        auto auth = authenticate(req);
+        std::string user_id;
+        
+        if (auth.success) {
+            user_id = auth.user_id;
+        }
+#ifdef DEV_MODE
+        else {
+            user_id = "demo";
+        }
+#else
+        else {
+            send_unauthorized(res, auth.error);
+            return;
+        }
+#endif
+        
+        int limit = 50;
+        if (req.has_param("limit")) {
+            limit = std::min(std::stoi(req.get_param_value("limit")), 200);
+        }
+        
+        auto fills = Database::instance().get_user_fills(user_id, limit);
+        
+        json arr = json::array();
+        for (const auto& t : fills) {
+            std::string side = (t.buyer_id == user_id) ? "buy" : "sell";
+            arr.push_back({
+                {"id", t.id},
+                {"symbol", t.symbol},
+                {"side", side},
+                {"quantity", t.quantity},
+                {"price", to_mnt(t.price)},
+                {"timestamp", t.timestamp}
+            });
+        }
+        
+        res.set_content(arr.dump(), "application/json");
+    });
+    
+    // ==================== PRICE ALERTS ====================
+    
+    // POST /api/alerts - Create a price alert
+    server_->Post("/api/alerts", [this](const httplib::Request& req, httplib::Response& res) {
+        auto auth = require_auth(req, res); if (!auth.success) return;
+        
+        try {
+            auto body = json::parse(req.body);
+            
+            std::string symbol = body.value("symbol", "");
+            double price = body.value("price", 0.0);
+            std::string direction = body.value("direction", "");
+            std::string phone = body.value("phone", auth.phone);
+            
+            // Validate symbol
+            const auto* product = ProductCatalog::instance().get(symbol);
+            if (!product) {
+                res.status = 400;
+                res.set_content(R"({"error":"Invalid symbol"})", "application/json");
+                return;
+            }
+            
+            // Validate price
+            if (price <= 0) {
+                res.status = 400;
+                res.set_content(R"({"error":"Price must be positive"})", "application/json");
+                return;
+            }
+            
+            // Validate direction
+            AlertDirection dir;
+            if (direction == "ABOVE" || direction == "above") {
+                dir = AlertDirection::ABOVE;
+            } else if (direction == "BELOW" || direction == "below") {
+                dir = AlertDirection::BELOW;
+            } else {
+                res.status = 400;
+                res.set_content(R"({"error":"Direction must be ABOVE or BELOW"})", "application/json");
+                return;
+            }
+            
+            auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            
+            std::string alert_id;
+            {
+                std::lock_guard<std::mutex> lock(alerts_mutex_);
+                
+                // Limit per user: max 50 active alerts
+                int user_count = 0;
+                for (const auto& a : alerts_) {
+                    if (a.user_id == auth.user_id) user_count++;
+                }
+                if (user_count >= 50) {
+                    res.status = 400;
+                    res.set_content(R"({"error":"Maximum 50 active alerts per user"})", "application/json");
+                    return;
+                }
+                
+                alert_id = "ALT-" + std::to_string(++alert_counter_);
+                alerts_.push_back({alert_id, auth.user_id, symbol, price, dir, phone, now, false});
+            }
+            
+            std::cout << "[ALERT] Created " << alert_id << ": " << symbol << " " << direction << " " << price << " (user: " << auth.user_id << ")" << std::endl;
+            
+            res.set_content(json{
+                {"success", true},
+                {"alert_id", alert_id},
+                {"symbol", symbol},
+                {"price", price},
+                {"direction", direction},
+                {"created_at", now}
+            }.dump(), "application/json");
+            
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+    
+    // GET /api/alerts - List user's active alerts
+    server_->Get("/api/alerts", [this](const httplib::Request& req, httplib::Response& res) {
+        auto auth = require_auth(req, res); if (!auth.success) return;
+        
+        json arr = json::array();
+        {
+            std::lock_guard<std::mutex> lock(alerts_mutex_);
+            for (const auto& a : alerts_) {
+                if (a.user_id != auth.user_id) continue;
+                arr.push_back({
+                    {"alert_id", a.id},
+                    {"symbol", a.symbol},
+                    {"price", a.price},
+                    {"direction", a.direction == AlertDirection::ABOVE ? "ABOVE" : "BELOW"},
+                    {"phone", a.user_phone},
+                    {"created_at", a.created_at}
+                });
+            }
+        }
+        
+        res.set_content(arr.dump(), "application/json");
+    });
+    
+    // DELETE /api/alerts/:id - Delete a specific alert
+    server_->Delete(R"(/api/alerts/([^/]+))", [this](const httplib::Request& req, httplib::Response& res) {
+        auto auth = require_auth(req, res); if (!auth.success) return;
+        
+        std::string alert_id = req.matches[1];
+        
+        bool found = false;
+        {
+            std::lock_guard<std::mutex> lock(alerts_mutex_);
+            for (auto it = alerts_.begin(); it != alerts_.end(); ++it) {
+                if (it->id == alert_id && it->user_id == auth.user_id) {
+                    alerts_.erase(it);
+                    found = true;
+                    break;
+                }
+            }
+        }
+        
+        if (found) {
+            res.set_content(json{{"success", true}, {"alert_id", alert_id}}.dump(), "application/json");
+        } else {
+            res.status = 404;
+            res.set_content(R"({"error":"Alert not found"})", "application/json");
+        }
+    });
+    
+    // ==================== SAVED WORKSPACES ====================
+    
+    // POST /api/workspaces - Save a workspace layout
+    server_->Post("/api/workspaces", [](const httplib::Request& req, httplib::Response& res) {
+        auto auth = require_auth(req, res); if (!auth.success) return;
+        
+        try {
+            auto body = json::parse(req.body);
+            
+            std::string name = body.value("name", "");
+            if (name.empty() || name.length() > 100) {
+                res.status = 400;
+                res.set_content(R"({"error":"Name required, max 100 chars"})", "application/json");
+                return;
+            }
+            
+            // Validate layout is valid JSON
+            json layout;
+            if (body.contains("layout") && body["layout"].is_object()) {
+                layout = body["layout"];
+            } else {
+                res.status = 400;
+                res.set_content(R"({"error":"Layout must be a JSON object"})", "application/json");
+                return;
+            }
+            
+            // Max 10 per user
+            int count = Database::instance().count_workspaces(auth.user_id);
+            if (count >= 10) {
+                res.status = 400;
+                res.set_content(R"({"error":"Maximum 10 saved workspaces per user"})", "application/json");
+                return;
+            }
+            
+            int64_t id = Database::instance().save_workspace(auth.user_id, name, layout.dump());
+            
+            res.set_content(json{
+                {"success", true},
+                {"workspace_id", id},
+                {"name", name}
+            }.dump(), "application/json");
+            
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(json{{"error", e.what()}}.dump(), "application/json");
+        }
+    });
+    
+    // GET /api/workspaces - List user's saved workspaces
+    server_->Get("/api/workspaces", [](const httplib::Request& req, httplib::Response& res) {
+        auto auth = require_auth(req, res); if (!auth.success) return;
+        
+        auto workspaces = Database::instance().get_workspaces(auth.user_id);
+        
+        json arr = json::array();
+        for (const auto& w : workspaces) {
+            arr.push_back({
+                {"workspace_id", w.id},
+                {"name", w.name},
+                {"layout", json::parse(w.layout)},
+                {"created_at", w.created_at},
+                {"updated_at", w.updated_at}
+            });
+        }
+        
+        res.set_content(arr.dump(), "application/json");
+    });
+    
+    // DELETE /api/workspaces/:id - Delete a workspace
+    server_->Delete(R"(/api/workspaces/(\d+))", [](const httplib::Request& req, httplib::Response& res) {
+        auto auth = require_auth(req, res); if (!auth.success) return;
+        
+        int64_t workspace_id = std::stoll(std::string(req.matches[1]));
+        
+        bool deleted = Database::instance().delete_workspace(auth.user_id, workspace_id);
+        
+        if (deleted) {
+            res.set_content(json{{"success", true}, {"workspace_id", workspace_id}}.dump(), "application/json");
+        } else {
+            res.status = 404;
+            res.set_content(R"({"error":"Workspace not found"})", "application/json");
+        }
+    });
     
     server_->Get("/api/trades/history", [](const httplib::Request& req, httplib::Response& res) {
         std::string symbol = req.get_param_value("symbol");
@@ -2309,7 +3279,8 @@ inline void HttpServer::setup_routes() {
     
     // ==================== EXPOSURE (Admin) ====================
     
-    server_->Get("/api/exposures", [](const httplib::Request&, httplib::Response& res) {
+    server_->Get("/api/exposures", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
         auto exposures = PositionManager::instance().get_all_exposures();
         
         json exp_arr = json::array();
@@ -2329,7 +3300,8 @@ inline void HttpServer::setup_routes() {
     // ==================== RISK DASHBOARD API ====================
     
     // GET /api/risk/exposure - Current net exposure by symbol
-    server_->Get("/api/risk/exposure", [](const httplib::Request&, httplib::Response& res) {
+    server_->Get("/api/risk/exposure", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
         auto net_exposures = PositionManager::instance().get_all_net_exposures();
         auto all_exposures = PositionManager::instance().get_all_exposures();
         
@@ -2366,7 +3338,8 @@ inline void HttpServer::setup_routes() {
     });
     
     // GET /api/risk/hedges - History of hedge trades
-    server_->Get("/api/risk/hedges", [](const httplib::Request&, httplib::Response& res) {
+    server_->Get("/api/risk/hedges", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
         auto hedges = HedgingEngine::instance().get_hedge_history();
         
         json arr = json::array();
@@ -2386,7 +3359,8 @@ inline void HttpServer::setup_routes() {
     });
     
     // GET /api/risk/pnl - Real-time P&L breakdown
-    server_->Get("/api/risk/pnl", [](const httplib::Request&, httplib::Response& res) {
+    server_->Get("/api/risk/pnl", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
         auto exposures = PositionManager::instance().get_all_exposures();
         
         json result = json::object();
@@ -2434,6 +3408,7 @@ inline void HttpServer::setup_routes() {
     
     // POST /api/rate - Admin endpoint to update rate (testing)
     server_->Post("/api/rate", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
         try {
             auto body = json::parse(req.body);
             double new_rate = body["rate"];
@@ -2444,10 +3419,44 @@ inline void HttpServer::setup_routes() {
                 return;
             }
             
+            // Capture old rate for audit trail
+            auto old = BomFeed::instance().get_rate();
+            double old_rate = old.rate;
+            
             BomFeed::instance().set_rate(new_rate);
+            
+            // Audit log: who changed what, when, from where
+            std::string reason = body.value("reason", "");
+            std::string ip = req.remote_addr;
+            json audit_data = {
+                {"pair", "USD/MNT"},
+                {"old_rate", old_rate},
+                {"new_rate", new_rate},
+                {"reason", reason},
+                {"ip", ip}
+            };
+            Database::instance().log_event("rate_change", admin.admin_id, audit_data.dump());
+            
+            // Ledger-cli audit comment
+            {
+                auto ts = std::chrono::system_clock::now();
+                auto t = std::chrono::system_clock::to_time_t(ts);
+                char buf[32]; std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", std::localtime(&t));
+                const char* ledger_dir = std::getenv("LEDGER_DIR");
+                std::string dir = ledger_dir ? ledger_dir : "ledger";
+                std::ofstream out(dir + "/prices.ledger", std::ios::app);
+                out << "; [AUDIT] " << buf << " Rate changed by " << admin.admin_id
+                    << ": USD/MNT " << old_rate << " -> " << new_rate
+                    << (reason.empty() ? "" : " | Reason: " + reason) << "\n\n";
+            }
+            
+            std::cout << "[AUDIT] Rate changed by " << admin.admin_id
+                      << ": USD/MNT " << old_rate << " → " << new_rate
+                      << (reason.empty() ? "" : " reason: " + reason) << std::endl;
             
             res.set_content(json{
                 {"success", true},
+                {"old_rate", old_rate},
                 {"new_rate", new_rate}
             }.dump(), "application/json");
             
@@ -2458,7 +3467,131 @@ inline void HttpServer::setup_routes() {
     });
     
 
-    // ==================== QPAY WEBHOOKS ====================
+    // GET /api/admin/rate-history - Audit trail of rate changes
+    server_->Get("/api/admin/rate-history", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
+        
+        int limit = 50;
+        if (req.has_param("limit")) {
+            limit = std::min(std::stoi(req.get_param_value("limit")), 200);
+        }
+        
+        auto entries = Database::instance().get_audit_log("rate_change", limit);
+        
+        json arr = json::array();
+        for (const auto& e : entries) {
+            json entry = {
+                {"admin", e.user_id},
+                {"timestamp", e.timestamp}
+            };
+            try {
+                entry["details"] = json::parse(e.data);
+            } catch (...) {
+                entry["details"] = e.data;
+            }
+            arr.push_back(entry);
+        }
+        
+        res.set_content(arr.dump(), "application/json");
+    });
+    
+    // GET /api/admin/hedge-status - View hedge exposure across all products
+    server_->Get("/api/admin/hedge-status", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
+        
+        auto statuses = ExposureTracker::instance().get_all_status();
+        
+        json arr = json::array();
+        for (const auto& s : statuses) {
+            arr.push_back({
+                {"symbol", s.symbol},
+                {"fxcm_symbol", s.fxcm_symbol},
+                {"net_position", s.net_position},
+                {"hedge_position", s.hedge_position},
+                {"unhedged", s.unhedged},
+                {"unhedged_usd", s.unhedged_usd},
+                {"needs_hedge", s.needs_hedge},
+                {"threshold_usd", ExposureTracker::instance().hedge_threshold_usd}
+            });
+        }
+        
+        res.set_content(json{
+            {"hedgeable_products", arr},
+            {"threshold_usd", ExposureTracker::instance().hedge_threshold_usd},
+            {"check_interval_seconds", ExposureTracker::instance().check_interval_seconds}
+        }.dump(), "application/json");
+    });
+    
+    // GET /api/admin/dashboard - One-call exchange health overview
+    server_->Get("/api/admin/dashboard", [](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
+        
+        auto& db = Database::instance();
+        auto& pm = PositionManager::instance();
+        
+        // Server uptime
+        static auto start_time = std::chrono::steady_clock::now();
+        auto uptime = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::steady_clock::now() - start_time).count();
+        
+        // Count open positions (all users)
+        int total_positions = 0;
+        int total_orders = 0;
+        json halted_products = json::array();
+        
+        ProductCatalog::instance().for_each([&](const Product& p) {
+            if (!p.is_active) return;
+            
+            // Check circuit breaker state
+            auto state = CircuitBreakerManager::instance().get_state(p.symbol);
+            if (state != CircuitState::NORMAL) {
+                std::string state_str;
+                switch (state) {
+                    case CircuitState::HALTED: state_str = "HALTED"; break;
+                    case CircuitState::LIMIT_UP: state_str = "LIMIT_UP"; break;
+                    case CircuitState::LIMIT_DOWN: state_str = "LIMIT_DOWN"; break;
+                    default: state_str = "UNKNOWN"; break;
+                }
+                halted_products.push_back({{"symbol", p.symbol}, {"state", state_str}});
+            }
+            
+            // Count open orders per book
+            auto* book = MatchingEngine::instance().get_book(p.symbol);
+            if (book) {
+                total_orders += static_cast<int>(book->bid_count() + book->ask_count());
+            }
+        });
+        
+        // Count positions
+        auto all_exposures = pm.get_all_exposures();
+        for (const auto& exp : all_exposures) {
+            if (std::abs(exp.net_position) > 0.0001) total_positions++;
+        }
+        
+        // Top products by 24h volume
+        auto top_products = db.get_top_products_by_volume(5);
+        json top_arr = json::array();
+        for (const auto& pv : top_products) {
+            top_arr.push_back({{"symbol", pv.symbol}, {"volume_mnt", pv.volume}});
+        }
+        
+        json dashboard = {
+            {"total_users", db.get_total_users()},
+            {"active_users_24h", db.get_active_users_24h()},
+            {"total_volume_24h_mnt", db.get_volume_24h_mnt()},
+            {"total_open_positions", total_positions},
+            {"total_open_orders", total_orders},
+            {"insurance_fund_balance", pm.get_insurance_fund_balance()},
+            {"server_uptime_seconds", uptime},
+            {"products_halted", halted_products},
+            {"top_products_by_volume", top_arr},
+            {"total_trades_all_time", db.get_total_trades()},
+            {"total_volume_all_time_mnt", db.get_total_volume()},
+            {"hedge_threshold_usd", ExposureTracker::instance().hedge_threshold_usd}
+        };
+        
+        res.set_content(dashboard.dump(2), "application/json");
+    });
 
     // QPay payment webhook - receives deposit notifications
     server_->Post("/api/webhook/qpay", [](const httplib::Request& req, httplib::Response& res) {
@@ -2466,12 +3599,14 @@ inline void HttpServer::setup_routes() {
             // Verify signature from QPay
             std::string signature = req.get_header_value("X-QPay-Signature");
             if (signature.empty()) {
-                signature = req.get_header_value("x-qpay-signature");
+                res.status = 401;
+                res.set_content(R"({"error":"Missing QPay signature"})", "application/json");
+                return;
             }
             
             auto& qpay = QPayHandler::instance();
             
-            if (!signature.empty() && !qpay.verify_signature(req.body, signature)) {
+            if (!qpay.verify_signature(req.body, signature)) {
                 res.status = 401;
                 res.set_content(R"({"error":"Invalid signature"})", "application/json");
                 return;
@@ -2929,6 +4064,66 @@ inline void HttpServer::setup_routes() {
         }
     });
 
+    // ==================== ADMIN DASHBOARD ====================
+    
+    // Comprehensive admin dashboard — single endpoint for exchange overview
+    server_->Get("/api/admin/dashboard", [this](const httplib::Request& req, httplib::Response& res) {
+        auto admin = require_admin(req, res); if (!admin.success) return;
+        
+        auto& pm = PositionManager::instance();
+        auto& catalog = ProductCatalog::instance();
+        auto& db = Database::instance();
+        
+        auto all_products = catalog.get_all_active();
+        
+        // Volume from database
+        double total_volume = db.get_total_volume();
+        
+        // P&L and balance from ledger-cli
+        std::string pnl = cre::SafeLedger::instance().get_pnl();
+        std::string balance = cre::SafeLedger::instance().get_full_balance();
+        
+        // System uptime
+        static auto start_time = std::chrono::steady_clock::now();
+        auto uptime = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::steady_clock::now() - start_time).count();
+        
+        // FXCM connection status
+        bool fxcm_connected = FxcmFeed::instance().is_connected();
+        
+        // Rate limiter stats
+        size_t tracked_ips = cre::RateLimiter::instance().tracked_ips();
+        
+        // Insurance fund
+        double insurance_balance = pm.get_insurance_fund_balance();
+        
+        // KYC stats
+        auto pending_kyc = KYCService::instance().get_pending_kyc();
+        
+        json dashboard = {
+            {"timestamp", std::chrono::system_clock::now().time_since_epoch().count()},
+            {"users", {
+                {"pending_kyc", pending_kyc.size()}
+            }},
+            {"trading", {
+                {"total_volume_mnt", total_volume},
+                {"products_active", all_products.size()}
+            }},
+            {"financials", {
+                {"pnl_report", pnl},
+                {"balance_report", balance},
+                {"insurance_fund_mnt", insurance_balance}
+            }},
+            {"system", {
+                {"uptime_seconds", uptime},
+                {"fxcm_connected", fxcm_connected},
+                {"tracked_ips", tracked_ips}
+            }}
+        };
+        
+        res.set_content(dashboard.dump(), "application/json");
+    });
+
     // ==================== USD-MNT CORE MARKET ADMIN ====================
     
     // Get USD-MNT market metrics
@@ -3231,7 +4426,11 @@ inline json HttpServer::product_to_json(const Product& p) {
         {"maker_fee", p.maker_fee},
         {"taker_fee", p.taker_fee},
         {"mark_price", p.mark_price_mnt},
+        {"last_price", p.last_price_mnt},
         {"funding_rate", p.funding_rate},
+        {"min_notional_mnt", p.min_notional_mnt},
+        {"min_fee_mnt", p.min_fee_mnt},
+        {"spread_markup", p.spread_markup},
         {"hedgeable", p.requires_hedge()}
     };
 }
@@ -3242,10 +4441,10 @@ inline json HttpServer::position_to_json(const Position& p) {
         {"user_id", p.user_id},
         {"size", p.size},
         {"side", p.is_long() ? "long" : "short"},
-        {"entry_price", p.entry_price},
-        {"margin_used", p.margin_used},
-        {"unrealized_pnl", p.unrealized_pnl},
-        {"realized_pnl", p.realized_pnl}
+        {"entry_price", from_micromnt(p.entry_price)},
+        {"margin_used", from_micromnt(p.margin_used)},
+        {"unrealized_pnl", from_micromnt(p.unrealized_pnl)},
+        {"realized_pnl", from_micromnt(p.realized_pnl)}
     };
 }
 

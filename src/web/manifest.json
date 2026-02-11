@@ -1,0 +1,16 @@
+{
+  "name": "CRE.mn — Mongolian Derivatives Exchange",
+  "short_name": "CRE.mn",
+  "description": "Trade perpetual futures on Mongolia's first derivatives exchange",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1A1D23",
+  "theme_color": "#E5C07B",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

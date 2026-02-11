@@ -177,6 +177,9 @@ public:
     // Initialize with session (call after login)
     bool initialize(IO2GSession* session) {
         if (!session) return false;
+        if (communicator_) return true;  // Already initialized
+        
+        session_ = session;  // Store for lazy init
         
         pricehistorymgr::IError* error = nullptr;
         communicator_ = pricehistorymgr::PriceHistoryCommunicatorFactory::createCommunicator(
@@ -197,27 +200,36 @@ public:
         status_listener_ = new HistoryStatusListener();
         communicator_->addStatusListener(status_listener_);
 
-        // Wait for ready
-        if (!status_listener_->waitReady(30)) {
-            std::cerr << "[FXCM History] Communicator not ready after 30s" << std::endl;
-            return false;
+        // Quick check (10s) — don't block startup; lazy-ready in fetchHistory
+        if (status_listener_->waitReady(10)) {
+            std::cout << "[FXCM History] Initialized and ready" << std::endl;
+        } else {
+            std::cout << "[FXCM History] Communicator created, will wait for ready lazily" << std::endl;
         }
-
-        std::cout << "[FXCM History] Initialized and ready" << std::endl;
         return true;
     }
 
-    // Fetch historical candles
+    // Fetch historical candles (serialized — FXCM communicator can't handle concurrent requests)
     std::vector<HistoricalCandle> fetchHistory(
         const std::string& instrument,
         int timeframe_seconds,
         int count = 300)
     {
+        std::lock_guard<std::mutex> fetch_lock(fetch_mutex_);
         std::vector<HistoricalCandle> candles;
         
-        if (!communicator_ || !communicator_->isReady()) {
-            std::cerr << "[FXCM History] Communicator not ready" << std::endl;
+        if (!communicator_) {
+            std::cerr << "[FXCM History] No communicator" << std::endl;
             return candles;
+        }
+        
+        // Wait for ready if not yet (lazy init)
+        if (!communicator_->isReady()) {
+            std::cout << "[FXCM History] Waiting for communicator to become ready..." << std::endl;
+            if (status_listener_ && !status_listener_->waitReady(60)) {
+                std::cerr << "[FXCM History] Communicator still not ready" << std::endl;
+                return candles;
+            }
         }
 
         // Get timeframe
@@ -271,9 +283,9 @@ public:
             return candles;
         }
 
-        // Wait for response
-        if (!listener->wait(30)) {
-            std::cerr << "[FXCM History] Request timeout" << std::endl;
+        // Wait for response (60s timeout for slow history requests)
+        if (!listener->wait(60)) {
+            std::cerr << "[FXCM History] Request timeout for " << instrument << std::endl;
             communicator_->cancelRequest(request);
             request->release();
             timeframe->release();
@@ -351,8 +363,10 @@ private:
     FxcmHistoryManager() = default;
     ~FxcmHistoryManager() { shutdown(); }
 
+    IO2GSession* session_{nullptr};
     pricehistorymgr::IPriceHistoryCommunicator* communicator_{nullptr};
     HistoryStatusListener* status_listener_{nullptr};
+    std::mutex fetch_mutex_;  // Serialize FXCM requests — communicator can't handle concurrent
 };
 
 } // namespace central_exchange

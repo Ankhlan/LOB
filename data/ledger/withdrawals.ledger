@@ -1,0 +1,6 @@
+; Withdrawal transactions
+; Written by LedgerWriter::record_withdrawal()
+; Format: Date * Description
+;     Liabilities:Customer:<phone>:Balance    -amount MNT
+;     Assets:Exchange:Bank:MNT    -amount MNT
+

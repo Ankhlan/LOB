@@ -70,20 +70,25 @@ struct Order {
     std::string user_id;
     Side side;
     OrderType type;
-    PriceMicromnt price;    // Micromnt (1 MNT = 1,000,000)
-    double quantity;        // Contracts
+    PriceMicromnt price;        // Micromnt (1 MNT = 1,000,000)
+    PriceMicromnt stop_price;   // Trigger price for STOP/STOP_LIMIT orders
+    double quantity;            // Contracts
     double filled_qty;
     double remaining_qty;
     OrderStatus status;
     Timestamp created_at;
     Timestamp updated_at;
-    bool reduce_only;       // Only reduces position
-    std::string client_id;  // Client-provided ID
+    bool reduce_only;           // Only reduces position
+    bool triggered;             // Whether stop has been triggered
+    std::string client_id;      // Client-provided ID
     
     bool is_bid() const { return side == Side::BUY; }
     bool is_ask() const { return side == Side::SELL; }
     bool is_active() const { 
         return status == OrderStatus::NEW || status == OrderStatus::PARTIALLY_FILLED; 
+    }
+    bool is_stop() const {
+        return type == OrderType::STOP_LIMIT && !triggered;
     }
 };
 
@@ -148,6 +153,12 @@ public:
     // Cancel order
     std::optional<Order> cancel(OrderId id);
     
+    // Modify resting order price/quantity
+    bool modify(OrderId id, std::optional<PriceMicromnt> new_price, std::optional<double> new_qty);
+    
+    // Check and trigger stop orders based on last trade price
+    std::vector<Trade> check_stop_orders(PriceMicromnt last_trade_price);
+    
     // Get best bid/offer
     std::pair<std::optional<PriceMicromnt>, std::optional<PriceMicromnt>> bbo() const;
     
@@ -160,6 +171,9 @@ public:
     
     // Get order by ID
     std::shared_ptr<Order> get_order(OrderId id) const;
+    
+    // Get all orders for a user
+    std::vector<std::shared_ptr<Order>> get_all_user_orders(const std::string& user_id) const;
     
     // Stats
     const std::string& symbol() const { return symbol_; }
@@ -179,6 +193,9 @@ private:
     
     // Order lookup
     std::unordered_map<OrderId, std::shared_ptr<Order>> orders_;
+    
+    // Stop orders waiting for trigger (not yet in the book)
+    std::vector<std::shared_ptr<Order>> stop_orders_;
     
     // Stats
     PriceMicromnt last_price_{0};
@@ -213,6 +230,24 @@ inline std::vector<Trade> OrderBook::submit(std::shared_ptr<Order> order) {
     order->created_at = now_micros();
     order->updated_at = order->created_at;
     
+    // STOP_LIMIT orders: store as pending stop (not in book until triggered)
+    if (order->type == OrderType::STOP_LIMIT && !order->triggered) {
+        order->status = OrderStatus::NEW;
+        orders_[order->id] = order;
+        stop_orders_.push_back(order);
+        if (on_order_) on_order_(*order);
+        return {};
+    }
+    
+    // Tick size validation for limit orders
+    if (order->type != OrderType::MARKET && tick_size_ > 0) {
+        PriceMicromnt tick_micromnt = to_micromnt(tick_size_);
+        if (tick_micromnt > 0 && (order->price % tick_micromnt) != 0) {
+            // Snap to nearest tick
+            order->price = (order->price / tick_micromnt) * tick_micromnt;
+        }
+    }
+    
     std::vector<Trade> trades;
     
     // Market orders or limit orders that cross
@@ -237,9 +272,10 @@ inline std::vector<Trade> OrderBook::submit(std::shared_ptr<Order> order) {
         return {};
     }
     
-    // Add remaining to book for limit orders
+    // Add remaining to book for limit orders (including triggered stop-limits)
     if (order->remaining_qty > 0 && 
-        (order->type == OrderType::LIMIT || order->type == OrderType::POST_ONLY)) {
+        (order->type == OrderType::LIMIT || order->type == OrderType::POST_ONLY ||
+         (order->type == OrderType::STOP_LIMIT && order->triggered))) {
         add_to_book(order);
     } else if (order->remaining_qty > 0) {
         // IOC/Market - cancel remainder
@@ -298,6 +334,19 @@ inline void OrderBook::match_against_bids(std::shared_ptr<Order> order, std::vec
 inline void OrderBook::match_at_level(std::shared_ptr<Order> order, PriceLevel& level, std::vector<Trade>& trades) {
     while (order->remaining_qty > 0 && !level.empty()) {
         auto& maker = level.orders.front();
+        
+        // Self-trade prevention: skip orders from the same user
+        if (maker->user_id == order->user_id) {
+            // Cancel the resting (maker) order to prevent self-trade
+            maker->status = OrderStatus::CANCELLED;
+            maker->updated_at = now_micros();
+            if (on_order_) on_order_(*maker);
+            level.total_quantity -= maker->remaining_qty;
+            level.orders.pop_front();
+            orders_.erase(maker->id);  // Clean up cancelled maker from lookup map
+            continue;
+        }
+        
         double fill_qty = std::min(order->remaining_qty, maker->remaining_qty);
         
         Trade trade = create_trade(maker, order, fill_qty);
@@ -314,6 +363,7 @@ inline void OrderBook::match_at_level(std::shared_ptr<Order> order, PriceLevel& 
             maker->status = OrderStatus::FILLED;
             if (on_order_) on_order_(*maker);
             level.orders.pop_front();
+            orders_.erase(maker->id);  // Clean up filled maker from lookup map
         } else {
             maker->status = OrderStatus::PARTIALLY_FILLED;
         }
@@ -426,6 +476,124 @@ inline std::shared_ptr<Order> OrderBook::get_order(OrderId id) const {
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = orders_.find(id);
     return it != orders_.end() ? it->second : nullptr;
+}
+
+inline std::vector<std::shared_ptr<Order>> OrderBook::get_all_user_orders(const std::string& user_id) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<std::shared_ptr<Order>> result;
+    for (const auto& [id, order] : orders_) {
+        if (order->user_id == user_id && order->status == OrderStatus::NEW) {
+            result.push_back(order);
+        }
+    }
+    return result;
+}
+
+// Check stop orders against last trade price and trigger any that qualify
+inline std::vector<Trade> OrderBook::check_stop_orders(PriceMicromnt last_trade_price) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    std::vector<Trade> all_trades;
+    std::vector<std::shared_ptr<Order>> remaining_stops;
+    
+    for (auto& stop : stop_orders_) {
+        if (stop->status != OrderStatus::NEW) continue;
+        
+        bool should_trigger = false;
+        
+        // BUY stop: triggers when price rises to or above stop_price
+        if (stop->side == Side::BUY && last_trade_price >= stop->stop_price) {
+            should_trigger = true;
+        }
+        // SELL stop: triggers when price falls to or below stop_price
+        if (stop->side == Side::SELL && last_trade_price <= stop->stop_price) {
+            should_trigger = true;
+        }
+        
+        if (should_trigger) {
+            stop->triggered = true;
+            stop->updated_at = now_micros();
+            
+            // Now match as a regular limit order at the limit price
+            auto trades = match(stop);
+            
+            // Add remaining to book if not fully filled
+            if (stop->remaining_qty > 0) {
+                add_to_book(stop);
+            }
+            
+            if (on_order_) on_order_(*stop);
+            all_trades.insert(all_trades.end(), trades.begin(), trades.end());
+        } else {
+            remaining_stops.push_back(stop);
+        }
+    }
+    
+    stop_orders_ = std::move(remaining_stops);
+    return all_trades;
+}
+
+// Modify a resting order's price and/or quantity
+inline bool OrderBook::modify(OrderId id, std::optional<PriceMicromnt> new_price, std::optional<double> new_qty) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    auto it = orders_.find(id);
+    if (it == orders_.end()) return false;
+    
+    auto order = it->second;
+    if (!order->is_active()) return false;
+    
+    // Cannot modify stop orders that haven't triggered
+    if (order->is_stop()) return false;
+    
+    // Validate new values
+    if (new_price && *new_price <= 0) return false;
+    if (new_qty && *new_qty <= 0) return false;
+    
+    // Remove from current book position
+    if (order->is_bid()) {
+        auto pit = bids_.find(order->price);
+        if (pit != bids_.end()) {
+            pit->second.remove_order(id);
+            if (pit->second.empty()) bids_.erase(pit);
+        }
+    } else {
+        auto pit = asks_.find(order->price);
+        if (pit != asks_.end()) {
+            pit->second.remove_order(id);
+            if (pit->second.empty()) asks_.erase(pit);
+        }
+    }
+    
+    // Apply modifications
+    if (new_price) {
+        // Tick size validation
+        if (tick_size_ > 0) {
+            PriceMicromnt tick_micromnt = to_micromnt(tick_size_);
+            if (tick_micromnt > 0 && (*new_price % tick_micromnt) != 0) {
+                *new_price = (*new_price / tick_micromnt) * tick_micromnt;
+            }
+        }
+        order->price = *new_price;
+    }
+    if (new_qty) {
+        order->quantity = *new_qty;
+        order->remaining_qty = *new_qty - order->filled_qty;
+        if (order->remaining_qty <= 0) {
+            order->status = OrderStatus::CANCELLED;
+            orders_.erase(id);
+            if (on_order_) on_order_(*order);
+            return true;
+        }
+    }
+    
+    order->updated_at = now_micros();
+    
+    // Re-insert at new price level (loses time priority - standard exchange behavior)
+    add_to_book(order);
+    
+    if (on_order_) on_order_(*order);
+    return true;
 }
 
 } // namespace central_exchange

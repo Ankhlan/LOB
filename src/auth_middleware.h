@@ -233,4 +233,17 @@ inline AdminAuthResult require_admin(const httplib::Request& req, httplib::Respo
     }
     return admin;
 }
+
+/**
+ * Require user auth - returns early if not authenticated
+ * Use as: auto auth = require_auth(req, res); if (!auth.success) return;
+ */
+inline AuthResult require_auth(const httplib::Request& req, httplib::Response& res) {
+    auto auth = authenticate(req);
+    if (!auth.success) {
+        res.status = auth.error_code;
+        res.set_content(json{{"error", auth.error}}.dump(), "application/json");
+    }
+    return auth;
+}
 } // namespace central_exchange

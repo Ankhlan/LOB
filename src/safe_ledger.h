@@ -95,8 +95,67 @@ public:
         return execute(cmd);
     }
     
+    /**
+     * Get full trial balance (all accounts)
+     */
+    std::string get_full_balance() {
+        std::string cmd = build_command({"bal", "-X", "MNT"});
+        return execute(cmd);
+    }
+    
+    /**
+     * Get user-specific balances
+     * @param user_id Must be alphanumeric + underscore only
+     */
+    std::string get_customer_balance(const std::string& user_id) {
+        if (!validate_user_id(user_id)) {
+            return "Error: Invalid user_id format";
+        }
+        
+        std::string cmd = build_command({"bal", "Customer:" + user_id, "-X", "MNT"});
+        return execute(cmd);
+    }
+    
+    /**
+     * Get transaction register for an account
+     * @param account Must match Account:SubAccount format
+     */
+    std::string get_register(const std::string& account) {
+        if (!validate_account_name(account)) {
+            return "Error: Invalid account format";
+        }
+        
+        std::string cmd = build_command({"reg", account, "-X", "MNT"});
+        return execute(cmd);
+    }
+    
+    /**
+     * Get P&L report (Income + Expenses)
+     */
+    std::string get_pnl() {
+        std::string cmd = build_command({"bal", "Revenue", "Expenses", "-X", "MNT"});
+        return execute(cmd);
+    }
+    
+    /**
+     * Get equity report (closing entries)
+     */
+    std::string get_equity() {
+        std::string cmd = build_command({"equity", "-X", "MNT"});
+        return execute(cmd);
+    }
+    
+    /**
+     * Verify ledger integrity by running 'bal' and checking for errors
+     * Returns empty string if OK, error messages if problems found
+     */
+    std::string verify() {
+        std::string cmd = build_command({"bal"});
+        return execute(cmd);
+    }
+    
 private:
-    std::string ledger_file_ = "exchange.ledger";
+    std::string ledger_file_ = "../ledger/master.journal";
     static constexpr size_t MAX_OUTPUT_SIZE = 64 * 1024;  // 64KB max output
     
     SafeLedger() {

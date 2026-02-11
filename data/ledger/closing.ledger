@@ -1,0 +1,5 @@
+; Monthly closing entries
+; Written by monthly_close.sh --execute
+; Revenue/Expense accounts closed to Equity:CurrentPL at period end
+; НББОУС (Mongolian Accounting Standards) compliant
+

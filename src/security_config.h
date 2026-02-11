@@ -13,6 +13,7 @@
 #include <string>
 #include <cstring>
 #include <random>
+#include <iostream>
 #include <openssl/rand.h>
 
 namespace central_exchange {
@@ -195,7 +196,8 @@ inline std::string get_admin_key() {
     if (is_production()) {
         return "";
     }
-    // Dev fallback - should be replaced!
+    // Dev fallback — LOGGED for visibility
+    std::cerr << "[SECURITY] WARNING: Using dev fallback admin key. Set ADMIN_API_KEY env var." << std::endl;
     return "dev-admin-key-replace-in-prod";
 }
 

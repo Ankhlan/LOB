@@ -349,8 +349,8 @@ private:
         secret_ = get_jwt_secret();
     }
     
-    // SECURITY FIX: Per-user salt (Critical #1)
-    std::string hash_password(const std::string& password, const std::string& salt = "CE_SALT_2025") {
+    // SECURITY FIX: Per-user salt required (Critical #1)
+    std::string hash_password(const std::string& password, const std::string& salt) {
         unsigned char hash[SHA256_DIGEST_LENGTH];
         std::string salted = password + salt;
         

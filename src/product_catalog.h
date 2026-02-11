@@ -21,14 +21,18 @@
 #include <unordered_map>
 #include <optional>
 #include <functional>
+#include "rate_provider.h"
 
 namespace central_exchange {
 
-// USD/MNT exchange rate (updated from FXCM)
-// Global USD/MNT exchange rate (updated by BomFeed from Bank of Mongolia)
-// Source: https://www.mongolbank.mn/en/currency-rates
-// Last manual update: 2026-01-29
-inline double USD_MNT_RATE = 3564.35;
+// Dynamic USD/MNT rate via RateProvider (live FXCM → env var → hardcoded fallback)
+inline double get_usd_mnt_rate() {
+    return RateProvider::instance().get_usd_mnt();
+}
+
+// Legacy alias — existing code that reads USD_MNT_RATE will get the live rate
+// NOTE: This is a function-like macro, not a variable. Do not assign to it.
+#define USD_MNT_RATE (central_exchange::get_usd_mnt_rate())
 
 enum class ProductCategory {
     FXCM_COMMODITY,
@@ -66,9 +70,13 @@ struct Product {
     double margin_rate;           // Initial margin % (e.g., 0.10 = 10%)
     double maker_fee;             // Maker fee (e.g., 0.0002 = 0.02%)
     double taker_fee;             // Taker fee (e.g., 0.0005 = 0.05%)
+    double spread_markup;         // Spread markup per side (e.g., 0.001 = 0.1%). 0 = fee-based model
+    double min_notional_mnt{10000.0}; // Minimum notional per order in MNT
+    double min_fee_mnt{10.0};     // Floor fee per trade in MNT (prevents sub-1 MNT fees)
     
     // Mark Price
-    double mark_price_mnt;        // Current mark price in MNT
+    double mark_price_mnt;        // Composite mark price for liquidation/PnL (70% FXCM + 20% last trade + 10% book mid)
+    double last_price_mnt{0.0};   // Last traded price (for display and execution)
     double funding_rate;          // 8-hour funding rate
     
     bool is_active;
@@ -95,6 +103,10 @@ struct Product {
     bool requires_hedge() const {
         return hedge_mode != HedgeMode::NONE && !fxcm_symbol.empty();
     }
+    
+    bool is_spot() const {
+        return symbol.find("-SPOT") != std::string::npos;
+    }
 };
 
 class ProductCatalog {
@@ -112,6 +124,8 @@ public:
     std::vector<const Product*> get_hedgeable() const;
     
     void update_mark_price(const std::string& symbol, double mnt_price);
+    void update_last_price(const std::string& symbol, double mnt_price);
+    void update_composite_mark(const std::string& symbol, double fxcm_price, double book_mid);
     void update_funding_rate(const std::string& symbol, double rate);
     void update_usd_mnt_rate(double rate);
     
@@ -142,14 +156,15 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
         .is_inverted = false,
-        .contract_size = 1.0,       // 1 oz per contract
-        .tick_size = 100.0,         // 100 MNT tick
-        .min_order_size = 0.01,
-        .max_order_size = 100.0,
+        .contract_size = 0.001,     // 0.001 oz per contract (~$2.6 ≈ 9,200 MNT notional)
+        .tick_size = 10.0,          // 10 MNT tick
+        .min_order_size = 1.0,      // 1 micro contract min
+        .max_order_size = 10000.0,  // 10000 micro contracts max
         .margin_rate = 0.05,        // 5% margin (20x)
         .maker_fee = 0.0002,
         .taker_fee = 0.0005,
-        .mark_price_mnt = 7'000'000.0,  // ~$2,029 * 3450
+        .spread_markup = 0.001,
+        .mark_price_mnt = 2650.0 * USD_MNT_RATE,  // ~$2650/oz gold
         .funding_rate = 0.0001,
         .is_active = true
     });
@@ -163,14 +178,15 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
         .is_inverted = false,
-        .contract_size = 1.0,       // 1 oz per contract (FXCM MinLot=1)
-        .tick_size = 10.0,
-        .min_order_size = 1.0,     // 1 oz min (FXCM BaseUnit=1)
-        .max_order_size = 1000.0,
+        .contract_size = 0.1,       // 0.1 oz per contract (~$3.1 ≈ 11,000 MNT notional)
+        .tick_size = 1.0,
+        .min_order_size = 1.0,     // 1 micro contract min
+        .max_order_size = 10000.0,
         .margin_rate = 0.05,
         .maker_fee = 0.0002,
         .taker_fee = 0.0005,
-        .mark_price_mnt = 105'000.0,  // ~$30 * 3450
+        .spread_markup = 0.001,
+        .mark_price_mnt = 31.0 * USD_MNT_RATE,  // ~$31/oz silver
         .funding_rate = 0.0001,
         .is_active = true
     });
@@ -184,14 +200,15 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
         .is_inverted = false,
-        .contract_size = 10.0,      // 10 barrels (FXCM ContractMult=10)
-        .tick_size = 50.0,
-        .min_order_size = 1.0,     // 1 contract min
-        .max_order_size = 500.0,
+        .contract_size = 0.1,      // 0.1 barrel (~$7.5 ≈ 26,700 MNT notional)
+        .tick_size = 5.0,
+        .min_order_size = 1.0,     // 1 micro contract min
+        .max_order_size = 100000.0,
         .margin_rate = 0.10,
         .maker_fee = 0.0002,
         .taker_fee = 0.0005,
-        .mark_price_mnt = 260'000.0,  // ~$75 * 3450
+        .spread_markup = 0.001,
+        .mark_price_mnt = 75.0 * USD_MNT_RATE,  // ~$75/bbl WTI
         .funding_rate = 0.0001,
         .is_active = true
     });
@@ -205,14 +222,15 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
         .is_inverted = false,
-        .contract_size = 1000.0,    // 1000 lbs
-        .tick_size = 10.0,
-        .min_order_size = 0.1,
-        .max_order_size = 500.0,
+        .contract_size = 1.0,      // 1 lb (~$4.5 ≈ 16,000 MNT notional)
+        .tick_size = 1.0,
+        .min_order_size = 1.0,    // 1 lb min
+        .max_order_size = 100000.0,
         .margin_rate = 0.10,
         .maker_fee = 0.0002,
         .taker_fee = 0.0005,
-        .mark_price_mnt = 15'500.0,  // ~$4.5 * 3450
+        .spread_markup = 0.001,
+        .mark_price_mnt = 4.5 * USD_MNT_RATE,  // ~$4.5/lb copper
         .funding_rate = 0.0001,
         .is_active = true
     });
@@ -226,14 +244,15 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
         .is_inverted = false,
-        .contract_size = 100.0,     // 100 MMBtu (FXCM ContractMult=100)
-        .tick_size = 1.0,
-        .min_order_size = 1.0,     // 1 contract min
-        .max_order_size = 500.0,
+        .contract_size = 1.0,      // 1 MMBtu (~$3 ≈ 10,700 MNT notional)
+        .tick_size = 0.1,
+        .min_order_size = 1.0,     // 1 MMBtu min
+        .max_order_size = 100000.0,
         .margin_rate = 0.15,
         .maker_fee = 0.0002,
         .taker_fee = 0.0005,
-        .mark_price_mnt = 10'350.0,  // ~$3 * 3450
+        .spread_markup = 0.001,
+        .mark_price_mnt = 3.0 * USD_MNT_RATE,  // ~$3/MMBtu natgas
         .funding_rate = 0.0001,
         .is_active = true
     });
@@ -248,14 +267,15 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::NONE,
         .is_inverted = false,  // Can't hedge - we ARE the USD/MNT source
-        .contract_size = 1000.0,  // $1000 USD notional per contract
-        .tick_size = 1.0,         // 1 MNT minimum increment
-        .min_order_size = 0.1,
-        .max_order_size = 10000.0,
+        .contract_size = 1.0,    // 1 USD notional per contract (≈3,564 MNT — retail accessible)
+        .tick_size = 0.1,         // 0.1 MNT minimum increment
+        .min_order_size = 1.0,    // 1 contract min (≈3,564 MNT)
+        .max_order_size = 100000.0,
         .margin_rate = 0.05,      // 5% margin = 20x leverage (Conductor spec)
         .maker_fee = 0.0001,
         .taker_fee = 0.0003,
-        .mark_price_mnt = 3450.0, // Current Bank of Mongolia rate
+        .spread_markup = 0.0005,
+        .mark_price_mnt = USD_MNT_RATE,  // Current Bank of Mongolia rate
         .funding_rate = 0.0001,   // Daily funding based on interest rate diff
         .is_active = true
     });
@@ -269,14 +289,15 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 1.0,    // FX pairs: multiplier is 1.0, FXCM price IS the rate
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
         .is_inverted = false,
-        .contract_size = 1000.0,  // €1000 notional
-        .tick_size = 1.0,
-        .min_order_size = 0.1,
-        .max_order_size = 10000.0,
+        .contract_size = 1.0,    // 1 EUR notional per contract
+        .tick_size = 0.1,
+        .min_order_size = 1.0,
+        .max_order_size = 100000.0,
         .margin_rate = 0.02,
         .maker_fee = 0.0001,
         .taker_fee = 0.0003,
-        .mark_price_mnt = 3726.0,  // EUR/USD × USD/MNT ≈ 1.08 × 3450
+        .spread_markup = 0.0005,
+        .mark_price_mnt = 1.08 * USD_MNT_RATE,  // EUR/USD × USD/MNT
         .funding_rate = 0.0001,
         .is_active = true
     });
@@ -290,14 +311,15 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 1.0,    // Not used for inverted pairs
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
         .is_inverted = true,      // USD/CNH is inverted: CNY-MNT = USD-MNT / USD-CNH
-        .contract_size = 10000.0, // ¥10000 notional
-        .tick_size = 0.1,
+        .contract_size = 100.0,  // ¥100 notional (~$14 ≈ 50,000 MNT)
+        .tick_size = 0.01,
         .min_order_size = 1.0,
         .max_order_size = 100000.0,
         .margin_rate = 0.03,
         .maker_fee = 0.0001,
         .taker_fee = 0.0003,
-        .mark_price_mnt = 476.0,  // 3450 / 7.25
+        .spread_markup = 0.0005,
+        .mark_price_mnt = USD_MNT_RATE / 7.25,  // USD/MNT ÷ USD/CNH
         .funding_rate = 0.0001,
         .is_active = true
     });
@@ -311,15 +333,60 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 1.0,    // Not used for inverted pairs
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
         .is_inverted = true,      // USD/RUB is inverted: RUB-MNT = USD-MNT / USD-RUB
-        .contract_size = 100000.0, // ₽100000 notional
-        .tick_size = 0.01,
+        .contract_size = 1000.0,  // ₽1000 notional (~$11 ≈ 39,000 MNT)
+        .tick_size = 0.001,
         .min_order_size = 1.0,
-        .max_order_size = 1000000.0,
+        .max_order_size = 100000.0,
         .margin_rate = 0.05,
         .maker_fee = 0.0001,
         .taker_fee = 0.0003,
-        .mark_price_mnt = 38.0,   // 3450 / 90
+        .spread_markup = 0.0005,
+        .mark_price_mnt = USD_MNT_RATE / 90.0,  // USD/MNT ÷ USD/RUB
         .funding_rate = 0.0001,
+        .is_active = true
+    });
+    
+    add_product({
+        .symbol = "JPY-MNT-SPOT",
+        .name = "JPY/MNT Spot",
+        .description = "Japanese Yen vs Mongolian Tugrik",
+        .category = ProductCategory::FXCM_FX_LOCAL,
+        .fxcm_symbol = "USD/JPY",
+        .usd_multiplier = 1.0,
+        .hedge_mode = HedgeMode::DELTA_NEUTRAL,
+        .is_inverted = true,      // USD/JPY is inverted: JPY-MNT = USD-MNT / USD-JPY
+        .contract_size = 1000.0,  // ¥1000 notional (~$6.7 ≈ 24,000 MNT)
+        .tick_size = 0.001,
+        .min_order_size = 1.0,
+        .max_order_size = 1000000.0,
+        .margin_rate = 1.0,       // 100% margin = no leverage (spot cash)
+        .maker_fee = 0.0,
+        .taker_fee = 0.0,
+        .spread_markup = 0.0015,  // 0.15% spread (revenue from spread, not fees)
+        .mark_price_mnt = USD_MNT_RATE / 150.0,  // USD/MNT ÷ USD/JPY (~150)
+        .funding_rate = 0.0,      // No funding on spot
+        .is_active = true
+    });
+    
+    add_product({
+        .symbol = "KRW-MNT-SPOT",
+        .name = "KRW/MNT Spot",
+        .description = "Korean Won vs Mongolian Tugrik",
+        .category = ProductCategory::FXCM_FX_LOCAL,
+        .fxcm_symbol = "USD/KRW",
+        .usd_multiplier = 1.0,
+        .hedge_mode = HedgeMode::DELTA_NEUTRAL,
+        .is_inverted = true,      // USD/KRW is inverted: KRW-MNT = USD-MNT / USD-KRW
+        .contract_size = 10000.0,  // ₩10000 notional (~$7 ≈ 25,000 MNT)
+        .tick_size = 0.0001,
+        .min_order_size = 1.0,
+        .max_order_size = 1000000.0,
+        .margin_rate = 1.0,       // 100% margin = no leverage (spot cash)
+        .maker_fee = 0.0,
+        .taker_fee = 0.0,
+        .spread_markup = 0.0015,  // 0.15% spread (revenue from spread, not fees)
+        .mark_price_mnt = USD_MNT_RATE / 1400.0,  // USD/MNT ÷ USD/KRW (~1400)
+        .funding_rate = 0.0,      // No funding on spot
         .is_active = true
     });
     
@@ -333,14 +400,15 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
         .is_inverted = false,
-        .contract_size = 1.0,     // 1 index point = $1
-        .tick_size = 100.0,
-        .min_order_size = 0.1,
-        .max_order_size = 100.0,
+        .contract_size = 0.001,   // 0.001 per index point ($6 ≈ 21,000 MNT notional for SPX ~6000)
+        .tick_size = 10.0,
+        .min_order_size = 1.0,
+        .max_order_size = 10000.0,
         .margin_rate = 0.05,
         .maker_fee = 0.0002,
         .taker_fee = 0.0005,
-        .mark_price_mnt = 17'250'000.0,  // ~5000 * 3450
+        .spread_markup = 0.001,
+        .mark_price_mnt = 6000.0 * USD_MNT_RATE,  // ~SPX 6000
         .funding_rate = 0.0001,
         .is_active = true
     });
@@ -354,14 +422,15 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
         .is_inverted = false,
-        .contract_size = 1.0,
-        .tick_size = 100.0,
-        .min_order_size = 0.1,
-        .max_order_size = 100.0,
+        .contract_size = 0.001,   // 0.001 per index point ($21 ≈ 75,000 MNT notional for NDX ~21000)
+        .tick_size = 10.0,
+        .min_order_size = 1.0,
+        .max_order_size = 10000.0,
         .margin_rate = 0.05,
         .maker_fee = 0.0002,
         .taker_fee = 0.0005,
-        .mark_price_mnt = 60'000'000.0,  // ~17400 * 3450
+        .spread_markup = 0.001,
+        .mark_price_mnt = 21000.0 * USD_MNT_RATE,  // ~NDX 21000
         .funding_rate = 0.0001,
         .is_active = true
     });
@@ -375,14 +444,37 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
         .is_inverted = false,
-        .contract_size = 1.0,
-        .tick_size = 50.0,
-        .min_order_size = 0.1,
-        .max_order_size = 100.0,
+        .contract_size = 0.001,   // 0.001 per index point ($20 ≈ 71,000 MNT notional for HSI ~20000)
+        .tick_size = 10.0,
+        .min_order_size = 1.0,
+        .max_order_size = 10000.0,
         .margin_rate = 0.05,
         .maker_fee = 0.0002,
         .taker_fee = 0.0005,
-        .mark_price_mnt = 70'000'000.0,
+        .spread_markup = 0.001,
+        .mark_price_mnt = 20000.0 * USD_MNT_RATE,  // ~HSI 20000
+        .funding_rate = 0.0001,
+        .is_active = true
+    });
+    
+    add_product({
+        .symbol = "NKY-MNT-PERP",
+        .name = "Nikkei 225 Perpetual",
+        .description = "Japan Nikkei 225 Index vs MNT",
+        .category = ProductCategory::FXCM_INDEX,
+        .fxcm_symbol = "JPN225",
+        .usd_multiplier = 1.0,
+        .hedge_mode = HedgeMode::DELTA_NEUTRAL,
+        .is_inverted = false,
+        .contract_size = 0.001,   // 0.001 per index point ($38 ≈ 135,000 MNT notional for NKY ~38000)
+        .tick_size = 10.0,
+        .min_order_size = 1.0,
+        .max_order_size = 10000.0,
+        .margin_rate = 0.05,
+        .maker_fee = 0.0002,
+        .taker_fee = 0.0005,
+        .spread_markup = 0.001,
+        .mark_price_mnt = 38000.0 * USD_MNT_RATE,  // ~NKY 38000
         .funding_rate = 0.0001,
         .is_active = true
     });
@@ -397,14 +489,15 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
         .is_inverted = false,
-        .contract_size = 0.001,   // 0.001 BTC per contract
-        .tick_size = 1000.0,
-        .min_order_size = 0.001,
-        .max_order_size = 10.0,
+        .contract_size = 0.0001,  // 0.0001 BTC per contract (~$10.3 ≈ 37,000 MNT notional)
+        .tick_size = 100.0,
+        .min_order_size = 1.0,    // 1 micro contract min
+        .max_order_size = 100000.0,
         .margin_rate = 0.10,
         .maker_fee = 0.0002,
         .taker_fee = 0.0005,
-        .mark_price_mnt = 345'000'000.0,  // ~$100k * 3450
+        .spread_markup = 0.001,
+        .mark_price_mnt = 103000.0 * USD_MNT_RATE,  // ~$103k BTC
         .funding_rate = 0.0001,
         .is_active = true
     });
@@ -418,14 +511,15 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 1.0,
         .hedge_mode = HedgeMode::DELTA_NEUTRAL,
         .is_inverted = false,
-        .contract_size = 0.01,    // 0.01 ETH per contract
-        .tick_size = 100.0,
-        .min_order_size = 0.01,
-        .max_order_size = 100.0,
+        .contract_size = 0.001,   // 0.001 ETH per contract (~$3.3 ≈ 12,000 MNT notional)
+        .tick_size = 10.0,
+        .min_order_size = 1.0,    // 1 micro contract min
+        .max_order_size = 100000.0,
         .margin_rate = 0.10,
         .maker_fee = 0.0002,
         .taker_fee = 0.0005,
-        .mark_price_mnt = 10'350'000.0,  // ~$3000 * 3450
+        .spread_markup = 0.001,
+        .mark_price_mnt = 3300.0 * USD_MNT_RATE,  // ~$3300 ETH
         .funding_rate = 0.0001,
         .is_active = true
     });
@@ -443,13 +537,14 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 0.0,
         .hedge_mode = HedgeMode::NONE,
         .is_inverted = false,
-        .contract_size = 1.0,     // 1 index unit
-        .tick_size = 100.0,
-        .min_order_size = 1.0,
-        .max_order_size = 10000.0,
+        .contract_size = 0.001,   // 0.001 index unit (≈1,000 MNT notional)
+        .tick_size = 1.0,
+        .min_order_size = 10.0,   // min ~10,000 MNT notional
+        .max_order_size = 1000000.0,
         .margin_rate = 0.20,      // 20% margin (5x) - more volatile
         .maker_fee = 0.0005,
         .taker_fee = 0.001,
+        .spread_markup = 0.002,
         .mark_price_mnt = 1'000'000.0,  // Base index = 1M MNT
         .funding_rate = 0.0003,
         .is_active = true
@@ -464,13 +559,14 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 0.0,
         .hedge_mode = HedgeMode::NONE,
         .is_inverted = false,
-        .contract_size = 1.0,
-        .tick_size = 1000.0,
-        .min_order_size = 0.1,
-        .max_order_size = 1000.0,
+        .contract_size = 0.001,   // 0.001 sqm index unit (≈5,000 MNT notional)
+        .tick_size = 1.0,
+        .min_order_size = 10.0,   // min ~50,000 MNT notional
+        .max_order_size = 100000.0,
         .margin_rate = 0.25,      // 25% margin (4x)
         .maker_fee = 0.0005,
         .taker_fee = 0.001,
+        .spread_markup = 0.002,
         .mark_price_mnt = 5'000'000.0,  // 5M MNT per sqm index
         .funding_rate = 0.0003,
         .is_active = true
@@ -485,14 +581,15 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 0.0,
         .hedge_mode = HedgeMode::NONE,
         .is_inverted = false,
-        .contract_size = 1.0,     // 1 kg
-        .tick_size = 100.0,
-        .min_order_size = 10.0,
+        .contract_size = 0.1,     // 0.1 kg (~$4.3 ≈ 15,300 MNT notional)
+        .tick_size = 10.0,
+        .min_order_size = 1.0,    // min ~15,300 MNT notional
         .max_order_size = 100000.0,
         .margin_rate = 0.15,
         .maker_fee = 0.0005,
         .taker_fee = 0.001,
-        .mark_price_mnt = 150'000.0,  // ~$43/kg * 3450
+        .spread_markup = 0.002,
+        .mark_price_mnt = 43.0 * USD_MNT_RATE,  // ~$43/kg cashmere
         .funding_rate = 0.0003,
         .is_active = true
     });
@@ -506,14 +603,15 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 0.0,
         .hedge_mode = HedgeMode::NONE,
         .is_inverted = false,
-        .contract_size = 1.0,     // 1 tonne
-        .tick_size = 100.0,
-        .min_order_size = 100.0,
+        .contract_size = 0.01,    // 0.01 tonne (10 kg, ~$2 ≈ 7,100 MNT notional)
+        .tick_size = 1.0,
+        .min_order_size = 1.0,    // min ~7,100 MNT notional
         .max_order_size = 1000000.0,
         .margin_rate = 0.15,
         .maker_fee = 0.0005,
         .taker_fee = 0.001,
-        .mark_price_mnt = 690'000.0,  // ~$200/tonne * 3450
+        .spread_markup = 0.002,
+        .mark_price_mnt = 200.0 * USD_MNT_RATE,  // ~$200/tonne coal
         .funding_rate = 0.0002,
         .is_active = true
     });
@@ -527,14 +625,15 @@ inline void ProductCatalog::initialize() {
         .usd_multiplier = 0.0,
         .hedge_mode = HedgeMode::NONE,
         .is_inverted = false,
-        .contract_size = 1.0,     // 1 tonne
-        .tick_size = 100.0,
-        .min_order_size = 10.0,
+        .contract_size = 0.001,   // 0.001 tonne (1 kg, ~$8 ≈ 28,500 MNT notional)
+        .tick_size = 10.0,
+        .min_order_size = 1.0,    // min ~28,500 MNT notional
         .max_order_size = 100000.0,
         .margin_rate = 0.15,
         .maker_fee = 0.0005,
         .taker_fee = 0.001,
-        .mark_price_mnt = 27'600'000.0,  // ~$8000/tonne * 3450
+        .spread_markup = 0.002,
+        .mark_price_mnt = 8000.0 * USD_MNT_RATE,  // ~$8000/tonne copper conc
         .funding_rate = 0.0002,
         .is_active = true
     });
@@ -582,6 +681,26 @@ inline void ProductCatalog::update_mark_price(const std::string& symbol, double 
     }
 }
 
+inline void ProductCatalog::update_last_price(const std::string& symbol, double mnt_price) {
+    auto it = products_.find(symbol);
+    if (it != products_.end()) {
+        it->second.last_price_mnt = mnt_price;
+    }
+}
+
+// Composite mark price: 70% FXCM feed + 20% last trade + 10% order book mid
+inline void ProductCatalog::update_composite_mark(const std::string& symbol, double fxcm_price, double book_mid) {
+    auto it = products_.find(symbol);
+    if (it == products_.end()) return;
+    
+    auto& prod = it->second;
+    double last = prod.last_price_mnt > 0 ? prod.last_price_mnt : fxcm_price;
+    double mid = book_mid > 0 ? book_mid : fxcm_price;
+    
+    // Weighted composite: prevents single-source manipulation
+    prod.mark_price_mnt = fxcm_price * 0.70 + last * 0.20 + mid * 0.10;
+}
+
 inline void ProductCatalog::update_funding_rate(const std::string& symbol, double rate) {
     auto it = products_.find(symbol);
     if (it != products_.end()) {
@@ -590,7 +709,7 @@ inline void ProductCatalog::update_funding_rate(const std::string& symbol, doubl
 }
 
 inline void ProductCatalog::update_usd_mnt_rate(double rate) {
-    USD_MNT_RATE = rate;
+    RateProvider::instance().update_rate("USD/MNT", rate);
 }
 
 inline void ProductCatalog::for_each(std::function<void(const Product&)> callback) const {

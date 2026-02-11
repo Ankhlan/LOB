@@ -13,6 +13,7 @@
  */
 
 #include "order_book.h"
+#include "exchange_config.h"
 #include <unordered_map>
 #include <chrono>
 #include <deque>
@@ -50,12 +51,12 @@ inline const char* to_string(RiskRejectCode code) {
     }
 }
 
-// Per-user risk limits
+// Per-user risk limits (defaults from exchange_config.h, overridable per-user)
 struct UserRiskLimits {
-    double max_position_size = 100.0;        // Max position per symbol
-    double daily_loss_limit = 10000000.0;    // 10M MNT daily loss limit
-    int max_orders_per_second = 10;          // Rate limit
-    double fat_finger_threshold = 0.10;      // 10% from market price
+    double max_position_size = config::max_position_size();
+    double daily_loss_limit = config::daily_loss_limit();
+    int max_orders_per_second = config::max_orders_per_second();
+    double fat_finger_threshold = config::fat_finger_threshold();
 };
 
 // Per-user risk state
@@ -65,6 +66,23 @@ struct UserRiskState {
     std::deque<std::chrono::steady_clock::time_point> order_timestamps;
     bool is_blocked = false;
     std::chrono::system_clock::time_point pnl_reset_time;
+    
+    // Check if daily PnL should auto-reset (new trading day)
+    bool should_auto_reset() const {
+        auto now = std::chrono::system_clock::now();
+        auto now_t = std::chrono::system_clock::to_time_t(now);
+        auto reset_t = std::chrono::system_clock::to_time_t(pnl_reset_time);
+        std::tm now_tm{}, reset_tm{};
+#ifdef _WIN32
+        localtime_s(&now_tm, &now_t);
+        localtime_s(&reset_tm, &reset_t);
+#else
+        localtime_r(&now_t, &now_tm);
+        localtime_r(&reset_t, &reset_tm);
+#endif
+        // Reset if day has changed
+        return now_tm.tm_yday != reset_tm.tm_yday || now_tm.tm_year != reset_tm.tm_year;
+    }
 };
 
 /**
@@ -103,6 +121,15 @@ public:
         
         auto& state = get_or_create_state(user_id);
         const auto& limits = get_limits(user_id);
+        
+        // Auto-reset daily PnL if trading day has changed
+        if (state.should_auto_reset()) {
+            state.daily_pnl = 0.0;
+            state.is_blocked = false;
+            state.pnl_reset_time = std::chrono::system_clock::now();
+            std::cout << "[RISK] Auto-reset daily PnL for user " << user_id 
+                      << " (new trading day)" << std::endl;
+        }
         
         // Check if user is blocked
         if (state.is_blocked) {

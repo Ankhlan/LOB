@@ -17,8 +17,20 @@
 #include <stdexcept>
 #include <sstream>
 #include <fstream>
+#include <iostream>
 
 using PriceMicromnt = int64_t;
+
+// Conversion helpers: 1 MNT = 1,000,000 micromnt
+constexpr int64_t MICROMNT_SCALE = 1'000'000;
+
+inline PriceMicromnt to_micromnt(double d) {
+    return static_cast<PriceMicromnt>(d * MICROMNT_SCALE);
+}
+
+inline double from_micromnt(PriceMicromnt m) {
+    return static_cast<double>(m) / MICROMNT_SCALE;
+}
 
 // ============================================================================
 // JOURNAL ENTRY (Immutable, Event-Sourced)
@@ -86,15 +98,15 @@ public:
     void record_deposit(const std::string& user_id, PriceMicromnt amount) {
         ensure_user(user_id);
         post_entry(EntryType::DEPOSIT,
-            "user:" + user_id + ":cash",
-            "exchange:liability:deposits",
+            "Assets:Exchange:Bank:MNT",
+            "Liabilities:Customer:" + user_id + ":Balance",
             amount, "", "Deposit");
     }
     
     void record_withdraw(const std::string& user_id, PriceMicromnt amount) {
         post_entry(EntryType::WITHDRAWAL,
-            "exchange:liability:deposits",
-            "user:" + user_id + ":cash",
+            "Liabilities:Customer:" + user_id + ":Balance",
+            "Assets:Exchange:Bank:MNT",
             amount, "", "Withdrawal");
     }
     
@@ -104,24 +116,24 @@ public:
         ensure_user(buyer_id);
         ensure_user(seller_id);
         
-        PriceMicromnt value = (price / 1000000) * qty;
+        PriceMicromnt value = price * static_cast<PriceMicromnt>(qty) / 1000000;
         std::string ref = symbol + "_" + std::to_string(next_entry_id_.load());
         
         // Buyer pays seller
         post_entry(EntryType::TRADE,
-            "user:" + buyer_id + ":cash",
-            "user:" + seller_id + ":cash",
+            "Liabilities:Customer:" + buyer_id + ":Balance",
+            "Liabilities:Customer:" + seller_id + ":Balance",
             value, ref, "Trade: " + symbol);
         
         // Trading fees
         if (fee > 0) {
             post_entry(EntryType::TRADE_FEE,
-                "user:" + buyer_id + ":cash",
-                "exchange:revenue:fees",
+                "Liabilities:Customer:" + buyer_id + ":Balance",
+                "Revenue:Trading:Fees",
                 fee, ref, "Trade fee (buyer)");
             post_entry(EntryType::TRADE_FEE,
-                "user:" + seller_id + ":cash",
-                "exchange:revenue:fees",
+                "Liabilities:Customer:" + seller_id + ":Balance",
+                "Revenue:Trading:Fees",
                 fee, ref, "Trade fee (seller)");
         }
     }
@@ -129,15 +141,40 @@ public:
     void record_pnl(const std::string& user_id, PriceMicromnt pnl, bool is_profit) {
         if (is_profit) {
             post_entry(EntryType::REALIZED_PNL,
-                "exchange:equity:trading",
-                "user:" + user_id + ":cash",
+                "Expenses:Trading:CustomerPayout",
+                "Liabilities:Customer:" + user_id + ":Balance",
                 pnl, "", "Realized profit");
         } else {
             post_entry(EntryType::REALIZED_PNL,
-                "user:" + user_id + ":cash",
-                "exchange:equity:trading",
+                "Liabilities:Customer:" + user_id + ":Balance",
+                "Revenue:Trading:CustomerLoss",
                 pnl, "", "Realized loss");
         }
+    }
+    
+    // Record funding payment (user pays or receives funding)
+    void record_funding(const std::string& user_id, const std::string& symbol,
+                        PriceMicromnt amount, bool user_pays) {
+        ensure_user(user_id);
+        if (user_pays) {
+            post_entry(EntryType::ADJUSTMENT,
+                "Liabilities:Customer:" + user_id + ":Balance",
+                "Revenue:Funding:" + symbol,
+                amount, "", "Funding payment " + symbol);
+        } else {
+            post_entry(EntryType::ADJUSTMENT,
+                "Expenses:Funding:" + symbol,
+                "Liabilities:Customer:" + user_id + ":Balance",
+                amount, "", "Funding receipt " + symbol);
+        }
+    }
+    
+    // Record VAT accrual on trading revenue
+    void post_vat(PriceMicromnt amount, const std::string& symbol) {
+        post_entry(EntryType::ADJUSTMENT,
+            "Expenses:Taxes:VAT",
+            "Liabilities:Taxes:VAT",
+            amount, "", "VAT accrual - " + symbol);
     }
     
     // ========================================================================
@@ -157,6 +194,15 @@ public:
             }
         }
         return (assets + exp) == (liab + equity + rev);
+    }
+    
+    // Periodic reconciliation — call every N trades to detect drift early
+    void periodic_verify(size_t trade_count) {
+        if (trade_count % 100 != 0) return;
+        if (!verify_balance()) {
+            std::cerr << "[ACCOUNTING] ⚠️ BALANCE MISMATCH detected after trade #"
+                      << trade_count << " — assets+exp != liab+equity+rev" << std::endl;
+        }
     }
     
     std::vector<JournalEntry> trail(const std::string& account_id) {
@@ -179,10 +225,20 @@ public:
     
 private:
     AccountingEngine() {
-        create_account("exchange:liability:deposits", AccountType::LIABILITY);
-        create_account("exchange:revenue:fees", AccountType::REVENUE);
-        create_account("exchange:equity:trading", AccountType::EQUITY);
-        create_account("exchange:asset:insurance", AccountType::ASSET);
+        create_account("Assets:Exchange:Bank:MNT", AccountType::ASSET);
+        create_account("Revenue:Trading:Fees", AccountType::REVENUE);
+        create_account("Expenses:Trading:CustomerPayout", AccountType::EXPENSE);
+        create_account("Revenue:Trading:CustomerLoss", AccountType::REVENUE);
+        create_account("Assets:Exchange:InsuranceFund", AccountType::ASSET);
+    }
+    
+    static AccountType infer_account_type(const std::string& path) {
+        if (path.rfind("Assets:", 0) == 0) return AccountType::ASSET;
+        if (path.rfind("Liabilities:", 0) == 0) return AccountType::LIABILITY;
+        if (path.rfind("Revenue:", 0) == 0) return AccountType::REVENUE;
+        if (path.rfind("Expenses:", 0) == 0) return AccountType::EXPENSE;
+        if (path.rfind("Equity:", 0) == 0) return AccountType::EQUITY;
+        return AccountType::ASSET; // fallback
     }
     
     void create_account(const std::string& id, AccountType type) {
@@ -191,10 +247,10 @@ private:
     }
     
     void ensure_user(const std::string& user_id) {
-        std::string cash = "user:" + user_id + ":cash";
-        std::string margin = "user:" + user_id + ":margin";
-        create_account(cash, AccountType::ASSET);
-        create_account(margin, AccountType::ASSET);
+        std::string balance = "Liabilities:Customer:" + user_id + ":Balance";
+        std::string margin = "Liabilities:Customer:" + user_id + ":Margin";
+        create_account(balance, AccountType::LIABILITY);
+        create_account(margin, AccountType::LIABILITY);
     }
     
     uint64_t post_entry(EntryType type, const std::string& dr, const std::string& cr,
@@ -202,8 +258,8 @@ private:
         std::lock_guard<std::mutex> lock(mutex_);
         
         // Ensure accounts exist
-        if (accounts_.find(dr) == accounts_.end()) create_account(dr, AccountType::ASSET);
-        if (accounts_.find(cr) == accounts_.end()) create_account(cr, AccountType::ASSET);
+        if (accounts_.find(dr) == accounts_.end()) create_account(dr, infer_account_type(dr));
+        if (accounts_.find(cr) == accounts_.end()) create_account(cr, infer_account_type(cr));
         
         JournalEntry e;
         e.id = ++next_entry_id_;
@@ -238,7 +294,42 @@ private:
     void load_journal() {
         std::ifstream f(data_dir_ + "/journal.log");
         if (!f) return;
-        // Replay on startup (simplified)
+        std::string line;
+        while (std::getline(f, line)) {
+            if (line.empty()) continue;
+            // Parse: id|timestamp|type|debit_account|credit_account|amount|reference_id|description
+            std::vector<std::string> fields;
+            std::istringstream ss(line);
+            std::string field;
+            while (std::getline(ss, field, '|')) {
+                fields.push_back(field);
+            }
+            if (fields.size() < 6) continue;
+            
+            JournalEntry e;
+            e.id = std::stoull(fields[0]);
+            e.timestamp = std::stoull(fields[1]);
+            e.type = static_cast<EntryType>(std::stoi(fields[2]));
+            e.debit_account = fields[3];
+            e.credit_account = fields[4];
+            e.amount = std::stoll(fields[5]);
+            if (fields.size() > 6) e.reference_id = fields[6];
+            if (fields.size() > 7) e.description = fields[7];
+            
+            // Ensure accounts exist before replaying — infer type from path prefix
+            if (accounts_.find(e.debit_account) == accounts_.end())
+                create_account(e.debit_account, infer_account_type(e.debit_account));
+            if (accounts_.find(e.credit_account) == accounts_.end())
+                create_account(e.credit_account, infer_account_type(e.credit_account));
+            
+            // Replay the entry
+            accounts_[e.debit_account].debit(e.amount);
+            accounts_[e.credit_account].credit(e.amount);
+            journal_.push_back(e);
+            
+            if (e.id > next_entry_id_.load())
+                next_entry_id_.store(e.id);
+        }
     }
     
     std::mutex mutex_;

@@ -11,6 +11,7 @@
  */
 
 #include "order_book.h"
+#include "exchange_config.h"
 #include <unordered_map>
 #include <chrono>
 #include <mutex>
@@ -40,13 +41,13 @@ inline const char* to_string(CircuitState state) {
     }
 }
 
-// Per-symbol circuit breaker configuration
+// Per-symbol circuit breaker configuration (defaults from exchange_config.h)
 struct CircuitBreakerConfig {
-    double price_limit_pct = 0.05;       // 5% move triggers limit
-    double halt_threshold_pct = 0.10;    // 10% move triggers halt
-    int time_window_seconds = 300;       // 5 minute window
-    int halt_duration_seconds = 300;     // 5 minute halt
-    int cooldown_seconds = 60;           // Cooldown before normal trading
+    double price_limit_pct = config::cb_price_limit_pct();
+    double halt_threshold_pct = config::cb_halt_threshold_pct();
+    int time_window_seconds = config::cb_time_window_seconds();
+    int halt_duration_seconds = config::cb_halt_duration_seconds();
+    int cooldown_seconds = config::cb_cooldown_seconds();
 };
 
 // Per-symbol circuit breaker state

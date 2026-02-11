@@ -12,6 +12,7 @@
  */
 
 #include "security_config.h"
+#include "exchange_config.h"
 #include "ledger_writer.h"
 #include "position_manager.h"
 
@@ -22,6 +23,8 @@
 #include <unordered_map>
 #include <chrono>
 #include <cstring>
+#include <sstream>
+#include <iomanip>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
 #include <nlohmann/json.hpp>
@@ -36,18 +39,17 @@ struct QPayConfig {
     std::string merchant_id;
     std::string secret_key;
     std::string callback_url;
-    std::string api_url = "https://merchant.qpay.mn/v2";
+    std::string api_url = config::qpay_api_url();
     
     static QPayConfig from_env() {
         QPayConfig cfg;
         
         const char* merchant = std::getenv("QPAY_MERCHANT_ID");
         const char* secret = std::getenv("QPAY_SECRET_KEY");
-        const char* callback = std::getenv("QPAY_CALLBACK_URL");
         
         cfg.merchant_id = merchant ? merchant : "";
         cfg.secret_key = secret ? secret : "";
-        cfg.callback_url = callback ? callback : "https://api.cre.mn/api/webhook/qpay";
+        cfg.callback_url = config::qpay_callback_url();
         
         return cfg;
     }
@@ -55,6 +57,26 @@ struct QPayConfig {
     bool is_valid() const {
         return !merchant_id.empty() && !secret_key.empty();
     }
+};
+
+// ==================== INVOICE TYPES ====================
+
+struct Invoice {
+    std::string id;
+    std::string qr_code;
+    std::string deep_link;
+    std::string expires_at;
+    std::string user_id;
+    double amount;
+    std::string type;  // "deposit" or "withdrawal"
+};
+
+struct WithdrawalTx {
+    std::string id;
+    std::string user_id;
+    double amount;
+    std::string bank_account;
+    std::string status;
 };
 
 // ==================== TRANSACTION TYPES ====================
@@ -74,6 +96,23 @@ struct PaymentTransaction {
     int64_t created_at;
     int64_t updated_at;
     std::string error_msg;
+    
+    // String accessors for route serialization
+    double amount() const { return amount_mnt; }
+    
+    std::string type_str() const {
+        return type == TxnType::DEPOSIT ? "deposit" : "withdrawal";
+    }
+    
+    std::string status_str() const {
+        switch (status) {
+            case TxnStatus::PENDING: return "pending";
+            case TxnStatus::CONFIRMED: return "completed";
+            case TxnStatus::FAILED: return "failed";
+            case TxnStatus::CANCELLED: return "cancelled";
+        }
+        return "unknown";
+    }
 };
 
 // ==================== WEBHOOK PAYLOADS ====================
@@ -424,6 +463,102 @@ public:
     
     bool is_initialized() const { return initialized_; }
     
+    // ==================== INVOICE CREATION ====================
+    
+    /**
+     * Create a QPay invoice for deposit
+     * Returns QR code data for the user to scan with their banking app
+     */
+    std::optional<Invoice> create_invoice(const std::string& user_id, double amount, const std::string& type) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        
+        Invoice inv;
+        inv.id = generate_invoice(user_id);
+        inv.user_id = user_id;
+        inv.amount = amount;
+        inv.type = type;
+        
+        // Generate QR code data (in production, this calls QPay API)
+        // POST merchant.qpay.mn/v2/invoice with OAuth2 bearer token
+        inv.qr_code = "qpay://invoice/" + inv.id + "?amount=" + std::to_string(static_cast<int64_t>(amount));
+        inv.deep_link = config_.api_url + "/payment/" + inv.id;
+        
+        // Expires in 30 minutes
+        auto expires = std::chrono::system_clock::now() + std::chrono::minutes(30);
+        auto time = std::chrono::system_clock::to_time_t(expires);
+        std::tm tm_buf{};
+#ifdef _WIN32
+        localtime_s(&tm_buf, &time);
+#else
+        localtime_r(&time, &tm_buf);
+#endif
+        std::stringstream ss;
+        ss << std::put_time(&tm_buf, "%Y-%m-%dT%H:%M:%S");
+        inv.expires_at = ss.str();
+        
+        // Store as pending transaction
+        PaymentTransaction txn;
+        txn.id = inv.id;
+        txn.user_id = user_id;
+        txn.type = TxnType::DEPOSIT;
+        txn.status = TxnStatus::PENDING;
+        txn.amount_mnt = amount;
+        txn.created_at = now_ms();
+        txn.updated_at = now_ms();
+        transactions_[txn.id] = txn;
+        
+        std::cout << "[QPay] Invoice created: " << inv.id << " for " << amount << " MNT" << std::endl;
+        
+        return inv;
+    }
+    
+    /**
+     * Create a withdrawal request (balance already deducted by caller)
+     */
+    WithdrawalTx create_withdrawal(const std::string& user_id, double amount, const std::string& bank_account) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        
+        PaymentTransaction txn;
+        txn.id = generate_txn_id();
+        txn.user_id = user_id;
+        txn.type = TxnType::WITHDRAWAL;
+        txn.status = TxnStatus::PENDING;
+        txn.amount_mnt = amount;
+        txn.created_at = now_ms();
+        txn.updated_at = now_ms();
+        transactions_[txn.id] = txn;
+        withdrawal_queue_.push(txn.id);
+        
+        WithdrawalTx wtx;
+        wtx.id = txn.id;
+        wtx.user_id = user_id;
+        wtx.amount = amount;
+        wtx.bank_account = bank_account;
+        wtx.status = "pending";
+        
+        std::cout << "[QPay] Withdrawal requested: " << amount << " MNT for user " << user_id << std::endl;
+        
+        return wtx;
+    }
+    
+    /**
+     * Update transaction status (for webhook/admin use)
+     */
+    void update_transaction_status(const std::string& txn_id, const std::string& status) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto it = transactions_.find(txn_id);
+        if (it != transactions_.end()) {
+            if (status == "completed") {
+                it->second.status = TxnStatus::CONFIRMED;
+            } else if (status == "failed") {
+                it->second.status = TxnStatus::FAILED;
+            } else if (status == "cancelled" || status == "rejected") {
+                it->second.status = TxnStatus::CANCELLED;
+            }
+            it->second.updated_at = now_ms();
+        }
+    }
+    
 private:
     QPayHandler() = default;
     
@@ -464,3 +599,8 @@ private:
 };
 
 } // namespace central_exchange
+
+// Global alias used by routes
+namespace cre {
+    using QPay = central_exchange::QPayHandler;
+}

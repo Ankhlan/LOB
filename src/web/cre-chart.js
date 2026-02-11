@@ -43,9 +43,12 @@ class CREChart {
         this.dragStart = null;
         this.lastDragX = 0;
         this.chartType = 'candles';
+        this.markPrice = null;
+        this.overlayLines = [];
 
         // Create canvas
         this.canvas = document.createElement('canvas');
+        this.canvas.style.display = 'block';
         this.ctx = this.canvas.getContext('2d');
         this.container.innerHTML = '';
         this.container.appendChild(this.canvas);
@@ -68,6 +71,7 @@ class CREChart {
         this.canvas.style.width = this.width + 'px';
         this.canvas.style.height = this.height + 'px';
         
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
         this.ctx.scale(dpr, dpr);
     }
 
@@ -89,6 +93,48 @@ class CREChart {
         this.canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
         this.canvas.addEventListener('mouseup', () => this.onMouseUp());
         this.canvas.addEventListener('mouseleave', () => this.onMouseUp());
+
+        // Touch support for mobile
+        this.lastTouchDist = 0;
+        this.canvas.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                const t = e.touches[0];
+                this.onMouseDown({ clientX: t.clientX, clientY: t.clientY });
+            } else if (e.touches.length === 2) {
+                this.lastTouchDist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+            }
+            e.preventDefault();
+        }, { passive: false });
+
+        this.canvas.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 1 && this.isDragging) {
+                const t = e.touches[0];
+                this.onMouseMove({ clientX: t.clientX, clientY: t.clientY });
+            } else if (e.touches.length === 2) {
+                const dist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                if (this.lastTouchDist > 0) {
+                    const delta = this.lastTouchDist - dist;
+                    this.onWheel({ deltaY: delta, clientX: (e.touches[0].clientX + e.touches[1].clientX) / 2, clientY: (e.touches[0].clientY + e.touches[1].clientY) / 2, preventDefault: () => {} });
+                }
+                this.lastTouchDist = dist;
+            }
+            e.preventDefault();
+        }, { passive: false });
+
+        this.canvas.addEventListener('touchend', (e) => {
+            this.onMouseUp();
+            this.lastTouchDist = 0;
+            if (e.touches.length === 0) {
+                this.crosshair = null;
+                this.render();
+            }
+        });
 
         // Resize
         window.addEventListener('resize', () => {
@@ -175,8 +221,10 @@ class CREChart {
         this.visibleRange.start = Math.max(0, this.data.length - visibleCount);
         this.visibleRange.end = this.data.length;
         
+        this.setupCanvas();
         this.render();
     }
+
     setChartType(type) {
         this.chartType = type || 'candles';
         this.render();
@@ -197,6 +245,17 @@ class CREChart {
             }
         }
         this.render();
+    }
+
+    setMarkPrice(price) {
+        this.markPrice = price;
+        if (this.data.length) this.render();
+    }
+
+    setOverlayLines(lines) {
+        // lines: [{ price, color, label, dash }]
+        this.overlayLines = lines || [];
+        if (this.data.length) this.render();
     }
 
     calculatePriceRange() {
@@ -338,6 +397,47 @@ class CREChart {
               }
               ctx.stroke();
           }
+        // Draw mark price line
+        if (this.markPrice && this.markPrice >= this.priceRange.min && this.markPrice <= this.priceRange.max) {
+            const yMark = chartTop + (1 - (this.markPrice - this.priceRange.min) / (this.priceRange.max - this.priceRange.min)) * priceChartHeight;
+            ctx.strokeStyle = '#E5C07B';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            ctx.moveTo(chartLeft, yMark);
+            ctx.lineTo(chartRight, yMark);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#E5C07B';
+            ctx.fillRect(chartRight + 2, yMark - 8, padding.right - 4, 16);
+            ctx.fillStyle = '#1A1D23';
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText('M ' + this.formatPrice(this.markPrice), chartRight + 4, yMark + 3);
+        }
+
+        // Draw overlay lines (TP/SL, liquidation, etc.)
+        if (this.overlayLines) {
+            for (const line of this.overlayLines) {
+                if (line.price < this.priceRange.min || line.price > this.priceRange.max) continue;
+                const yLine = chartTop + (1 - (line.price - this.priceRange.min) / (this.priceRange.max - this.priceRange.min)) * priceChartHeight;
+                ctx.strokeStyle = line.color || '#888';
+                ctx.lineWidth = 1;
+                ctx.setLineDash(line.dash || [3, 3]);
+                ctx.beginPath();
+                ctx.moveTo(chartLeft, yLine);
+                ctx.lineTo(chartRight, yLine);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                if (line.label) {
+                    ctx.fillStyle = line.color || '#888';
+                    ctx.font = '9px monospace';
+                    ctx.textAlign = 'right';
+                    ctx.fillText(line.label, chartRight - 2, yLine - 3);
+                }
+            }
+        }
+
         // Draw crosshair
         if (this.crosshair) {
             this.drawCrosshair(ctx, chartLeft, chartTop, chartRight, chartBottom, priceChartHeight, visible, candleSpacing);
@@ -511,7 +611,7 @@ class CREChart {
             tooltipX = x - textWidth - 10;
         }
 
-        ctx.fillStyle = 'rgba(30, 30, 50, 0.9)';
+        ctx.fillStyle = this.options.bgColor || 'rgba(30, 30, 50, 0.9)';
         ctx.fillRect(tooltipX, y, textWidth, 20);
         
         ctx.fillStyle = candle.close >= candle.open ? options.upColor : options.downColor;
